@@ -12,22 +12,35 @@ sessions. This is the phased plan; **Phase 1 is done** as of this session.
 - [x] Comparison driver across the ASHRAE thermal envelope (`main.py`)
 - [x] Literature review with citations (`LITERATURE_REVIEW.md`)
 
-## Phase 2 — system-level validation & sensitivity
-- [ ] Digitize published AMR characteristic curves (Tušek 2010, Nielsen 2011)
-      as COP/span validation targets — currently only material-level ΔT_ad
-      is validated, not full-system COP
-- [ ] Sobol/variance-based sensitivity analysis on (field, frequency,
-      utilization, regenerator effectiveness) → COP, mirroring
-      `sobol_results.txt` in pemfc
-- [ ] Response-surface (RSM) surrogate for fast optimization, mirroring
-      `rsm.py` / `rsm_coefficients.txt`
+## Phase 2 — system-level validation & sensitivity — done this session
+- [x] Digitized published AMR prototype data (`data/amr_experimental_benchmarks.csv`:
+      Astronautics/Jacobs 2014, DTU rotary Gd, Tušek single-bed Gd) as
+      system-level COP/span validation targets
+- [x] Calibrate-then-validate methodology (`validation_system.py`) —
+      revealed that published COP figures are *electrical* (pump + motor
+      overhead included), not thermodynamic-cycle-only; added a calibrated
+      `parasitic_fraction` to `amr_cycle.py` and got the two comparable
+      lab devices to ~10% agreement
+- [x] Sobol/variance-based sensitivity analysis (`sensitivity.py` →
+      `results/sobol_results.txt`) — found electrical COP is ~99.9%
+      sensitive to `parasitic_fraction` alone in the current model
+      structure, a genuine finding that motivates Phase 3
+- [x] Response-surface (RSM) surrogate for cooling capacity Qc
+      (`rsm.py` → `results/rsm_coefficients.txt`, R²=0.94 held-out)
 
-## Phase 3 — optimization & multi-stage design
-- [ ] Multi-objective optimization (NSGA-III or similar) trading off COP,
-      cooling capacity, magnet mass/cost — mirrors `optimize.py`
-- [ ] Cascade/multi-stage AMR design to cover the full 5–20 K ASHRAE span
-      (Phase 1 model shows single-stage collapse above ~16 K at 2 T — this
-      is the key design finding motivating Phase 3)
+## Phase 3 — state-dependent losses, optimization & multi-stage design
+- [ ] **New, motivated by Phase 2's Sobol finding:** make `eta_2nd_law` and
+      `parasitic_fraction` state-dependent functions instead of constants —
+      eddy-current losses ~ frequency², viscous dissipation ~ mdot²,
+      magnet/motor sizing ~ field — using correlations from Tušek et al.
+      and Eriksen et al. (2015)
+- [ ] Multi-objective optimization (NSGA-III or similar) trading off
+      electrical COP, cooling capacity, magnet mass/cost, using the RSM
+      surrogate as the fast inner-loop evaluator — mirrors `optimize.py`
+- [ ] Cascade/multi-stage AMR design to cover the full 5-20 K ASHRAE span
+      (Phase 1/2 model shows single-stage Qc collapse above ~16 K at 2 T,
+      AND that single-stage electrical COP trails vapor-compression across
+      most of the range — this is the key design finding motivating Phase 3)
 
 ## Phase 4 — thermal/geometric detail
 - [ ] NTU-based regenerator effectiveness model replacing the fixed 0.85

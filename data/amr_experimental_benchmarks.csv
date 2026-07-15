@@ -1,0 +1,9 @@
+device,material,mu0H_T,mass_MCM_kg,frequency_Hz,span_K,Qc_W,COP,source
+Astronautics_rotary_2014,La(Fe-Si)13Hy layered,1.44,1.52,4.0,11.0,2502,1.9,"Jacobs et al., Int. J. Refrig. 37 (2014) 84-91"
+Astronautics_rotary_2014_zerospan,La(Fe-Si)13Hy layered,1.44,1.52,4.0,0.0,3042,,"Jacobs et al., Int. J. Refrig. 37 (2014) 84-91"
+DTU_rotary_Gd_2016,Gd (packed bed),1.44,0.98,1.4,10.1,818,4.2,"Bahl/Eriksen/Engelbrecht, rotary AMR - ScienceDirect (2016)"
+DTU_rotary_Gd_2016_maxspan,Gd (packed bed),1.44,0.98,1.4,16.6,0,,"Bahl/Eriksen/Engelbrecht, rotary AMR - ScienceDirect (2016), no-load span from ambient"
+Tusek_singlebed_Gd_2010,Gd (packed bed),1.69,0.196,0.25,15.0,6.5,4.6,"Tusek, Kitanovski et al., Appl. Therm. Eng. (2011 dataset, 2010 device)"
+Risoe_DTU_Gd_2011,Gd (packed bed),1.1,0.1955,1.0,30.0,35,5.0,"Engelbrecht et al., Int. Refrig. Cryo. Conf. Purdue (2010); part I/II ScienceDirect (2016)"
+Risoe_DTU_Gd_2011_maxcap,Gd (packed bed),1.1,0.1955,1.0,0.0,53.7,,"Engelbrecht et al., part I/II ScienceDirect (2016), max cooling capacity near zero span"
+Okamura_Hirano_2013,Gd (packed bed),1.1,,,5.0,,2.5,"Okamura & Hirano (2013), cited in Silva et al. review (2016)"

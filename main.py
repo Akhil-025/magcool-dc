@@ -45,7 +45,8 @@ def main():
         rows.append({
             "span_K": span,
             "Tc_K": T_cold_K, "Th_K": T_hot_K,
-            "AMR_COP": round(amr_res.COP, 2),
+            "AMR_COP_ideal": round(amr_res.COP, 2),
+            "AMR_COP_electrical": round(amr_res.COP_electrical, 2),
             "AMR_Qc_W": round(amr_res.Qc, 1),
             "AMR_2ndlaw_eff": round(amr_res.exergy_eff, 3),
             "VaporCompression_COP": round(vcc.COP, 2),
@@ -58,11 +59,15 @@ def main():
         writer.writeheader()
         writer.writerows(rows)
 
-    print(f"{'span(K)':>8} {'AMR COP':>9} {'VCC COP':>9} {'Liquid COP':>11} {'Carnot':>8}")
+    print(f"{'span(K)':>8} {'AMR elec COP':>13} {'VCC COP':>9} {'Liquid COP':>11} {'Carnot':>8}")
     for r in rows:
-        print(f"{r['span_K']:>8} {r['AMR_COP']:>9} {r['VaporCompression_COP']:>9} "
+        print(f"{r['span_K']:>8} {r['AMR_COP_electrical']:>13} {r['VaporCompression_COP']:>9} "
               f"{r['LiquidCooling_COP']:>11} {r['Carnot_COP']:>8}")
     print(f"\nWrote {RESULTS_CSV}")
+    print("Note: AMR_COP_electrical (parasitic-inclusive, Phase 2 calibrated) is the "
+          "column comparable to VCC/Liquid COP, both of which are electrical figures. "
+          "AMR_COP_ideal (magnetic-cycle-only) is kept for reference but overstates "
+          "real-world performance -- see core/validation_system.py.")
 
 
 if __name__ == "__main__":

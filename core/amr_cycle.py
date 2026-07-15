@@ -41,16 +41,23 @@ class AMRCycleResult:
     T_span: float
     Qc: float          # W, cooling capacity
     Qh: float           # W, heat rejected
-    W_mag: float         # W, net magnetic work input
-    COP: float
-    exergy_eff: float    # second-law efficiency vs Carnot
+    W_mag: float         # W, net magnetic (thermodynamic-cycle) work input
+    W_parasitic: float    # W, pump + motor-drive overhead (see note below)
+    COP: float            # ideal magnetic-cycle-only COP (Qc / W_mag)
+    COP_electrical: float  # device-level electrical COP (Qc / (W_mag + W_parasitic))
+                             # -- this is the number comparable to published
+                             # "COPe" / device COP figures, and to the
+                             # vapor-compression/liquid-cooling baselines in
+                             # baseline_cooling.py, which are also electrical.
+    exergy_eff: float    # second-law efficiency vs Carnot (magnetic-cycle-only)
 
 
 class AMRSystem:
     def __init__(self, material: MagnetocaloricMaterial, mu0H_max: float,
                  mass_regenerator: float, frequency: float,
                  fluid_cp: float = 4186.0, fluid_mdot: float = 0.05,
-                 regenerator_effectiveness: float = 0.85):
+                 regenerator_effectiveness: float = 0.85,
+                 parasitic_fraction: float = 0.15):
         """
         material               : MagnetocaloricMaterial instance
         mu0H_max                : peak applied field, Tesla
@@ -60,6 +67,23 @@ class AMRSystem:
         fluid_mdot                : fluid mass flow rate, kg/s
         regenerator_effectiveness : NTU-based regenerator effectiveness (0-1),
                                      from thermal.py NTU correlation
+        parasitic_fraction        : pump + magnet-motor-drive electrical
+                                     overhead, as a fraction of Qc, ADDED ON
+                                     TOP of the ideal magnetic-cycle work to
+                                     get device-level electrical COP. The
+                                     default 0.15 is the Phase 2 calibrated
+                                     value against two comparably-sized lab
+                                     devices (DTU rotary Gd: 0.171, Tusek
+                                     single-bed Gd: 0.118 - see
+                                     core/validation_system.py). The large
+                                     Astronautics naval-cooler prototype
+                                     implied 0.453, which Jacobs et al. (2014)
+                                     attribute explicitly to "electrical
+                                     components with mediocre efficiency" at
+                                     that scale/vintage - treat 0.15 as an
+                                     optimistic lab-scale figure, not a
+                                     production-hardware guarantee, and widen
+                                     it in any economics sensitivity study.
         """
         self.mat = material
         self.mu0H_max = mu0H_max
@@ -68,6 +92,7 @@ class AMRSystem:
         self.cp_f = fluid_cp
         self.mdot_f = fluid_mdot
         self.eps = regenerator_effectiveness
+        self.parasitic_fraction = parasitic_fraction
 
     def cooling_capacity(self, T_cold, T_span):
         """Cooling capacity Qc (W) at a given no-load DeltaT_ad and imposed
@@ -105,13 +130,16 @@ class AMRSystem:
     def run(self, T_cold, T_span) -> AMRCycleResult:
         Qc, dTad = self.cooling_capacity(T_cold, T_span)
         W, eta2 = self.magnetic_work(T_cold, T_span, Qc)
+        W_parasitic = self.parasitic_fraction * Qc
         Qh = Qc + W
         COP = Qc / W if W > 0 else 0.0
+        COP_electrical = Qc / (W + W_parasitic) if (W + W_parasitic) > 0 else 0.0
         T_hot = T_cold + T_span
         COP_carnot = T_cold / (T_hot - T_cold) if T_hot > T_cold else np.inf
         exergy_eff = COP / COP_carnot if np.isfinite(COP_carnot) and COP_carnot > 0 else 0.0
-        return AMRCycleResult(T_span=T_span, Qc=Qc, Qh=Qh, W_mag=W, COP=COP,
-                               exergy_eff=exergy_eff)
+        return AMRCycleResult(T_span=T_span, Qc=Qc, Qh=Qh, W_mag=W,
+                               W_parasitic=W_parasitic, COP=COP,
+                               COP_electrical=COP_electrical, exergy_eff=exergy_eff)
 
     def characteristic_curve(self, T_cold, spans):
         return [self.run(T_cold, s) for s in spans]
