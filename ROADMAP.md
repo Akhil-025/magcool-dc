@@ -1,7 +1,4 @@
-# Roadmap to pemfc-suite parity
-
-Mirroring the `pemfc` repo's structure realistically takes several build
-sessions. This is the phased plan.
+# Roadmap to madcool-suite parity
 
 ## Phase 1 — done
 - [x] Mean-field MCE material model (`mce_material.py`), validated against

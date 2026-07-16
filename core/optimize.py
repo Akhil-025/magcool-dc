@@ -1,33 +1,31 @@
 """
 optimize.py
 ============
-Phase 3: multi-objective design optimization of the AMR system using
+Multi-objective design optimization of the AMR system using
 NSGA-III (Deb & Jain, IEEE Trans. Evol. Comput. 18(4), 577-601 (2014)),
 via the pymoo implementation (Blank & Deb, IEEE Access 8, 89497-89509 (2020)).
 
 Design variables:
-    mu0H_max              [1.0, 3.0]   T
-    frequency               [0.3, 5.0]   Hz
-    fluid_mdot                [0.02, 0.5] kg/s
-    mass_regenerator            [1.0, 15.0] kg
-    regenerator_effectiveness    [0.6, 0.95]  -
+    mu0H_max                  [1.0, 3.0]   T
+    frequency                 [0.3, 5.0]   Hz
+    fluid_mdot                [0.02, 0.5]  kg/s
+    mass_regenerator          [1.0, 15.0]  kg
+    regenerator_effectiveness [0.6, 0.95]  -
 
 Objectives (all converted to minimization for pymoo):
-    f1 = -COP_electrical        (maximize electrical COP; uses the Phase 3
-                                   state-dependent loss_model, NOT the Phase
-                                   2 constant, so the field/frequency/mdot
-                                   choices carry a genuine efficiency cost)
-    f2 = -Qc                     (maximize cooling capacity)
-    f3 = cost_index              (minimize a literature-informed CAPEX proxy:
-                                   Gd material cost ~$175/kg (Franco et al.
-                                   2018) + a magnet-cost term scaling with
-                                   field^2 * regenerator mass as a rough
-                                   permanent-magnet-volume proxy, consistent
-                                   with the order-of-magnitude figures in
-                                   economics.py / Bahl et al. 2014)
+    f1 = -COP_electrical        (maximize electrical COP; uses the
+                                 state-dependent loss model so the
+                                 field/frequency/mdot choices carry a
+                                 genuine efficiency cost)
+    f2 = -Qc                    (maximize cooling capacity)
+    f3 = cost_index             (minimize a materials-cost proxy based on the
+                                magnetocaloric material and permanent-magnet
+                                costs implemented in economics.py. The cost
+                                model estimates magnet and MCM material costs
+                                using literature-reported unit prices and a
+                                simple magnet-mass scaling relation.)
 
-Fixed operating point: T_cold = 291 K, span = 10 K (same as sensitivity.py,
-for direct comparability of results).
+Fixed operating point: T_cold = 291 K, span = 10 K.
 
 Output: Pareto front written to results/pareto_front.csv, plus a short
 text summary of the extreme and knee-point designs.
@@ -48,9 +46,10 @@ T_COLD_K = 291.0
 SPAN_K = 10.0
 
 _LOSS_MODEL = StateDependentLossModel()
-USE_NTU_THERMAL_MODEL = True   # Phase 4: mass_regenerator now has a real
-                                 # effect on Qc via core/thermal.py; set False
-                                 # to reproduce the Phase 3 mass-floor result
+USE_NTU_THERMAL_MODEL = True     # Enables the NTU-based thermal model so
+                                 # regenerator mass influences cooling
+                                 # capacity through the regenerator thermal
+                                 # effectiveness calculation.
 
 
 def cost_index(mu0H, mass_regenerator):
@@ -100,8 +99,8 @@ def run_optimization(pop_size=60, n_gen=40, seed=1,
         writer.writeheader()
         writer.writerows(rows)
 
-    # Highlight three extreme designs + a naive "knee point" (min L2 distance
-    # to the per-objective ideal point in normalized objective space)
+    # Identify representative Pareto-optimal designs, including the design
+    # closest to the normalized ideal point ("knee point").
     Fn = (F - F.min(axis=0)) / (F.max(axis=0) - F.min(axis=0) + 1e-12)
     knee_idx = np.argmin(np.linalg.norm(Fn, axis=1))
     best_cop_idx = np.argmax(-F[:, 0])
@@ -123,15 +122,14 @@ def run_optimization(pop_size=60, n_gen=40, seed=1,
 
     masses = [r["mass_regenerator_kg"] for r in rows]
     if max(masses) - min(masses) < 0.5 and not USE_NTU_THERMAL_MODEL:
-        print("\nDIAGNOSTIC FINDING (Phase 3, constant-eps mode): every Pareto-optimal "
-              "design sits at the regenerator-mass lower bound because mass_regenerator "
-              "doesn't affect Qc without the NTU thermal model. Set USE_NTU_THERMAL_MODEL "
-              "= True (default since Phase 4) to see the real mass/cost/performance tradeoff.")
+        print("\nDiagnostic: every Pareto-optimal design lies at the minimum "
+            "regenerator mass because, with the constant-effectiveness thermal "
+            "model, regenerator mass does not influence cooling capacity.")
     elif USE_NTU_THERMAL_MODEL:
-        print(f"\nPHASE 4: mass_regenerator now spans {min(masses):.2f}-{max(masses):.2f} kg "
-              "across the Pareto front (core/thermal.py's NTU model makes more regenerator "
-              "material genuinely improve eps/Qc, trading off against the cost objective, "
-              "rather than being pure waste as in the Phase 3 constant-eps result).")
+        print(f"\nRegenerator mass spans {min(masses):.2f}-{max(masses):.2f} kg "
+            "across the Pareto front. The NTU thermal model captures the expected "
+            "trade-off between additional regenerator material, cooling capacity, "
+            "and material cost.")
     return rows
 
 

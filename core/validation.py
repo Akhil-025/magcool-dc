@@ -1,16 +1,25 @@
 """
 validation.py
-==============
-Validates the mean-field MCE model (mce_material.py) against published
-experimental data for gadolinium adiabatic temperature change near its
-Curie point (T ~ 294 K), the most widely reported benchmark in the
-magnetocaloric literature.
+=============
+Validation of the mean-field magnetocaloric model against published
+experimental measurements of gadolinium's adiabatic temperature change
+near its Curie temperature (Tc ≈ 294 K).
 
-Reference data (digitized from):
-    Dan'kov, Tishin, Pecharsky & Gschneidner, Phys. Rev. B 57 (1998) 3478
-        - direct measurement of DeltaT_ad(Gd) for mu0*H = 1, 2, 5 T at Tc
-    Pecharsky & Gschneidner, J. Magn. Magn. Mater. 200 (1999) 44-56
-        - review/compilation of Gd MCE data
+The model predictions are compared with experimental values reported for
+applied magnetic fields of 1 T, 2 T and 5 T.
+
+Reference data
+--------------
+Dan'kov, Tishin, Pecharsky & Gschneidner,
+Phys. Rev. B 57 (1998) 3478
+
+    Direct measurements of the adiabatic temperature change of
+    polycrystalline gadolinium.
+
+Pecharsky & Gschneidner,
+J. Magn. Magn. Mater. 200 (1999) 44–56
+
+    Review and compilation of magnetocaloric properties of gadolinium.
 """
 
 import numpy as np
@@ -45,8 +54,10 @@ if __name__ == "__main__":
     rows = run_validation()
     max_err = max(abs(r[3]) for r in rows)
     print("-" * 70)
-    print(f"Max |error| = {max_err:.1f}%  "
-          "(mean-field theory is known to overpredict near Tc because it "
-          "neglects short-range spin correlations / critical fluctuations - "
-          "see de Oliveira & von Ranke, Phys. Rep. 489 (2010) 89-159 - "
-          "so a systematic high bias here is expected and documented, not a bug)")
+    print(
+        f"Maximum absolute error = {max_err:.1f}%.\n"
+        "The model shows the expected systematic overprediction near the Curie "
+        "temperature. This is a well-known limitation of mean-field theory, "
+        "which neglects short-range spin correlations and critical fluctuations "
+        "(see de Oliveira & von Ranke, Phys. Rep. 489 (2010) 89–159)."
+    )

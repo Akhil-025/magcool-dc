@@ -1,15 +1,16 @@
 """
 giant_mce_analysis.py
-=======================
-Phase 5: now that first_order_mce.py gives Gd5Si2Ge2 a physically-appropriate
-(first-order Landau) model instead of the structurally-invalid mean-field
-treatment flagged in Phase 4, this script answers the question posed at the
-end of Phase 4: does the giant-MCE material change the COP-competitiveness
-conclusion?
+=====================
+Evaluates whether a first-order giant magnetocaloric material
+(Gd5Si2Ge2), modeled using the Landau free-energy formulation in
+first_order_mce.py, changes the system-level competitiveness of AMR
+cooling for data-center applications.
 
-Short answer: not as-is, because its favorable operating window is
-mistargeted for data-center duty -- but the underlying material family is
-tunable, which is the real, actionable finding.
+Short answer: not in its current composition, because its optimal
+operating temperature lies below the ASHRAE-recommended data-center
+range. However, the underlying Gd5(SixGe1-x)4 material family is
+compositionally tunable, making it a promising direction for future
+materials development.
 """
 
 import numpy as np
@@ -80,7 +81,7 @@ def run_analysis(out_path="results/giant_mce_analysis.txt"):
     lines.append("The giant-MCE effect is real and large when the material is operated within")
     lines.append("its own narrow first-order transition window -- but Gd5Si2Ge2's window sits")
     lines.append(f"~{291.0-peak_T_giant:.0f}K below the ASHRAE data-center range, so it is not directly")
-    lines.append("usable for this application as-is. This does NOT overturn the Phase 1-4")
+    lines.append("usable for this application as-is. This does not overturn the")
     lines.append("conclusion (Gd trails vapor-compression/liquid cooling on COP within the")
     lines.append("ASHRAE range). What it DOES support: literature confirms the Gd5(SixGe1-x)4")
     lines.append("family has composition-tunable ordering temperature (Pecharsky & Gschneidner,")
@@ -89,15 +90,15 @@ def run_analysis(out_path="results/giant_mce_analysis.txt"):
     lines.append("Gd5Si2Ge2 and Gd5Si4 tuned to ~291-300K, IF it retains first-order/giant")
     lines.append("character at that composition, is the genuinely promising untested direction")
     lines.append("for closing the COP gap. This is a materials-synthesis question outside what")
-    lines.append("a simulation suite alone can answer -- flagged as Phase 6 in ROADMAP.md, not")
-    lines.append("claimed as solved here.")
+    lines.append("a simulation study alone can answer and remains an open materials")
+    lines.append("research question rather than a result established here.")
     lines.append(f"\nFor reference, baselines at this operating point: VCC COP={vcc.COP:.2f}, "
                  f"Liquid COP={liq.COP:.2f}")
     lines.append(f"\nNote also: even correctly targeted, Gd5Si2Ge2's COP_electrical "
                  f"({r_giant_own.COP_electrical:.2f}) is close to Gd's own COP_electrical at "
                  f"its matched point ({r_gd_ashrae.COP_electrical:.2f}), not dramatically "
                  f"higher, despite ~4x the cooling capacity (Qc). This is consistent with "
-                 f"Phase 3's Sobol finding: COP_electrical is driven mainly by frequency/flow/"
+                 f"the Sobol sensitivity analysis: COP_electrical is driven mainly by frequency/flow/"
                  f"field-dependent losses (loss_model.py), not by which material is loaded into "
                  f"the regenerator -- a bigger MCE mostly buys more Qc per kg, not a better COP.")
 

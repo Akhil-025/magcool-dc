@@ -1,27 +1,24 @@
 """
 cascade.py
 ===========
-Phase 3: multi-stage (cascade) AMR design, addressing the single-stage
-finding from Phase 1/main.py: a single AMR stage at mu0*H=2T collapses to
-zero cooling capacity above ~16 K span, which is inside the ASHRAE 5-20 K
-range this project targets.
+Multi-stage (cascade) AMR model for extending the operating temperature
+span beyond the limits of a single-stage system.
 
 Cascade concept: N single-stage AMR modules in series, each handling an
-equal share of the total span (Th_total - Tc_total)/N, analogous to cascade
-vapor-compression refrigeration. Stage 1 (coldest) absorbs the data-center
-heat load Qc at T_cold; its heat rejection becomes the "cold" input to
-stage 2, and so on up to the final stage rejecting at T_hot. Because heat
-is passed through in series, each stage must reject the SAME Qc (steady
-state, no stage-to-stage loss assumed) -- so:
+equal share of the total span (Th_total - Tc_total)/N, analogous to
+cascade vapor-compression refrigeration. Stage 1 (coldest) absorbs the
+data-center heat load Qc at T_cold; its heat rejection becomes the input
+to Stage 2, and so on until the final stage rejects heat at T_hot.
+Because heat is transferred through the stages in series, each stage must
+reject the same cooling load (steady state, neglecting inter-stage losses):
 
-    W_total = sum_i W_i(Qc, span/N)     for i = 1..N
+    W_total = Σ W_i(Qc, span/N)
     COP_cascade = Qc / W_total
 
-This is a simplification (real designs use graded Curie-temperature
-materials per stage - e.g. Gd/Gd-alloy layering - which this module doesn't
-yet model; every stage here uses Gd for tractability, flagged as a Phase 4
-item). It is, however, sufficient to answer the Phase 1 question: does
-staging recover the span the single-stage design loses?
+This simplified model assumes identical gadolinium regenerator stages.
+More advanced cascade systems may employ graded Curie-temperature
+materials (e.g. Gd alloys) in different stages, but those effects are not
+included here.
 """
 
 import numpy as np

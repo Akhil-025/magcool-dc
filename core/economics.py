@@ -3,29 +3,32 @@ economics.py
 ============
 Order-of-magnitude CAPEX/OPEX comparison.
 
-Phase 6 update: replaced the earlier placeholder $175/kg (loosely
-attributed to "Franco et al. 2018 order-of-magnitude") with the actual
-per-kg costs used in a dedicated magnetic-refrigerator cost-optimization
-study, found via a targeted search this session: Bjørk, Bahl & Smith,
-"Determining the minimum mass and cost of a magnetic refrigerator", Int. J.
-Refrigeration 34 (2011) 1805-1816 -- $40/kg for NdFeB (N42, 1.2-1.3T
-remanence) permanent magnet material, $20/kg for the magnetocaloric
-material (Gd). Their own worked examples (100W/20K device: 0.8kg magnet +
-0.3kg Gd; 50W/30K device: 0.15kg magnet + 0.04kg Gd) show magnet mass
-running roughly 2.7-3.75x the MCM mass and increasing with field --
-approximated here as magnet_mass ~= 3.0 * mu0H_max[T] * mass_regenerator,
-a rough fit to their two reported points, NOT a validated scaling law.
+Material costs are based on the magnetic refrigerator cost-optimization
+study by Bjørk, Bahl & Smith, "Determining the minimum mass and cost of a
+magnetic refrigerator", Int. J. Refrigeration 34 (2011) 1805-1816.
+
+The model uses:
+    - $40/kg for NdFeB (N42, 1.2-1.3 T remanence) permanent magnet material
+    - $20/kg for gadolinium (Gd) magnetocaloric material
+
+Their worked examples (100 W / 20 K device: 0.8 kg magnet + 0.3 kg Gd;
+50 W / 30 K device: 0.15 kg magnet + 0.04 kg Gd) indicate that magnet mass
+is typically several times the magnetocaloric material mass and increases
+with magnetic field strength. This behaviour is approximated here as
+
+    magnet_mass ≈ 3.0 × mu0H_max[T] × mass_regenerator
+
+which provides a rough fit to the published examples but should not be
+interpreted as a validated scaling law.
 
 Sources:
-    - Bjork, Bahl & Smith, Int. J. Refrig. 34 (2011) 1805-1816 -- magnet/MCM
-      unit costs and worked mass examples (used directly above)
-    - Bahl, Engelbrecht et al., Int. J. Refrig. 37 (2014) 78-83 -- AMR
+    - Bjørk, Bahl & Smith, Int. J. Refrig. 34 (2011) 1805-1816 — magnet and
+      magnetocaloric material costs and worked mass examples
+    - Bahl, Engelbrecht et al., Int. J. Refrig. 37 (2014) 78-83 — AMR
       system cost breakdown context
-    - Lawrence Berkeley National Lab, "Data Center Cooling System Cost
-      Benchmarks" (chilled water plant OPEX ~$0.02-0.05/kWh-cooled at
-      typical US industrial electricity rates)
+    - Lawrence Berkeley National Laboratory, "Data Center Cooling System
+      Cost Benchmarks" — representative chilled-water OPEX
 """
-
 from dataclasses import dataclass
 
 COST_MCM_PER_KG = 20.0          # $/kg, Bjork et al. 2011
@@ -40,7 +43,8 @@ def material_cost(mu0H_max, mass_regenerator):
     materials-only FLOOR, not full system cost (excludes heat exchangers,
     pumps, motor/drive, controls, enclosure -- Bahl et al. 2014 note these
     dominate total AMR system cost, materials are a minority share, but no
-    specific multiplier is cited here pending a bottom-up BOM in Phase 7)."""
+    specific multiplier is used here pending development of a detailed
+    bottom-up bill-of-materials (BOM) model."""
     magnet_mass = MAGNET_TO_MCM_MASS_RATIO_PER_TESLA * mu0H_max * mass_regenerator
     return COST_MAGNET_PER_KG * magnet_mass + COST_MCM_PER_KG * mass_regenerator
 
@@ -55,13 +59,13 @@ class TCOResult:
 
 AMR_MAGNETIC = TCOResult(
     "Magnetic (AMR)", capex_per_kw_cooling=2200.0, opex_per_kwh_cooling=0.012,
-    notes="Pre-commercial; this $/kW figure is a rough placeholder, NOT yet "
-          "derived from material_cost() above -- use material_cost(mu0H, "
-          "mass_regenerator) directly with a specific optimize.py Pareto "
-          "design for a grounded, materials-only cost floor (excludes heat "
-          "exchangers/pumps/motor/controls, which Bahl et al. 2014 note "
-          "dominate total system cost). Reconciling this placeholder with "
-          "the bottom-up figure is a Phase 7 item.")
+    notes="Pre-commercial; this $/kW figure is a rough placeholder and is not "
+        "derived directly from material_cost(). Use "
+        "material_cost(mu0H, mass_regenerator) with a specific design to "
+        "estimate a materials-only cost floor. This excludes heat "
+        "exchangers, pumps, motor/drive, controls and enclosure, which "
+        "Bahl et al. (2014) identify as major contributors to total AMR "
+        "system cost. A detailed bottom-up cost model is left for future work.")
 
 VAPOR_COMPRESSION = TCOResult(
     "Vapor-compression CRAC/CRAH", capex_per_kw_cooling=350.0,

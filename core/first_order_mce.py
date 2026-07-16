@@ -1,11 +1,11 @@
 """
 first_order_mce.py
 ====================
-Phase 5: replaces the mean-field/Brillouin treatment of Gd5Si2Ge2 (which
-Phase 4 flagged as structurally unable to capture its giant MCE) with an
-extended Landau free-energy model that CAN produce a first-order
-magnetostructural transition -- the actual physical origin of the "giant"
-effect (Pecharsky & Gschneidner, Phys. Rev. Lett. 78, 4494 (1997)).
+Implements an extended Landau free-energy model for Gd5Si2Ge2, replacing
+the mean-field/Brillouin treatment with a model capable of describing the
+first-order magnetostructural transition responsible for the giant
+magnetocaloric effect (Pecharsky & Gschneidner, Phys. Rev. Lett. 78, 4494
+(1997)).
 
 Model
 -----
@@ -64,13 +64,13 @@ the only one, and note the real spread when citing this in the paper.
      not a validated number -- there is no direct system-level benchmark
      for it in this codebase (see data/amr_experimental_benchmarks.csv,
      which has none for Gd5Si2Ge2).
-  2. No independent validation dataset exists in this repo for this model
-     (unlike GADOLINIUM's Dan'kov et al. 1998 check in validation.py) --
-     it is calibrated to ONE literature number (peak DeltaS_M) and not
-     cross-checked against a second, independent measurement. Phase 6 should
-     add the Giguere et al. (Phys. Rev. Lett. 83, 2262 (1999)) direct
-     DeltaT_ad measurement as a held-out check before this feeds real
-     paper conclusions.
+    2. No independent validation dataset exists in this repository for this
+    model (unlike GADOLINIUM's Dan'kov et al. (1998) validation in
+    validation.py). It is calibrated to a single literature value
+    (peak DeltaS_M) and has not been cross-checked against an independent
+    experimental dataset. Future validation should include the direct
+    DeltaT_ad measurements of Giguère et al. (Phys. Rev. Lett. 83, 2262
+    (1999)) before using this model for quantitative design conclusions.
 """
 
 import numpy as np

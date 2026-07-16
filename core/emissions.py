@@ -1,28 +1,27 @@
 """
 emissions.py
 =============
-Phase 5: refrigerant-free GWP/emissions comparison. Magnetic (AMR) cooling
-uses a single-phase heat transfer fluid (typically water/glycol) and no
-HFC/HFO refrigerant at all -- a categorical difference from vapor-compression
-and (indirectly, via its chiller-plant mechanical-cooling hours) liquid
-cooling, both of which carry refrigerant charge with nonzero GWP and leak
-risk. This module quantifies that avoided-emissions case, since the Phase
-1-4 COP results do not, on their own, favor magnetic cooling.
+Refrigerant-free GWP/emissions comparison.
 
-Refrigerant GWP values (AR5 100-year GWP, IPCC):
-    R-410A  : 2088   (common CRAC/DX refrigerant)
-    R-134a  : 1430    (common chiller refrigerant)
-    R-32     : 675      (lower-GWP DX alternative, increasingly used)
-    R-1234ze : 7          (HFO, near-zero GWP, emerging in chiller plants)
+Magnetic (AMR) cooling uses a single-phase heat transfer fluid (typically
+water/glycol) and no HFC/HFO refrigerant. This distinguishes it from
+vapor-compression and, where mechanical chilling is required, liquid
+cooling systems, both of which use refrigerants with non-zero global
+warming potential (GWP) and associated leakage risk.
 
-Leak rate assumption: 2-10%/year of refrigerant charge is a commonly cited
-range for commercial HVAC/refrigeration systems (US EPA GreenChill program
-guidance; ASHRAE Standard 15 discussions of annual leakage). This module
-uses a mid-range 4%/year default, clearly labeled as an assumption.
+Refrigerant GWP values (IPCC AR5, 100-year GWP):
+    R-410A   : 2088   (common CRAC/DX refrigerant)
+    R-134a   : 1430   (common chiller refrigerant)
+    R-32     : 675    (lower-GWP DX alternative)
+    R-1234ze : 7      (near-zero-GWP HFO)
 
-Refrigerant charge per kW cooling: ~0.3-0.5 kg/kW is representative for
-packaged DX/chiller equipment (manufacturer datasheets, order-of-magnitude;
-not a specific product spec). Default 0.4 kg/kW.
+Leak rate assumption: 2–10% per year is commonly cited for commercial
+HVAC/refrigeration systems (US EPA GreenChill; ASHRAE Standard 15). This
+module uses a clearly identified mid-range assumption of 4% per year.
+
+Representative refrigerant charge: approximately 0.3–0.5 kg per kW of
+cooling capacity for packaged DX/chiller equipment. A default value of
+0.4 kg/kW is used here.
 """
 
 from dataclasses import dataclass
@@ -91,11 +90,10 @@ if __name__ == "__main__":
         print(f"{r.technology:<32} refrigerant={r.refrigerant_GWP_tCO2e_per_year:7.2f} "
               f"tCO2e/yr  operational={r.operational_CO2_tCO2e_per_year:8.2f} tCO2e/yr  "
               f"total={r.total_tCO2e_per_year:8.2f} tCO2e/yr")
-    print("\nNote: at these representative COPs, operational emissions dominate and "
-          "AMR's lower COP (from Phase 1-4) makes its OPERATIONAL emissions the "
-          "highest of the three -- the refrigerant-free case is a real, categorical "
-          "benefit (zero leak risk, zero phase-out/replacement liability under "
-          "F-gas-type regulation) but it does NOT overturn the emissions comparison "
-          "on its own unless AMR's COP is closed relative to the baselines. Report "
-          "both numbers plainly; don't let the qualitative refrigerant-free story "
-          "imply a quantitative emissions win it hasn't earned yet.")
+    print("\nNote: at these representative COPs, operational emissions dominate. "
+        "If AMR has a lower COP than the baseline technologies, its operational "
+        "emissions will also be higher. The refrigerant-free design remains a "
+        "genuine environmental benefit (zero direct refrigerant leakage and no "
+        "refrigerant phase-out liability), but it does not by itself guarantee "
+        "lower total emissions. Both operational and refrigerant-related "
+        "emissions should therefore be reported separately.")

@@ -1,8 +1,11 @@
 """
 mce_material.py
 ================
-Mean-field (molecular-field / Brillouin) model of the magnetocaloric effect (MCE)
-for room-temperature magnetic refrigeration materials.
+Mean-field (molecular-field / Brillouin) model of the magnetocaloric effect
+for materials exhibiting second-order magnetic phase transitions. This model
+is appropriate for elemental gadolinium and similar compounds but is not
+intended for first-order giant-MCE materials such as Gd5Si2Ge2, which are
+modeled separately using a Landau free-energy formulation.
 
 Physics
 -------
@@ -175,19 +178,23 @@ GD5SI2GE2 = MagnetocaloricMaterial(
     n_atoms_per_fu=9,
     source="Pecharsky & Gschneidner, Phys. Rev. Lett. 78, 4494 (1997)",
 )
-# HONESTY FLAG (found in Phase 4, core/cascade.py): the mean-field/Brillouin
-# framework used throughout mce_material.py is built for second-order
-# (continuous) magnetic transitions, which is valid for pure Gd. Gd5Si2Ge2's
-# "giant" MCE comes from a first-order, coupled magnetostructural phase
-# transition (Pecharsky & Gschneidner 1997) -- physics a continuous
-# mean-field/Brillouin model cannot capture. Running GD5SI2GE2 through
-# delta_T_adiabatic() here UNDERPREDICTS its real effect by roughly an order
-# of magnitude (model gives ~1 K at 2 T near its own Tc vs. the several-K-
-# to-double-digit effects reported experimentally near a first-order
-# transition). Treat GD5SI2GE2 in this codebase as a materials-library
-# placeholder, not yet a validated giant-MCE model — a proper treatment
-# needs a Bean-Rodbell or Landau free-energy model with magnetoelastic
-# coupling, deferred to Phase 5 (see ROADMAP.md).
+# MODEL LIMITATION
+#
+# The mean-field/Brillouin framework implemented in this module describes
+# second-order (continuous) magnetic phase transitions and is therefore
+# appropriate for materials such as elemental gadolinium.
+#
+# Gd5Si2Ge2 undergoes a first-order magnetostructural transition, which is
+# responsible for its giant magnetocaloric effect (Pecharsky &
+# Gschneidner, Phys. Rev. Lett. 78, 4494 (1997)). The continuous
+# mean-field model cannot reproduce the discontinuous entropy and
+# magnetization changes associated with that transition and therefore
+# substantially underestimates the material's ΔS_M and ΔT_ad.
+#
+# The GD5SI2GE2 definition below is retained only as a parameter library
+# entry. Quantitative simulations of this material should instead use the
+# first-order Landau model implemented in first_order_mce.py, which is
+# specifically designed for giant-MCE materials.
 
 LACAMNO3 = MagnetocaloricMaterial(
     name="La0.7Ca0.3MnO3 (perovskite manganite)",

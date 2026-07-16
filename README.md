@@ -2,9 +2,7 @@
 
 Physics-based simulation suite evaluating **magnetocaloric (magnetic) cooling
 for data centers**, benchmarked against vapor-compression CRAC/CRAH and
-direct liquid cooling — built as the magnetic-cooling counterpart to the
-[`pemfc`](https://github.com/Akhil-025/pemfc) PEM fuel cell simulation suite,
-for an ASHRAE Region XV student paper submission.
+direct liquid cooling.
 
 ## Status: Phase 6 (extended validation stress-test + grounded economics) — see `ROADMAP.md`
 
@@ -237,7 +235,7 @@ core/            physics, validation, sensitivity, surrogate, and economics modu
 data/            literature-sourced parameter tables + digitized prototype benchmarks
 results/         generated comparison tables, Sobol results, RSM coefficients
 main.py          top-level comparison driver
-ROADMAP.md       phased plan to reach pemfc-suite parity
+ROADMAP.md       phased plan to reach -suite parity
 LITERATURE_REVIEW.md
 NOMENCLATURE.md
 ```

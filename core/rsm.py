@@ -1,21 +1,24 @@
 """
 rsm.py
 ======
-Response-surface (RSM) surrogate model, quadratic-in-all-variables plus
-pairwise interactions, fit to AMR cooling capacity Qc(mu0H_max, frequency,
-fluid_mdot, regen_effectiveness, span) by ordinary least squares over a
-Latin-hypercube-like grid sample of the design space.
+Quadratic response-surface (RSM) surrogate model for AMR cooling capacity,
+fit by ordinary least squares over samples spanning the design space.
 
-Qc is the chosen surrogate target (not COP) because the Sobol analysis in
-sensitivity.py established that COP_electrical is, in the current model,
-algebraically independent of these four design variables (see
-results/sobol_results.txt) -- fitting a surrogate to a quantity with ~0
-true sensitivity would just fit noise. Qc is the output that genuinely
-varies across the design space and is the one a designer would actually
-want a fast surrogate for during Phase 3 optimization (avoiding a full
-AMRSystem.run() call inside an NSGA-III inner loop).
+The surrogate predicts
 
-Mirrors pemfc/rsm.py + rsm_coefficients.txt.
+    Qc(mu0H_max, frequency, fluid_mdot, regenerator_effectiveness, span)
+
+using linear, quadratic, and pairwise interaction terms.
+
+Cooling capacity (Qc) is used as the response variable because it exhibits
+substantial variation across the design space, making it well suited to
+surrogate modeling. In contrast, the electrical COP predicted by the
+current system model is comparatively insensitive to these design variables,
+so constructing an RSM for COP would provide little additional value.
+
+The fitted surrogate provides a computationally inexpensive approximation
+to repeated AMRSystem.run() evaluations and is intended for design-space
+exploration and multi-objective optimization.
 """
 
 import numpy as np

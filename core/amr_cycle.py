@@ -71,9 +71,8 @@ class AMRSystem:
         parasitic_fraction        : pump + magnet-motor-drive electrical
                                      overhead, as a fraction of Qc, ADDED ON
                                      TOP of the ideal magnetic-cycle work to
-                                     get device-level electrical COP. The
-                                     default 0.15 is the Phase 2 calibrated
-                                     value against two comparably-sized lab
+                                     get device-level electrical COP. The default 0.15 is a literature-calibrated
+                                     value based on two comparably sized lab
                                      devices (DTU rotary Gd: 0.171, Tusek
                                      single-bed Gd: 0.118 - see
                                      core/validation_system.py). The large
@@ -81,19 +80,18 @@ class AMRSystem:
                                      implied 0.453, which Jacobs et al. (2014)
                                      attribute explicitly to "electrical
                                      components with mediocre efficiency" at
-                                     that scale/vintage - treat 0.15 as an
-                                     optimistic lab-scale figure, not a
+                                     that scale/vintage. Treat 0.15 as an
+                                     optimistic lab-scale figure rather than a
                                      production-hardware guarantee, and widen
                                      it in any economics sensitivity study.
                                      IGNORED if loss_model is provided.
         loss_model                : optional core.loss_model.StateDependentLossModel.
-                                     Phase 3: if given, W_parasitic is computed
-                                     as a function of (frequency, mu0H_max,
-                                     fluid_mdot, Qc) instead of the constant
-                                     parasitic_fraction*Qc — this is what
-                                     restores field/frequency/flow sensitivity
-                                     to COP_electrical (see results/sobol_results.txt
-                                     for why the constant-fraction model had none).
+                                    If provided, W_parasitic is computed as a
+                                    function of (frequency, mu0H_max,
+                                    fluid_mdot, Qc) instead of the constant
+                                    parasitic_fraction*Qc. This restores
+                                    field-, frequency-, and flow-dependent
+                                    electrical losses to COP_electrical.
         """
         self.mat = material
         self.mu0H_max = mu0H_max
@@ -108,9 +106,10 @@ class AMRSystem:
         self._last_ntu_info = None
 
     def _effective_eps(self):
-        """Phase 4: if use_ntu_thermal_model is set, compute eps from bed
-        geometry/NTU (core/thermal.py) instead of using the fixed constant
-        -- this is what makes mass_regenerator matter for Qc."""
+        """If use_ntu_thermal_model is enabled, compute regenerator
+        effectiveness from the NTU model (core/thermal.py) instead of using
+        the prescribed constant value. This allows regenerator mass to
+        influence cooling capacity."""
         if not self.use_ntu_thermal_model:
             return self.eps
         from core.thermal import regenerator_effectiveness as ntu_eps

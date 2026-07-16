@@ -1,15 +1,33 @@
 """
 main.py
 =======
-Runs the magnetic (AMR) cooling model against vapor-compression and liquid
-cooling baselines across the ASHRAE TC9.9 data-center thermal guideline
-envelope, and writes a comparison table + plot to results/.
+Runs the active magnetic regenerator (AMR) cooling model alongside
+vapor-compression and liquid-cooling baselines over the ASHRAE TC9.9
+recommended operating range for data-center cooling.
 
-Operating points: server return air / facility water at Tc = 18-27 C
-(ASHRAE Class A1/A2 recommended range), rejecting to Th = Tc + span, where
-span is swept 5-20 K to cover close-coupled to chilled-water-plant duty.
-Reference: ASHRAE TC9.9, "Thermal Guidelines for Data Processing
-Environments", 5th ed. (2021).
+The script evaluates system performance at a fixed cold-side temperature
+of 18 °C (291.15 K) while sweeping the temperature lift from 5 K to 20 K.
+Results are written to results/comparison_table.csv.
+
+Operating conditions
+--------------------
+Cold-side temperature:
+    18 °C (ASHRAE recommended supply temperature)
+
+Temperature span:
+    5–20 K
+
+The AMR model is compared with:
+
+    • Vapor-compression refrigeration
+    • Liquid cooling
+    • Carnot COP
+
+Reference
+---------
+ASHRAE TC9.9,
+Thermal Guidelines for Data Processing Environments,
+5th Edition (2021).
 """
 
 import numpy as np
@@ -64,10 +82,13 @@ def main():
         print(f"{r['span_K']:>8} {r['AMR_COP_electrical']:>13} {r['VaporCompression_COP']:>9} "
               f"{r['LiquidCooling_COP']:>11} {r['Carnot_COP']:>8}")
     print(f"\nWrote {RESULTS_CSV}")
-    print("Note: AMR_COP_electrical (parasitic-inclusive, Phase 2 calibrated) is the "
-          "column comparable to VCC/Liquid COP, both of which are electrical figures. "
-          "AMR_COP_ideal (magnetic-cycle-only) is kept for reference but overstates "
-          "real-world performance -- see core/validation_system.py.")
+    print(
+        "Note: AMR_COP_electrical includes estimated parasitic losses and is "
+        "the appropriate quantity for comparison with vapor-compression and "
+        "liquid-cooling COP values, which are also reported on an electrical "
+        "basis. AMR_COP_ideal represents the thermodynamic cycle alone and is "
+        "provided for reference."
+    )
 
 
 if __name__ == "__main__":

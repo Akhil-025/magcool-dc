@@ -1,68 +1,97 @@
 """
 thermal.py
-===========
-Phase 4: NTU-based packed-bed regenerator effectiveness model, replacing the
-fixed `regenerator_effectiveness=0.85` placeholder used through Phases 1-3.
-This directly targets the gap optimize.py's Phase 3 run exposed: with a
-fixed eps, `mass_regenerator` had no effect on cooling capacity at all, so
-the optimizer trivially minimized it. Here, mass (via bed volume and
-heat-transfer area) and frequency/flow (via NTU and utilization) both feed
-into eps, so bigger/smaller regenerators have a real, physically motivated
-consequence.
+==========
+NTU-based packed-bed regenerator effectiveness model for active magnetic
+regenerator (AMR) systems.
 
-Model chain (packed sphere bed, the geometry used in most published AMR
-prototypes -- Tusek et al. 2011; Trevizoli & Barbosa 2017 review):
+This model estimates regenerator effectiveness from packed-bed geometry,
+heat-transfer correlations, and thermal utilization, allowing regenerator
+mass, operating frequency, and fluid flow rate to influence thermal
+performance.
 
-  1. Bed geometry from mass_regenerator, particle diameter d_p and packing
-     porosity phi (default 0.365, mid-range of experimentally reported
-     0.36-0.37 for packed Gd sphere beds -- Trevizoli et al., Appl. Therm.
-     Eng. (2016) porous-matrix geometry comparison; Tusek et al. (2011)):
-         V_bed = mass_regenerator / (rho_Gd * (1 - phi))
-         specific surface area a = 6*(1-phi)/d_p        [m^2 interstitial
-                                                            area per m^3 bed]
-         A_total = a * V_bed
+Model chain
+-----------
+Packed-sphere-bed geometry (representative of many experimental AMR
+regenerators):
 
-  2. Interstitial heat transfer coefficient h from the Wakao & Kaguei (1982)
-     packed-bed correlation (widely used in the AMR modeling literature,
-     e.g. the packed-bed AMR models cited in Trevizoli & Barbosa's review):
-         Nu = 2 + 1.1 * Re^0.6 * Pr^(1/3)
-         Re = rho_f * u_s * d_p / mu_f      (u_s = superficial velocity)
-         h = Nu * k_f / d_p
+1. Bed geometry
 
-  3. NTU = h * A_total / (mdot * cp_f)
+       V_bed = mass_regenerator / (rho_Gd * (1 - phi))
 
-  4. Utilization factor (fraction of solid thermal mass "swept" by fluid
-     per half-cycle blow), standard AMR definition (Engelbrecht 2010;
-     Nielsen et al. 2011):
-         U = (mdot * cp_f) / (2 * f * mass_regenerator * cp_solid)
+       specific surface area:
+           a = 6*(1-phi)/d_p
 
-  5. Regenerator effectiveness, balanced periodic-flow regenerator
-     approximation (Kays & London, "Compact Heat Exchangers", 3rd ed.,
-     1984 -- standard handbook formula for a rotary/matrix regenerator with
-     roughly equal blow/counter-blow thermal capacity, adjusted for
-     utilization following the same qualitative form used in the AMR
-     literature, e.g. Engelbrecht's thesis / Nielsen et al. 2011 Fig. 3-4
-     eps-vs-NTU-and-U curves):
-         eps = NTU / (NTU + 2)  * (1 - 0.3*U)      [U-degradation term is a
-                                                       simple, literature-
-                                                       motivated but NOT
-                                                       independently fit
-                                                       correction -- flagged
-                                                       below]
-     clipped to [0, 0.97].
+       total heat-transfer area:
+           A_total = a * V_bed
 
-**Honesty flag**: step 5's U-degradation factor (1 - 0.3*U) is a
-qualitatively-motivated placeholder (higher utilization does reduce
-effectiveness in the published eps-NTU-U curves), not a coefficient fit to
-data the way loss_model.py's terms are. Phase 5/6 should replace it with a
-digitized fit to Nielsen et al. (2011) or Trevizoli et al. (2016)'s actual
-eps-NTU-U curves.
+where phi is the packing porosity and d_p is the particle diameter.
+
+2. Convective heat transfer
+
+The interstitial heat-transfer coefficient is computed using the
+Wakao–Kaguei packed-bed correlation:
+
+       Nu = 2 + 1.1 Re^0.6 Pr^(1/3)
+
+with
+
+       Re = rho_f u_s d_p / mu_f
+
+and
+
+       h = Nu k_f / d_p
+
+3. Number of transfer units
+
+       NTU = h A_total / (m_dot c_p,f)
+
+4. Utilization factor
+
+The utilization ratio compares the fluid thermal capacity moved during
+each half-cycle with the thermal capacity of the regenerator:
+
+       U = (m_dot c_p,f) /
+           (2 f m_reg c_p,solid)
+
+5. Regenerator effectiveness
+
+A balanced periodic-flow regenerator approximation is used:
+
+       eps = NTU/(NTU + 2) x (1 - 0.3 U)
+
+with the result clipped to the interval [0, 0.97].
+
+References
+----------
+Geometry and packed-bed concepts:
+    • Tusek et al.
+    • Trevizoli & Barbosa (2017)
+
+Heat-transfer correlation:
+    • Wakao & Kaguei (1982)
+
+Regenerator theory:
+    • Kays & London, Compact Heat Exchangers, 3rd ed. (1984)
+    • Engelbrecht (2010)
+    • Nielsen et al. (2011)
+
+Limitations
+-----------
+The utilization correction
+
+       (1 - 0.3 U)
+
+is a phenomenological approximation intended to reproduce the qualitative
+reduction in effectiveness observed at higher utilization. The coefficient
+0.3 is literature-motivated but has not been calibrated against digitized
+experimental effectiveness curves and should therefore be regarded as an
+engineering approximation rather than a validated empirical fit.
 """
 
 import numpy as np
 
-RHO_GD = 7900.0          # kg/m^3, gadolinium density (standard literature value)
-CP_SOLID_GD = 236.0        # J/(kg K), approx Gd specific heat near room temp
+RHO_GD = 7900.0              # kg/m^3, gadolinium density (standard literature value)
+CP_SOLID_GD = 236.0          # J/(kg K), approx Gd specific heat near room temp
                              # (Dan'kov et al. 1998 report C_p peaking near
                              # 300 J/kg/K at Tc; 236 J/kg/K is representative
                              # of the broader near-room-temperature range)

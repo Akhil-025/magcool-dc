@@ -1,8 +1,8 @@
 """
 baseline_cooling.py
 ====================
-Reference COP models for the two incumbent data-center cooling technologies
-that magnetic cooling is being benchmarked against:
+Reference COP models for two conventional data-center cooling technologies
+used as benchmarks for magnetic cooling:
 
 1. Vapor-compression CRAC/CRAH (air-cooled, room/row-based)
 2. Direct liquid cooling (cold-plate, facility-water-cooled)

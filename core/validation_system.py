@@ -1,34 +1,54 @@
 """
 validation_system.py
-=====================
-Phase 2: system-level (device-scale) validation of amr_cycle.py against
-digitized published AMR prototype data (data/amr_experimental_benchmarks.csv).
+====================
+System-level validation of the active magnetic regenerator (AMR) cycle model
+against published prototype-scale experimental data.
 
-Methodology (mirrors the calibrate-then-validate approach used in
-pemfc/calibration_summary.txt): the 0-D model needs a fluid mass-flow rate
-that none of the source papers report in a directly usable form (some report
-a utilization factor U with a device-specific definition; comparing those
-directly would just be re-deriving mdot from their own paper, not an
-independent check). Instead:
+Benchmark data are loaded from
+data/amr_experimental_benchmarks.csv.
 
-  1. CALIBRATE: for each benchmark, solve for the single free parameter
-     (fluid_mdot) that reproduces the *reported cooling capacity* Qc at the
-     *reported span*, using the device's own field/mass/frequency and the
-     material closest to what was actually used (Gd for Gd devices; Gd is
-     also used as a stand-in for La(Fe,Si)13H_y since that material isn't
-     yet in the materials library — flagged explicitly in the output).
+Methodology
+-----------
+The available literature generally does not report fluid mass-flow rate in a
+form directly comparable across devices. Some studies instead report
+utilization factors or other device-specific quantities, making direct
+comparison difficult.
 
-  2. VALIDATE: with mdot calibrated (i.e. Qc matched by construction), check
-     whether the model's *independently computed* COP - which comes from
-     amr_cycle.py's second-law-efficiency assumption (eta_2nd_law =
-     0.35 + 0.20*eps), not from anything fit to this data - matches the
-     reported COP. This is the actual test of the cycle model, since Qc
-     alone doesn't test the magnetic-work / COP physics.
+The validation therefore follows a two-step procedure:
 
-This is a real limitation to disclose in the paper: it validates the
-second-law-efficiency correlation, not the full 0-D model end-to-end, because
-device-level mdot data isn't published in a directly comparable form. Phase 4
-(NTU-based thermal.py) removes the need for this calibration step.
+1. Calibration
+
+   For each benchmark device, determine the fluid mass-flow rate that
+   reproduces the reported cooling capacity (Qc) at the reported operating
+   temperature span using the published field strength, regenerator mass and
+   operating frequency.
+
+   The magnetic material closest to the experimental device is used:
+
+   • Gd for gadolinium-based prototypes.
+
+   • Gd is used as a surrogate for La(Fe,Si)13Hy devices because that
+     material is not yet included in the material library.
+
+2. Validation
+
+   After calibrating the mass-flow rate, compare the model-predicted
+   electrical COP with the published experimental COP.
+
+   Since cooling capacity is matched during calibration, the validation
+   primarily assesses the cycle model's prediction of efficiency rather than
+   its ability to predict cooling capacity from first principles.
+
+Limitations
+-----------
+Because the fluid mass-flow rate is calibrated rather than independently
+measured, this procedure validates the cycle-efficiency model rather than
+providing a completely independent end-to-end validation of the entire
+0-D AMR model.
+
+A more rigorous validation would compare against experimental datasets that
+report complete operating conditions, including directly measured flow rates
+or utilization values that are consistent across devices.
 """
 
 import csv
@@ -38,7 +58,7 @@ from core.mce_material import GADOLINIUM
 from core.amr_cycle import AMRSystem
 
 BENCH_CSV = "data/amr_experimental_benchmarks.csv"
-T_COLD_ASSUMED_K = 294.0 - 5.0  # assume device centered near Gd's Tc=294K,
+T_COLD_ASSUMED_K = 294.0 - 5.0     # assume device centered near Gd's Tc=294K,
                                    # cold side ~5K below center as a working default
 
 
@@ -107,23 +127,22 @@ def run_system_validation():
 
 
 if __name__ == "__main__":
-    print("Phase 2 system-level validation vs. published AMR prototypes")
+    print("System-level validation against published AMR prototype data")
     print("=" * 110)
     results = run_system_validation()
     errs = [abs(r["COP_error_pct"]) for r in results if "COP_error_pct" in r]
     if errs:
         print("=" * 110)
         print(f"Mean |COP_electrical error| = {np.mean(errs):.1f}%  |  Max = {np.max(errs):.1f}%")
-        print("\nKey Phase 2 finding: the *ideal* magnetic-cycle COP (no pump/motor "
-              "overhead) overpredicts published *electrical* device COP by 118-619% "
-              "-- because literature COP figures are electrical (include pump + "
-              "magnet-motor-drive power), not thermodynamic-cycle-only. Adding a "
-              "calibrated parasitic_fraction (default 0.15, see amr_cycle.py) to "
-              "get COP_electrical brings the two smaller/comparable lab devices to "
-              "single-digit-percent agreement; the large Astronautics naval-cooler "
-              "prototype remains an outlier because its own paper reports unusually "
-              "low electrical-component efficiency at that scale/vintage. This "
-              "electrical-vs-ideal distinction is the correct number to carry into "
-              "main.py's comparison against vapor-compression/liquid-cooling "
-              "baselines, which are themselves electrical COPs.")
+        print(
+            "\nSummary: the ideal thermodynamic-cycle COP substantially "
+            "overpredicts published electrical COP because experimental values "
+            "include pump, motor and drive losses that are absent from the ideal "
+            "cycle. Incorporating calibrated parasitic losses significantly improves "
+            "agreement for the laboratory-scale benchmark devices, while the "
+            "large-scale Astronautics prototype remains an outlier, likely reflecting "
+            "additional system-level inefficiencies not represented by the current "
+            "model. Electrical COP is therefore the appropriate metric for comparison "
+            "with vapor-compression and liquid-cooling systems."
+        )
 

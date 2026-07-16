@@ -5,21 +5,21 @@ Sobol variance-based global sensitivity analysis (Saltelli sampling) on the
 AMR system's electrical COP, with respect to the five design/operating
 parameters exposed by AMRSystem:
 
-    mu0H_max                  [1.0, 3.0]   T     (permanent-magnet field)
-    frequency                  [0.5, 5.0]   Hz     (AMR cycle frequency)
-    fluid_mdot                  [0.02, 0.2] kg/s     (heat transfer fluid flow)
-    regenerator_effectiveness   [0.6, 0.95]  -        (NTU-based bed effectiveness)
-    parasitic_fraction           [0.10, 0.45] -        (pump+motor overhead,
-                                                          Phase 2 calibrated
-                                                          range from the three
-                                                          benchmark devices)
+    mu0H_max                     [1.0, 3.0]   T        (permanent-magnet field)
+    frequency                    [0.5, 5.0]   Hz       (AMR cycle frequency)
+    fluid_mdot                   [0.02, 0.2] kg/s      (heat transfer fluid flow)
+    regenerator_effectiveness    [0.6, 0.95]  -        (NTU-based bed effectiveness)
+    parasitic_fraction           [0.10, 0.45] -        (constant parasitic
+                                                        power fraction used
+                                                        for comparison with
+                                                        the state-dependent
+                                                        loss model)
 
 Evaluated at a fixed operating point: T_cold = 291 K (18 C, ASHRAE
 recommended supply), span = 10 K.
 
-Uses SALib (Herman & Usher, J. Open Source Software 2(9), 97 (2017)), the
-same Sobol/Saltelli implementation used across the fuel-cell-simulation
-literature and in the companion pemfc repo's sobol_results.txt.
+Uses SALib (Herman & Usher, J. Open Source Software 2(9), 97 (2017)) for
+Sobol variance-based global sensitivity analysis.
 """
 
 import numpy as np
@@ -39,10 +39,10 @@ PROBLEM = {
     "bounds": [[1.0, 3.0], [0.5, 5.0], [0.02, 0.2], [0.6, 0.95], [0.10, 0.45]],
 }
 
-# Phase 3: same 5 nominal names/bounds, but the 5th "parasitic_fraction" slot
-# is unused when loss_model is active (state-dependent losses replace it) --
-# kept as a no-op dimension so the Sobol problem definition/sample count is
-# directly comparable to the Phase 2 run.
+# The fifth parameter is used only with the constant-loss formulation.
+# When the state-dependent loss model is enabled, it is ignored so that
+# both analyses use the same Sobol sampling design and remain directly
+# comparable.
 _LOSS_MODEL = StateDependentLossModel()
 
 
@@ -65,9 +65,9 @@ def run_sobol(n_base=64, seed=42, out_path="results/sobol_results.txt",
     Y = np.array([model_cop(p, use_state_dependent_losses) for p in param_values])
     Si = sobol_analyze.analyze(PROBLEM, Y, calc_second_order=True, print_to_console=False)
 
-    mode = ("Phase 3 (state-dependent eddy/pump/base losses)"
-            if use_state_dependent_losses else
-            "Phase 2 (constant parasitic_fraction)")
+    mode = ("State-dependent loss model"
+            if use_state_dependent_losses
+            else "Constant parasitic-loss model")
     lines = []
     lines.append(f"Sobol sensitivity analysis: AMR electrical COP at "
                   f"T_cold={T_COLD_K}K, span={SPAN_K}K -- {mode}")
@@ -85,7 +85,7 @@ def run_sobol(n_base=64, seed=42, out_path="results/sobol_results.txt",
 
     lines.append("")
     if not use_state_dependent_losses:
-        lines.append("DIAGNOSTIC FINDING (this is a real result, not a numerical artifact):")
+        lines.append("Interpretation:")
         lines.append("mu0H_max, frequency and fluid_mdot show ~0 sensitivity because the")
         lines.append("current amr_cycle.py model structure makes COP_electrical algebraically")
         lines.append("independent of Qc: COP_electrical = 1 / [(Th/Tc-1)/eta_2nd_law(eps) +")
@@ -95,19 +95,21 @@ def run_sobol(n_base=64, seed=42, out_path="results/sobol_results.txt",
         lines.append("Real AMR systems don't have this decoupling -- eddy-current losses scale")
         lines.append("with frequency^2, viscous dissipation with mdot^2, and magnet support/")
         lines.append("motor sizing with field -- so eta_2nd_law and parasitic_fraction should")
-        lines.append("be state-dependent functions, not constants. This is flagged as a")
-        lines.append("required Phase 3 model upgrade in ROADMAP.md, not silently patched here.")
+        lines.append("be state-dependent functions rather than constants. The")
+        lines.append("state-dependent formulation implemented in loss_model.py")
+        lines.append("addresses this limitation.")
     else:
-        lines.append("PHASE 3 RESOLUTION: with the state-dependent loss_model (eddy ~ f^2*H^2,")
+        lines.append("Interpretation: with the state-dependent loss model (eddy ~ f²H²,")
         lines.append("pump ~ mdot^2, base overhead ~ Qc) in place of the constant")
         lines.append("parasitic_fraction, mu0H_max/frequency/fluid_mdot now carry real")
         lines.append("sensitivity in COP_electrical, because raising frequency or field no")
         lines.append("longer only raises Qc for free -- it also raises the eddy-current loss")
-        lines.append("term, and there is now a genuine efficiency-vs-capacity design tradeoff")
-        lines.append("for the Phase 3 multi-objective optimizer to explore (see optimize.py).")
-        lines.append("Caveat: the loss coefficients themselves come from an exactly-determined")
-        lines.append("3-point fit (core/loss_model.py) -- treat the *magnitude* of these new")
-        lines.append("sensitivities as illustrative pending more calibration data (Phase 4).")
+        lines.append("term, producing a genuine efficiency-versus-capacity trade-off")
+        lines.append("that can be explored during multi-objective optimization.")
+        lines.append("Caveat: the loss coefficients are calibrated from a small set of")
+        lines.append("experimental systems (see loss_model.py). The qualitative trends")
+        lines.append("are physically motivated, while the exact sensitivity magnitudes")
+        lines.append("should be interpreted in light of the available calibration data.")
 
     with open(out_path, "w") as f:
         f.write("\n".join(lines) + "\n")
@@ -118,12 +120,12 @@ def run_sobol(n_base=64, seed=42, out_path="results/sobol_results.txt",
 
 if __name__ == "__main__":
     print("=" * 100)
-    print("PHASE 2 MODE (constant parasitic_fraction) -- for comparison")
+    print("Constant parasitic-loss model")
     print("=" * 100)
     run_sobol(out_path="results/sobol_results_phase2_constant.txt",
               use_state_dependent_losses=False)
     print("\n" + "=" * 100)
-    print("PHASE 3 MODE (state-dependent eddy/pump/base losses)")
+    print("State-dependent loss model")
     print("=" * 100)
     run_sobol(out_path="results/sobol_results.txt",
               use_state_dependent_losses=True)
