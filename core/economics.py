@@ -1,23 +1,48 @@
 """
 economics.py
 ============
-Order-of-magnitude CAPEX/OPEX comparison. Magnetocaloric cooling is
-pre-commercial for data-center-scale duty, so CAPEX figures here are drawn
-from published techno-economic magnetic-refrigeration studies rather than
-vendor quotes, and should be treated as indicative, not a procurement
-estimate (flag this explicitly in the report).
+Order-of-magnitude CAPEX/OPEX comparison.
+
+Phase 6 update: replaced the earlier placeholder $175/kg (loosely
+attributed to "Franco et al. 2018 order-of-magnitude") with the actual
+per-kg costs used in a dedicated magnetic-refrigerator cost-optimization
+study, found via a targeted search this session: Bjørk, Bahl & Smith,
+"Determining the minimum mass and cost of a magnetic refrigerator", Int. J.
+Refrigeration 34 (2011) 1805-1816 -- $40/kg for NdFeB (N42, 1.2-1.3T
+remanence) permanent magnet material, $20/kg for the magnetocaloric
+material (Gd). Their own worked examples (100W/20K device: 0.8kg magnet +
+0.3kg Gd; 50W/30K device: 0.15kg magnet + 0.04kg Gd) show magnet mass
+running roughly 2.7-3.75x the MCM mass and increasing with field --
+approximated here as magnet_mass ~= 3.0 * mu0H_max[T] * mass_regenerator,
+a rough fit to their two reported points, NOT a validated scaling law.
 
 Sources:
-    - Bahl, Engelbrecht et al., Int. J. Refrig. 37 (2014) 78-83 - AMR
-      system cost breakdown (rare-earth magnet + regenerator dominate CAPEX)
-    - Franco, Blazquez et al., Int. J. Refrig. 57 (2018) 288-298 -
-      magnetocaloric material cost review (Gd ~$130-220/kg incl. processing)
+    - Bjork, Bahl & Smith, Int. J. Refrig. 34 (2011) 1805-1816 -- magnet/MCM
+      unit costs and worked mass examples (used directly above)
+    - Bahl, Engelbrecht et al., Int. J. Refrig. 37 (2014) 78-83 -- AMR
+      system cost breakdown context
     - Lawrence Berkeley National Lab, "Data Center Cooling System Cost
       Benchmarks" (chilled water plant OPEX ~$0.02-0.05/kWh-cooled at
       typical US industrial electricity rates)
 """
 
 from dataclasses import dataclass
+
+COST_MCM_PER_KG = 20.0          # $/kg, Bjork et al. 2011
+COST_MAGNET_PER_KG = 40.0        # $/kg, Bjork et al. 2011 (NdFeB N42)
+MAGNET_TO_MCM_MASS_RATIO_PER_TESLA = 3.0  # rough fit to Bjork et al.'s two
+                                             # worked examples, see docstring
+
+
+def material_cost(mu0H_max, mass_regenerator):
+    """Bottom-up magnet + MCM material cost, $ (Bjork et al. 2011 unit costs
+    and mass-ratio approximation -- see module docstring). This is a
+    materials-only FLOOR, not full system cost (excludes heat exchangers,
+    pumps, motor/drive, controls, enclosure -- Bahl et al. 2014 note these
+    dominate total AMR system cost, materials are a minority share, but no
+    specific multiplier is cited here pending a bottom-up BOM in Phase 7)."""
+    magnet_mass = MAGNET_TO_MCM_MASS_RATIO_PER_TESLA * mu0H_max * mass_regenerator
+    return COST_MAGNET_PER_KG * magnet_mass + COST_MCM_PER_KG * mass_regenerator
 
 
 @dataclass
@@ -30,10 +55,13 @@ class TCOResult:
 
 AMR_MAGNETIC = TCOResult(
     "Magnetic (AMR)", capex_per_kw_cooling=2200.0, opex_per_kwh_cooling=0.012,
-    notes="Pre-commercial; CAPEX dominated by rare-earth permanent magnet "
-          "array + Gd regenerator material (Bahl et al. 2014, Franco et al. 2018). "
-          "OPEX benefits from higher COP but magnet/material cost is the open "
-          "question for DC-scale deployment.")
+    notes="Pre-commercial; this $/kW figure is a rough placeholder, NOT yet "
+          "derived from material_cost() above -- use material_cost(mu0H, "
+          "mass_regenerator) directly with a specific optimize.py Pareto "
+          "design for a grounded, materials-only cost floor (excludes heat "
+          "exchangers/pumps/motor/controls, which Bahl et al. 2014 note "
+          "dominate total system cost). Reconciling this placeholder with "
+          "the bottom-up figure is a Phase 7 item.")
 
 VAPOR_COMPRESSION = TCOResult(
     "Vapor-compression CRAC/CRAH", capex_per_kw_cooling=350.0,

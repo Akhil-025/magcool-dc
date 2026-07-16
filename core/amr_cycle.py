@@ -57,7 +57,8 @@ class AMRSystem:
                  mass_regenerator: float, frequency: float,
                  fluid_cp: float = 4186.0, fluid_mdot: float = 0.05,
                  regenerator_effectiveness: float = 0.85,
-                 parasitic_fraction: float = 0.15):
+                 parasitic_fraction: float = 0.15,
+                 loss_model=None, use_ntu_thermal_model: bool = False):
         """
         material               : MagnetocaloricMaterial instance
         mu0H_max                : peak applied field, Tesla
@@ -84,6 +85,15 @@ class AMRSystem:
                                      optimistic lab-scale figure, not a
                                      production-hardware guarantee, and widen
                                      it in any economics sensitivity study.
+                                     IGNORED if loss_model is provided.
+        loss_model                : optional core.loss_model.StateDependentLossModel.
+                                     Phase 3: if given, W_parasitic is computed
+                                     as a function of (frequency, mu0H_max,
+                                     fluid_mdot, Qc) instead of the constant
+                                     parasitic_fraction*Qc — this is what
+                                     restores field/frequency/flow sensitivity
+                                     to COP_electrical (see results/sobol_results.txt
+                                     for why the constant-fraction model had none).
         """
         self.mat = material
         self.mu0H_max = mu0H_max
@@ -93,6 +103,20 @@ class AMRSystem:
         self.mdot_f = fluid_mdot
         self.eps = regenerator_effectiveness
         self.parasitic_fraction = parasitic_fraction
+        self.loss_model = loss_model
+        self.use_ntu_thermal_model = use_ntu_thermal_model
+        self._last_ntu_info = None
+
+    def _effective_eps(self):
+        """Phase 4: if use_ntu_thermal_model is set, compute eps from bed
+        geometry/NTU (core/thermal.py) instead of using the fixed constant
+        -- this is what makes mass_regenerator matter for Qc."""
+        if not self.use_ntu_thermal_model:
+            return self.eps
+        from core.thermal import regenerator_effectiveness as ntu_eps
+        info = ntu_eps(self.m_reg, self.f, self.mdot_f)
+        self._last_ntu_info = info
+        return info["eps"]
 
     def cooling_capacity(self, T_cold, T_span):
         """Cooling capacity Qc (W) at a given no-load DeltaT_ad and imposed
@@ -108,7 +132,8 @@ class AMRSystem:
         if dTad_noload <= 0:
             return 0.0, dTad_noload
         span_fraction = max(0.0, 1.0 - T_span / (2 * dTad_noload))
-        Qc = self.eps * self.mdot_f * self.cp_f * dTad_noload * span_fraction
+        eps = self._effective_eps()
+        Qc = eps * self.mdot_f * self.cp_f * dTad_noload * span_fraction
         return max(Qc, 0.0), dTad_noload
 
     def magnetic_work(self, T_cold, T_span, Qc):
@@ -123,14 +148,18 @@ class AMRSystem:
         (Tusek et al. 2010; Eriksen et al. 2015, Int. J. Refrig. 58)."""
         T_hot = T_cold + T_span
         carnot_work = Qc * (T_hot / T_cold - 1.0) if T_cold > 0 else np.inf
-        eta_2nd_law = 0.35 + 0.20 * self.eps  # 0.35 at eps=0 .. 0.52 at eps=0.85
+        eta_2nd_law = 0.35 + 0.20 * self._effective_eps()  # 0.35 at eps=0 .. 0.52 at eps=0.85
         W = carnot_work / max(eta_2nd_law, 1e-3)
         return W, eta_2nd_law
 
     def run(self, T_cold, T_span) -> AMRCycleResult:
         Qc, dTad = self.cooling_capacity(T_cold, T_span)
         W, eta2 = self.magnetic_work(T_cold, T_span, Qc)
-        W_parasitic = self.parasitic_fraction * Qc
+        if self.loss_model is not None:
+            W_parasitic = self.loss_model.parasitic_power(
+                self.f, self.mu0H_max, self.mdot_f, Qc)
+        else:
+            W_parasitic = self.parasitic_fraction * Qc
         Qh = Qc + W
         COP = Qc / W if W > 0 else 0.0
         COP_electrical = Qc / (W + W_parasitic) if (W + W_parasitic) > 0 else 0.0

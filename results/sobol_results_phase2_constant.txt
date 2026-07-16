@@ -1,0 +1,29 @@
+Sobol sensitivity analysis: AMR electrical COP at T_cold=291.0K, span=10.0K -- Phase 2 (constant parasitic_fraction)
+Samples: 768 (Saltelli, N_base=64)
+
+parameter                     S1   S1_conf        ST   ST_conf
+mu0H_max_T                0.0000    0.0000    0.0000    0.0000
+frequency_Hz              0.0000    0.0000    0.0000    0.0000
+fluid_mdot_kgs           -0.0000    0.0000    0.0000    0.0000
+regen_effectiveness      -0.0042    0.0136    0.0015    0.0007
+parasitic_fraction        1.0091    0.3252    1.0025    0.2404
+
+Ranked by total-order sensitivity (ST):
+  parasitic_fraction     ST=1.0025
+  regen_effectiveness    ST=0.0015
+  mu0H_max_T             ST=0.0000
+  fluid_mdot_kgs         ST=0.0000
+  frequency_Hz           ST=0.0000
+
+DIAGNOSTIC FINDING (this is a real result, not a numerical artifact):
+mu0H_max, frequency and fluid_mdot show ~0 sensitivity because the
+current amr_cycle.py model structure makes COP_electrical algebraically
+independent of Qc: COP_electrical = 1 / [(Th/Tc-1)/eta_2nd_law(eps) +
+parasitic_fraction], since both W_mag and W_parasitic scale linearly
+with Qc and cancel. Field/frequency/flow rate DO change how much cooling
+you get (Qc, via dTad) but NOT, in this model, how efficiently you get it.
+Real AMR systems don't have this decoupling -- eddy-current losses scale
+with frequency^2, viscous dissipation with mdot^2, and magnet support/
+motor sizing with field -- so eta_2nd_law and parasitic_fraction should
+be state-dependent functions, not constants. This is flagged as a
+required Phase 3 model upgrade in ROADMAP.md, not silently patched here.

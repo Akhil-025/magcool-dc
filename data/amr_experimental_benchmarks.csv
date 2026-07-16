@@ -6,4 +6,4 @@ DTU_rotary_Gd_2016_maxspan,Gd (packed bed),1.44,0.98,1.4,16.6,0,,"Bahl/Eriksen/E
 Tusek_singlebed_Gd_2010,Gd (packed bed),1.69,0.196,0.25,15.0,6.5,4.6,"Tusek, Kitanovski et al., Appl. Therm. Eng. (2011 dataset, 2010 device)"
 Risoe_DTU_Gd_2011,Gd (packed bed),1.1,0.1955,1.0,30.0,35,5.0,"Engelbrecht et al., Int. Refrig. Cryo. Conf. Purdue (2010); part I/II ScienceDirect (2016)"
 Risoe_DTU_Gd_2011_maxcap,Gd (packed bed),1.1,0.1955,1.0,0.0,53.7,,"Engelbrecht et al., part I/II ScienceDirect (2016), max cooling capacity near zero span"
-Okamura_Hirano_2013,Gd (packed bed),1.1,,,5.0,,2.5,"Okamura & Hirano (2013), cited in Silva et al. review (2016)"
+Okamura_Hirano_2013,Gd (packed bed),1.1,1.0,1.0,5.0,200,2.5,"Okamura & Hirano (2013) J. Japan Soc. Appl. Electromagn. Mech. 21(1) 10-14, values as reported in Trevizoli & Barbosa review (ScienceDirect, ~2021): Qc_max=200W, COP_max=2.5 at 5K span, 1.1T, 1kg Gd. Frequency not stated in the secondary source -- 1.0 Hz used as a placeholder, flagged in loss_model.py."

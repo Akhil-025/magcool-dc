@@ -175,6 +175,19 @@ GD5SI2GE2 = MagnetocaloricMaterial(
     n_atoms_per_fu=9,
     source="Pecharsky & Gschneidner, Phys. Rev. Lett. 78, 4494 (1997)",
 )
+# HONESTY FLAG (found in Phase 4, core/cascade.py): the mean-field/Brillouin
+# framework used throughout mce_material.py is built for second-order
+# (continuous) magnetic transitions, which is valid for pure Gd. Gd5Si2Ge2's
+# "giant" MCE comes from a first-order, coupled magnetostructural phase
+# transition (Pecharsky & Gschneidner 1997) -- physics a continuous
+# mean-field/Brillouin model cannot capture. Running GD5SI2GE2 through
+# delta_T_adiabatic() here UNDERPREDICTS its real effect by roughly an order
+# of magnitude (model gives ~1 K at 2 T near its own Tc vs. the several-K-
+# to-double-digit effects reported experimentally near a first-order
+# transition). Treat GD5SI2GE2 in this codebase as a materials-library
+# placeholder, not yet a validated giant-MCE model — a proper treatment
+# needs a Bean-Rodbell or Landau free-energy model with magnetoelastic
+# coupling, deferred to Phase 5 (see ROADMAP.md).
 
 LACAMNO3 = MagnetocaloricMaterial(
     name="La0.7Ca0.3MnO3 (perovskite manganite)",
