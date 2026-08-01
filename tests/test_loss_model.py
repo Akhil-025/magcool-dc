@@ -1,82 +1,10 @@
 import numpy as np
-import pytest
 
-from core.economics import material_cost, lifetime_cost
-from core.emissions import refrigerant_emissions_tCO2e, operational_emissions_tCO2e, compare_emissions
-from core.baseline_cooling import carnot_cop, vapor_compression_cop, liquid_cooling_cop
 from core.loss_model import (
     calibrate_loss_coefficients, leave_one_out_cv, CALIBRATION_POINTS_CORE,
     CALIBRATION_POINTS_EXTENDED, CALIBRATION_POINTS_FURTHER_EXTENDED,
     analyze_parasitic_fraction_scaling,
 )
-
-
-def test_material_cost_scales_with_field_and_mass():
-    base = material_cost(mu0H_max=1.0, mass_regenerator=1.0)
-    higher_field = material_cost(mu0H_max=2.0, mass_regenerator=1.0)
-    more_mass = material_cost(mu0H_max=1.0, mass_regenerator=2.0)
-    assert higher_field > base
-    assert more_mass > base
-
-
-def test_lifetime_cost_includes_materials_floor_and_electricity():
-    result = lifetime_cost(mu0H_max=1.0, mass_regenerator=1.0, Qc_avg_W=500.0,
-                            COP_electrical=3.0, device_lifetime_years=15.0)
-    mat_floor = material_cost(mu0H_max=1.0, mass_regenerator=1.0)
-    assert result["materials_floor_$"] == pytest.approx(mat_floor, rel=1e-6)
-    assert result["lifetime_electricity_$"] > 0
-    assert result["lifetime_total_$"] == pytest.approx(
-        result["materials_floor_$"] + result["lifetime_electricity_$"], rel=1e-6)
-
-
-def test_lifetime_cost_scales_with_lifetime_and_inversely_with_cop():
-    short = lifetime_cost(mu0H_max=1.0, mass_regenerator=1.0, Qc_avg_W=500.0,
-                           COP_electrical=3.0, device_lifetime_years=5.0)
-    long = lifetime_cost(mu0H_max=1.0, mass_regenerator=1.0, Qc_avg_W=500.0,
-                          COP_electrical=3.0, device_lifetime_years=15.0)
-    assert long["lifetime_electricity_$"] > short["lifetime_electricity_$"]
-
-    low_cop = lifetime_cost(mu0H_max=1.0, mass_regenerator=1.0, Qc_avg_W=500.0,
-                             COP_electrical=2.0)
-    high_cop = lifetime_cost(mu0H_max=1.0, mass_regenerator=1.0, Qc_avg_W=500.0,
-                              COP_electrical=8.0)
-    assert low_cop["lifetime_electricity_$"] > high_cop["lifetime_electricity_$"]
-
-
-def test_lifetime_cost_rejects_nonpositive_cop():
-    with pytest.raises(ValueError):
-        lifetime_cost(mu0H_max=1.0, mass_regenerator=1.0, Qc_avg_W=500.0,
-                       COP_electrical=0.0)
-
-
-def test_refrigerant_emissions_zero_leak_rate_is_zero():
-    assert refrigerant_emissions_tCO2e(100.0, leak_rate=0.0) == 0.0
-
-
-def test_operational_emissions_scale_inversely_with_cop():
-    low_cop = operational_emissions_tCO2e(100.0, cop=3.0)
-    high_cop = operational_emissions_tCO2e(100.0, cop=10.0)
-    assert low_cop > high_cop
-
-
-def test_compare_emissions_amr_has_zero_refrigerant_component():
-    results = compare_emissions(100.0, amr_cop=5.0, vcc_cop=12.0, liquid_cop=20.0)
-    amr = next(r for r in results if r.technology.startswith("Magnetic"))
-    assert amr.refrigerant_GWP_tCO2e_per_year == 0.0
-
-
-def test_carnot_cop_matches_definition():
-    assert carnot_cop(290.0, 300.0) == pytest.approx(290.0 / 10.0)
-
-
-def test_baseline_cops_below_carnot():
-    vcc = vapor_compression_cop(290.0, 300.0)
-    liq = liquid_cooling_cop(290.0, 300.0)
-    assert vcc.COP < vcc.COP_carnot
-    # liquid cooling blends a high economizer-mode COP, so only check it's
-    # not exceeding physical bounds by an absurd margin (it can legitimately
-    # exceed the *mechanical* Carnot figure for the DX-only comparison).
-    assert liq.COP > 0
 
 
 def test_loss_model_calibration_nonnegative():

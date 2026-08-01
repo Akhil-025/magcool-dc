@@ -241,7 +241,7 @@
         represent, strengthening rather than overturning the existing
         Phase 7 conclusion. CORE 3-point fit remains the production
         default. New tests in `tests/test_validation_system.py` and
-        `tests/test_supporting_modules.py` cover all of this; full run
+        `tests/test_loss_model.py` cover all of this; full run
         saved to `results/loss_model_diagnostics.txt`.
       - **Tušek, Kitanovski, Zupan, Prebil, Poredoš (2013), "A
         comprehensive experimental analysis of gadolinium active magnetic

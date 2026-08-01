@@ -43,7 +43,7 @@ solution afterwards does not minimize any well-defined objective under
 that constraint and can silently mask an unstable fit. For the CORE
 3-point set the unconstrained optimum is already non-negative, so NNLS
 and the old lstsq-then-clip approach agree exactly (checked by
-`tests/test_supporting_modules.py`). For the EXTENDED 4-point set, NNLS
+`tests/test_loss_model.py`). For the EXTENDED 4-point set, NNLS
 removes the negative k_eddy/base_frac Phase 6 reported (`k_eddy=0` is
 now the constrained optimum instead of a clipped negative value), but
 leave-one-out error predicting the smallest device (Tušek, 6.5 W) from
