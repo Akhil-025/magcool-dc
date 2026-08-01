@@ -1,0 +1,5 @@
+device_group,status,anchor_span_K,anchor_Qc_W,companion_span_K,companion_Qc_lit_W,companion_Qc_model_W,companion_Qc_error_pct,mdot_calibrated_kg_s
+Astronautics_rotary_2014,,11.0,2502.0,0.0,3042.0,3577.5,17.6,0.253
+DTU_rotary_Gd_2016,,10.1,818.0,16.6,0.0,0.0,,0.1981
+Risoe_DTU_Gd_2011,no calibration found at anchor point,,,,,,,
+Lozano_POLO_UFSC_2016,multi-point set (8 independent points) -- see run_system_validation(),,,,,,,

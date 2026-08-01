@@ -1,0 +1,28 @@
+Sobol sensitivity analysis: AMR electrical COP at T_cold=291.0K, span=10.0K -- State-dependent loss model
+Samples: 768 (Saltelli, N_base=64)
+
+parameter                     S1   S1_conf        ST   ST_conf
+mu0H_max_T                0.0430    0.0572    0.0363    0.0209
+frequency_Hz              0.5392    0.2595    0.7721    0.3001
+fluid_mdot_kgs            0.2154    0.1345    0.2369    0.0944
+regen_effectiveness       0.0156    0.0803    0.0383    0.0144
+parasitic_fraction        0.0000    0.0000    0.0000    0.0000
+
+Ranked by total-order sensitivity (ST):
+  frequency_Hz           ST=0.7721
+  fluid_mdot_kgs         ST=0.2369
+  regen_effectiveness    ST=0.0383
+  mu0H_max_T             ST=0.0363
+  parasitic_fraction     ST=0.0000
+
+Interpretation: with the state-dependent loss model (eddy ~ f²H²,
+pump ~ mdot^2, base overhead ~ Qc) in place of the constant
+parasitic_fraction, mu0H_max/frequency/fluid_mdot now carry real
+sensitivity in COP_electrical, because raising frequency or field no
+longer only raises Qc for free -- it also raises the eddy-current loss
+term, producing a genuine efficiency-versus-capacity trade-off
+that can be explored during multi-objective optimization.
+Caveat: the loss coefficients are calibrated from a small set of
+experimental systems (see loss_model.py). The qualitative trends
+are physically motivated, while the exact sensitivity magnitudes
+should be interpreted in light of the available calibration data.

@@ -1,0 +1,81 @@
+Calibrated loss-model coefficients [CORE (production default)], 3 points, 3 unknowns (exactly-determined, NNLS, residual norm=0.0000):
+  k_eddy    =  1.998653  W / (Hz^2 * T^2)
+  k_pump    =  776.886679  W / (kg/s)^2
+  base_frac =  0.060692  (dimensionless, x Qc)
+  Fit residuals (predicted - required W_parasitic):
+    Astronautics_rotary_2014     true= 1133.41W  fit= 1133.41W  resid=  +0.00W
+    DTU_rotary_Gd_2016           true=  139.88W  fit=  139.88W  resid=  +0.00W
+    Tusek_singlebed_Gd_2010      true=    0.77W  fit=    0.77W  resid=  -0.00W
+
+==========================================================================================
+DIAGNOSTIC: adding Okamura & Hirano (2013) as a fourth calibration point
+==========================================================================================
+Calibrated loss-model coefficients [EXTENDED (4pt, diagnostic only, NNLS)], 4 points, 3 unknowns (over-determined, NNLS, residual norm=31.5823):
+  k_eddy    =  33.057651  W / (Hz^2 * T^2)
+  k_pump    =  0.000000  W / (kg/s)^2
+  base_frac =  0.014753  (dimensionless, x Qc)
+  Fit residuals (predicted - required W_parasitic):
+    Astronautics_rotary_2014     true= 1133.41W  fit= 1133.69W  resid=  +0.28W
+    DTU_rotary_Gd_2016           true=  139.88W  fit=  146.42W  resid=  +6.55W
+    Tusek_singlebed_Gd_2010      true=    0.77W  fit=    6.00W  resid=  +5.23W
+    Okamura_Hirano_2013          true=   73.40W  fit=   42.95W  resid= -30.45W
+  NOTE: k_pump pinned to 0 by the non-negativity constraint (the unconstrained optimum was negative here).
+
+  Leave-one-out cross-validation on the EXTENDED set (NNLS per fold):
+  held out Astronautics_rotary_2014     W_parasitic true= 1133.41W  predicted= 1210.86W  error=   +6.8%
+  held out DTU_rotary_Gd_2016           W_parasitic true=  139.88W  predicted=  317.94W  error= +127.3%
+  held out Tusek_singlebed_Gd_2010      W_parasitic true=    0.77W  predicted=    6.00W  error= +682.0%
+  held out Okamura_Hirano_2013          W_parasitic true=   73.40W  predicted=   16.51W  error=  -77.5%
+
+  CONCLUSION: switching from unconstrained lstsq to NNLS removes the negative (unphysical) coefficients Phase 6 found, and improves the worst leave-one-out error from +1639% to +682% (held-out device: Tusek_singlebed_Gd_2010) -- but that is still an order-of-magnitude miss. A better-behaved solver alone does not make a single linear model generalize across devices spanning 6.5W to 2502W of cooling capacity. The CORE 3-point fit remains the production default.
+
+  Testing the natural next hypothesis -- that this is a simple device-size effect:
+Parasitic fraction (W_parasitic / Qc) sorted by device scale:
+    Tusek_singlebed_Gd_2010      Qc=     6.5 W   fraction=0.118
+    Okamura_Hirano_2013          Qc=   200.0 W   fraction=0.367
+    DTU_rotary_Gd_2016           Qc=   818.0 W   fraction=0.171
+    Astronautics_rotary_2014     Qc=  2502.0 W   fraction=0.453
+  Monotonic in device scale? False
+  CONCLUSION: no monotonic size trend in this 4-point set -- the smallest device (Tusek, 6.5W) does NOT have the highest overhead fraction, and the largest (Astronautics, 2502W) does NOT have the lowest. A simple size/scale term is not supported by the data in hand; the Astronautics outlier is independently attributed by its own source paper to 'mediocre' electrical-component efficiency at that scale, i.e. a device-specific engineering choice, not a generic size law. With the Lozano points included, the picture sharpens further: the four highest fractions in the whole set (1.18-1.68) are ALL Lozano points clustered in the low-to-mid Qc range, sitting well above Okamura (200W, 0.367) and Astronautics (2502W, 0.453) -- i.e. grouped by device/paper, not ordered by scale.
+
+==========================================================================================
+DIAGNOSTIC: adding 4 calibratable Lozano POLO/UFSC (2016) points (8pt FURTHER_EXTENDED)
+==========================================================================================
+Calibrated loss-model coefficients [FURTHER_EXTENDED (8pt, diagnostic only, NNLS)], 8 points, 3 unknowns (over-determined, NNLS, residual norm=201.4144):
+  k_eddy    =  2.517271  W / (Hz^2 * T^2)
+  k_pump    =  570.319325  W / (kg/s)^2
+  base_frac =  0.150571  (dimensionless, x Qc)
+  Fit residuals (predicted - required W_parasitic):
+    Astronautics_rotary_2014     true= 1133.41W  fit= 1132.14W  resid=  -1.27W
+    DTU_rotary_Gd_2016           true=  139.88W  fit=  193.68W  resid= +53.80W
+    Tusek_singlebed_Gd_2010      true=    0.77W  fit=    1.44W  resid=  +0.67W
+    Okamura_Hirano_2013          true=   73.40W  fit=   34.60W  resid= -38.80W
+    Lozano_POLO_UFSC_2016_r4     true=  105.25W  fit=   69.74W  resid= -35.51W
+    Lozano_POLO_UFSC_2016_r6     true=  122.21W  fit=   14.53W  resid=-107.68W
+    Lozano_POLO_UFSC_2016_r7     true=  104.31W  fit=   12.72W  resid= -91.59W
+    Lozano_POLO_UFSC_2016_r8     true=  142.07W  fit=   19.92W  resid=-122.15W
+
+  Leave-one-out cross-validation on the FURTHER_EXTENDED set (NNLS per fold):
+  held out Astronautics_rotary_2014     W_parasitic true= 1133.41W  predicted=  974.20W  error=  -14.0%
+  held out DTU_rotary_Gd_2016           W_parasitic true=  139.88W  predicted=  373.69W  error= +167.2%
+  held out Tusek_singlebed_Gd_2010      W_parasitic true=    0.77W  predicted=    1.44W  error=  +88.0%
+  held out Okamura_Hirano_2013          W_parasitic true=   73.40W  predicted=   29.55W  error=  -59.7%
+  held out Lozano_POLO_UFSC_2016_r4     W_parasitic true=  105.25W  predicted=    9.09W  error=  -91.4%
+  held out Lozano_POLO_UFSC_2016_r6     W_parasitic true=  122.21W  predicted=   12.56W  error=  -89.7%
+  held out Lozano_POLO_UFSC_2016_r7     W_parasitic true=  104.31W  predicted=   11.05W  error=  -89.4%
+  held out Lozano_POLO_UFSC_2016_r8     W_parasitic true=  142.07W  predicted=   15.76W  error=  -88.9%
+
+  CONCLUSION: the naive 'worst leave-one-out error' metric actually IMPROVES with 8 points (+167%, held-out device: DTU_rotary_Gd_2016) versus the 4-point EXTENDED set's +682% -- but this is misleading, not genuine progress: it happens because Tusek's small W_parasitic becomes easier to hit once more low/mid-Qc points anchor the fit, not because the model now generalizes to the Lozano device class. The more informative number is that all 4 Lozano points, when held out, are underpredicted by a similar amount (mean -90%, individually ['-91%', '-90%', '-89%', '-89%']) -- a CONSISTENT, one-directional miss, not noise. That consistency is itself evidence for the standing hypothesis: Lozano's device sits in a different, definably-worse motor/inverter efficiency class (its own paper: COP 'modest ... in comparison with established cooling technologies', motor power comparable to or exceeding Qc) that a state-variable-only loss model (frequency, field, mdot, Qc) cannot represent, regardless of solver. The CORE 3-point fit remains the production default.
+
+  Re-testing scale monotonicity with the enlarged 8-device set:
+Parasitic fraction (W_parasitic / Qc) sorted by device scale:
+    Tusek_singlebed_Gd_2010      Qc=     6.5 W   fraction=0.118
+    Lozano_POLO_UFSC_2016_r4     Qc=    62.5 W   fraction=1.684
+    Lozano_POLO_UFSC_2016_r7     Qc=    80.8 W   fraction=1.291
+    Lozano_POLO_UFSC_2016_r6     Qc=    81.2 W   fraction=1.505
+    Lozano_POLO_UFSC_2016_r8     Qc=   120.4 W   fraction=1.180
+    Okamura_Hirano_2013          Qc=   200.0 W   fraction=0.367
+    DTU_rotary_Gd_2016           Qc=   818.0 W   fraction=0.171
+    Astronautics_rotary_2014     Qc=  2502.0 W   fraction=0.453
+  Monotonic in device scale? False
+  CONCLUSION: no monotonic size trend in this 8-point set -- the smallest device (Tusek, 6.5W) does NOT have the highest overhead fraction, and the largest (Astronautics, 2502W) does NOT have the lowest. A simple size/scale term is not supported by the data in hand; the Astronautics outlier is independently attributed by its own source paper to 'mediocre' electrical-component efficiency at that scale, i.e. a device-specific engineering choice, not a generic size law. With the Lozano points included, the picture sharpens further: the four highest fractions in the whole set (1.18-1.68) are ALL Lozano points clustered in the low-to-mid Qc range, sitting well above Okamura (200W, 0.367) and Astronautics (2502W, 0.453) -- i.e. grouped by device/paper, not ordered by scale.
