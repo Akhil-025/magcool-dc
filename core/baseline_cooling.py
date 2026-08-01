@@ -77,14 +77,3 @@ def liquid_cooling_cop(Tc, Th, economizer_hours_fraction=0.6,
                           % (economizer_hours_fraction * 100),
                           Tc, Th, cop_avg, cc, eff_2nd_law_blended)
 
-
-def compare_all(amr_result, Tc, Th, **kwargs):
-    """Convenience: returns dict of technology -> CoolingResult/AMRCycleResult
-    for the same (Tc, Th) operating point."""
-    vcc = vapor_compression_cop(Tc, Th)
-    liq = liquid_cooling_cop(Tc, Th)
-    return {
-        "Magnetic (AMR)": amr_result,
-        "Vapor-compression": vcc,
-        "Liquid cooling": liq,
-    }

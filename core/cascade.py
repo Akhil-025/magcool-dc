@@ -155,7 +155,6 @@ def _peak_temperature(material, mu0H_max, T_range=(200.0, 340.0), n=1401):
     Ts_coarse = np.linspace(*T_range, n_coarse)
     dT_coarse = material.delta_T_adiabatic(Ts_coarse, H)
     i0 = int(np.argmax(dT_coarse))
-    step = (T_range[1] - T_range[0]) / (n_coarse - 1)
     lo = Ts_coarse[max(0, i0 - 2)]
     hi = Ts_coarse[min(n_coarse - 1, i0 + 2)]
     if hi <= lo:

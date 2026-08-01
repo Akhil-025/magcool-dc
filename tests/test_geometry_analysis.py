@@ -1,5 +1,3 @@
-import pytest
-
 from core.geometry_analysis import (
     demonstrate_pre_phase7_model_had_no_optimum,
     check_free_mdot_cop_is_degenerate,

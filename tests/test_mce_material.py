@@ -18,7 +18,7 @@ this module (see mce_material.py docstrings for the full explanation):
 import numpy as np
 import pytest
 
-from core.mce_material import GADOLINIUM, kB, MagnetocaloricMaterial
+from core.mce_material import GADOLINIUM, kB
 
 
 def test_magnetization_converges_quickly():

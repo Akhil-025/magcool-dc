@@ -563,7 +563,7 @@ def plot_parasitic_fraction_scaling():
     frac = [r[2] for r in rows]
 
     fig, ax = plt.subplots(figsize=(9.5, 6))
-    sc = ax.scatter(Qc, frac, c=np.arange(len(Qc)), cmap='viridis', s=90,
+    ax.scatter(Qc, frac, c=np.arange(len(Qc)), cmap='viridis', s=90,
                      edgecolor='white', zorder=3)
     for qc_, f_, n_ in zip(Qc, frac, names):
         ax.annotate(n_, (qc_, f_), fontsize=7, xytext=(5, 4), textcoords='offset points')

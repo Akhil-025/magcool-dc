@@ -65,7 +65,6 @@ Honesty notes (read before trusting any number here)
   utilization correction already is in `thermal.py`).
 """
 
-import numpy as np
 from core.thermal import (regenerator_effectiveness, pumping_power_packed_bed,
                            regenerator_effectiveness_parallel_plate,
                            pumping_power_parallel_plate)
