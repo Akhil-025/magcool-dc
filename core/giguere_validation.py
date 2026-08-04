@@ -165,5 +165,92 @@ _T_peak, _dT_model_7T = _model_peak_dTad(7.0)
 DTAD_CORRECTION_FACTOR = GIGUERE_DIRECT_DTAD_7T / _dT_model_7T  # ~0.41-0.42
 
 
+# --- Paper-Mining Pass Part 3, §2: Pecharsky & Gschneidner (1997)'s own
+#     Gd5Si2Ge2-vs-Gd peak DeltaT_ad ratio, a SECOND independent primary
+#     source (heat-capacity-based, not pulse-field-thermometry-based like
+#     Giguere et al. above), and a SECOND independent field point (2T/5T,
+#     not the 7T DTAD_CORRECTION_FACTOR was fit to) ---
+#
+# Source: Pecharsky & Gschneidner, "Giant Magnetocaloric Effect in
+# Gd5Si2Ge2", Phys. Rev. Lett. 78, 4494 (1997) -- already cited in this
+# codebase for GD5SI2GE2_FIRST_ORDER's Tc/J, but this specific number
+# (read directly from the PDF, not assumed) had not previously been
+# pulled from its own text: "The DeltaT_ad values of Gd5Si2Ge2 are larger
+# than the corresponding DeltaT_ad values for Gd by about 30%, comparing
+# the peak values, regardless of the temperature." This is a
+# HEAT-CAPACITY-DERIVED comparison (S(T) integrated from C(T,H) for BOTH
+# materials, same paper, same Fig. 6, field changes of 0->2T and 0->5T),
+# independent of both the direct-measurement method (Giguere et al. 1999)
+# and the Maxwell-relation/DeltaS_M route this codebase's Landau model is
+# itself calibrated to.
+PECHARSKY_1997_PEAK_RATIO = 1.30  # Gd5Si2Ge2 peak DeltaT_ad / Gd peak DeltaT_ad, ~field-independent per the paper's own "regardless of the temperature" framing
+
+
+def run_pecharsky_ratio_check(verbose=True):
+    """Checks the model's own peak-DeltaT_ad(Gd5Si2Ge2)/peak-DeltaT_ad(Gd)
+    ratio against Pecharsky & Gschneidner (1997)'s ~1.30 figure, at BOTH
+    fields their own Fig. 6 comparison uses (2T and 5T) -- for BOTH the
+    raw (uncorrected) model and the Giguere-et-al.-derived
+    DTAD_CORRECTION_FACTOR-corrected model, since it's not obvious in
+    advance which one this independent check should land closer to.
+
+    ACTUAL RESULT (do not silently update this docstring to hide an
+    unfavorable finding -- same precedent run_validation()'s own docstring
+    above and core.validation.run_curie_shift_check() set): at 5T, the
+    RAW (uncorrected) model's ratio comes out at ~1.24 -- close to
+    Pecharsky & Gschneidner's ~1.30, an unexpected agreement given it was
+    never fit to this number. But applying DTAD_CORRECTION_FACTOR (fit to
+    a single 7T DIRECT measurement) drags the SAME ratio down to ~0.51 at
+    5T (and ~0.87 at 2T) -- i.e. the corrected model predicts Gd5Si2Ge2
+    UNDERPERFORMS pure Gd, which contradicts the basic "giant" MCE premise
+    the whole first_order_mce.py module exists to represent. This is a
+    genuine, informative limitation of DTAD_CORRECTION_FACTOR, not a
+    contradiction dismissed as noise: a single-field (7T) empirical
+    correction, when extrapolated down to 2-5T, OVERCORRECTS. The
+    correction's own docstring already says "treat as an honest fudge
+    factor from a single field/composition point, not a validated model
+    extension" -- this check is the concrete evidence for exactly that
+    caveat, from an independent source and field range. NOT used to
+    change DTAD_CORRECTION_FACTOR's value or composition_tuned_material()'s
+    default (see that function's own docstring in first_order_mce.py for
+    why re-fitting again would just repeat the same single-point-
+    calibration problem one level up).
+    """
+    from core.mce_material import GADOLINIUM
+    rows = []
+    for B in (2.0, 5.0):
+        T_peak_gd5, dT_gd5_raw = _model_peak_dTad(B)
+        dT_gd5_corrected = dT_gd5_raw * DTAD_CORRECTION_FACTOR
+        Ts = np.linspace(270.0, 320.0, 1001)
+        dT_gd_curve = GADOLINIUM.delta_T_adiabatic(Ts, B / mu0)
+        i = int(np.argmax(dT_gd_curve))
+        dT_gd_peak = float(dT_gd_curve[i])
+        ratio_raw = dT_gd5_raw / dT_gd_peak
+        ratio_corrected = dT_gd5_corrected / dT_gd_peak
+        rows.append({
+            "field_T": B, "gd5si2ge2_peak_raw_K": round(dT_gd5_raw, 2),
+            "gd5si2ge2_peak_corrected_K": round(dT_gd5_corrected, 2),
+            "gd_peak_K": round(dT_gd_peak, 2),
+            "ratio_raw": round(ratio_raw, 2), "ratio_corrected": round(ratio_corrected, 2),
+        })
+        if verbose:
+            print(f"{B:.0f}T: Gd5Si2Ge2 peak dTad raw={dT_gd5_raw:5.2f}K  "
+                  f"corrected={dT_gd5_corrected:5.2f}K  |  Gd peak dTad={dT_gd_peak:5.2f}K  |  "
+                  f"ratio raw={ratio_raw:.2f}  corrected={ratio_corrected:.2f}  "
+                  f"(Pecharsky & Gschneidner 1997: ~{PECHARSKY_1997_PEAK_RATIO:.2f})")
+    if verbose:
+        print("Finding: the RAW model's ratio is closer to Pecharsky & Gschneidner's "
+              "~1.30 than the Giguere-corrected model's ratio is -- applying the single-"
+              "field (7T) DTAD_CORRECTION_FACTOR at 2T/5T overcorrects to the point of "
+              "predicting Gd5Si2Ge2 underperforms Gd (ratio < 1), contradicting the "
+              "'giant' MCE premise. See this function's docstring.")
+    return rows
+
+
 if __name__ == "__main__":
     run_validation()
+    print("\n" + "=" * 78)
+    print("Extension: Gd5Si2Ge2/Gd peak DeltaT_ad ratio vs. Pecharsky & Gschneidner "
+          "(1997) (Paper-Mining Pass Part 3, S2)")
+    print("=" * 78)
+    run_pecharsky_ratio_check()

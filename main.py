@@ -18,7 +18,8 @@ in the repository in one pass, in dependency order, so a single
     7c. Astronautics graded-bed check  (core/cascade.py, ROADMAP.md Phase 9 addendum)
     8.  Giant-MCE materials analysis   (core/giant_mce_analysis.py)
     8b. First-order Landau model demo  (core/first_order_mce.py)
-    8c. Giguere et al. (1999) direct-measurement cross-check (core/giguere_validation.py)
+    8c. Giguere et al. (1999) direct-measurement cross-check + Pecharsky &
+        Gschneidner (1997) peak-ratio check (core/giguere_validation.py)
     9.  Sobol sensitivity analysis     (core/sensitivity.py)
     10. RSM surrogate fit              (core/rsm.py)
     11. NSGA-III design optimization   (core/optimize.py)
@@ -50,18 +51,29 @@ Each stage is wrapped so a failure in one analysis logs an error and
 does not stop the rest of the pipeline. A summary of what ran, what
 failed, output files written, and total wall time is printed at the end.
 Every stage's progress, timing, and any failure is written both to the
-console and to results/pipeline.log via the logging module.
+console and to results/pipeline.log via the logging module. Stage
+functions that print directly (most of core/'s modules use plain print()
+in their own `if __name__ == "__main__"` style, rather than the logging
+module main.py itself uses for its bespoke per-stage summaries) have
+their stdout captured and routed through the same logger for the
+duration of each stage (see _StreamToLogger below), so that output is
+also preserved in results/pipeline.log rather than only appearing on a
+live console and vanishing afterward.
 
-Typical total runtime: ~15-20s (NSGA-III optimization and Sobol sampling
-are the bulk of it). Nothing here is required to reproduce results/
-except the packages in requirements.txt (SALib, pymoo, and matplotlib
-included).
+Typical total runtime: ~6 minutes on a modest machine. Figure generation
+(step 12, ~200s) and the Curie-graded cascade sweep (step 7b, ~100s) are
+the current bulk of it, not NSGA-III optimization or Sobol sampling
+(step 11 and steps 9/9b are ~5-15s each) -- update this estimate again if
+a future change shifts where the time goes. Nothing here is required to
+reproduce results/ except the packages in requirements.txt (SALib, pymoo,
+and matplotlib included).
 """
 
 import logging
 import os
 import time
 import traceback
+import contextlib
 
 import numpy as np
 import csv
@@ -98,9 +110,9 @@ REPRESENTATIVE_SPAN_K = 10.0
 
 def _setup_logging():
     """Configures a root logger that writes timestamped, leveled records
-    to both the console and results/pipeline.log (overwritten each run,
-    so the log always reflects the most recent pipeline execution)."""
-    os.makedirs(RESULTS_DIR, exist_ok=True)
+    to the console only. Safe to run at import time (e.g. when pytest
+    collects tests/test_main.py via `import main`) since it never touches
+    results/pipeline.log -- see _attach_file_logging() for that."""
     formatter = logging.Formatter(
         fmt="%(asctime)s [%(levelname)-7s] %(name)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
@@ -109,16 +121,32 @@ def _setup_logging():
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
 
-    file_handler = logging.FileHandler(LOG_FILE, mode="w")
-    file_handler.setFormatter(formatter)
-
     root = logging.getLogger()
     root.setLevel(logging.INFO)
     root.handlers.clear()
     root.addHandler(console_handler)
-    root.addHandler(file_handler)
 
     return logging.getLogger("main")
+
+
+def _attach_file_logging():
+    """Attaches the results/pipeline.log FileHandler (mode="w", so the
+    log always reflects the most recent full pipeline execution).
+
+    Deliberately NOT called at module import time: doing so meant simply
+    running `import main` -- e.g. via pytest collecting tests/test_main.py,
+    which itself explicitly documents that it should NOT touch
+    results/pipeline.log -- silently truncated the log to 0 bytes without
+    ever running a single pipeline stage. Only main() calls this, so the
+    log is only overwritten when the pipeline actually runs."""
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    formatter = logging.Formatter(
+        fmt="%(asctime)s [%(levelname)-7s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    file_handler = logging.FileHandler(LOG_FILE, mode="w")
+    file_handler.setFormatter(formatter)
+    logging.getLogger().addHandler(file_handler)
 
 
 logger = _setup_logging()
@@ -129,6 +157,41 @@ def _banner(title):
     logger.info("#" * 100)
     logger.info("# %s", title)
     logger.info("#" * 100)
+
+
+class _StreamToLogger:
+    """File-like stream that routes each complete line written to it
+    through logger.info(), so plain print() calls made inside a stage
+    function (most of core/'s modules print directly, in their own
+    ``if __name__ == "__main__"`` style, rather than using the logging
+    module the way main.py's own bespoke per-stage summaries do) are
+    captured in results/pipeline.log via the existing FileHandler instead
+    of only reaching a live console and leaving no persistent record.
+
+    Buffers partial lines (write() can be called with partial output,
+    e.g. by a progress indicator using end="") until a newline arrives.
+    Does not double-log logger.info() calls made directly inside a stage
+    function: those go straight to the logger's own handlers and never
+    touch sys.stdout, so redirecting stdout during a stage has no effect
+    on them.
+    """
+
+    def __init__(self, target_logger, level=logging.INFO):
+        self._logger = target_logger
+        self._level = level
+        self._buffer = ""
+
+    def write(self, message):
+        self._buffer += message
+        while "\n" in self._buffer:
+            line, self._buffer = self._buffer.split("\n", 1)
+            if line:
+                self._logger.log(self._level, line)
+
+    def flush(self):
+        if self._buffer:
+            self._logger.log(self._level, self._buffer)
+            self._buffer = ""
 
 
 def run_baseline_sweep():
@@ -337,15 +400,20 @@ def run_plot_generation():
 
 
 def main():
+    _attach_file_logging()
     t_start = time.time()
     stage_times = {}
     failures = []
 
     stages = [
         ("1. Material-level model validation vs. Dan'kov et al. (1998)",
-         lambda: validation.run_validation()),
+         lambda: (validation.run_validation(),
+                  validation.run_giguere_gd_extension(),
+                  validation.run_curie_shift_check())),
         ("2. System-level validation vs. published AMR prototypes",
-         lambda: validation_system.run_system_validation()),
+         lambda: (validation_system.run_system_validation(),
+                  validation_system.run_field_sensitivity_check(),
+                  validation_system.run_capacity_only_calibration_check())),
         ("3. Loss-model calibration (auto-loaded by AMRSystem's default loss model)",
          lambda: (loss_model.calibrate_loss_coefficients(), loss_model.run_extended_diagnostic())),
         ("3b. Regenerator thermal-effectiveness demo (core/thermal.py, reached transitively otherwise)",
@@ -369,7 +437,8 @@ def main():
         ("8b. First-order Landau model calibration check (core/first_order_mce.py, reached transitively otherwise)",
          run_first_order_mce_demo),
         ("8c. Giguere et al. (1999) direct-measurement cross-check (core/giguere_validation.py)",
-         lambda: giguere_validation.run_validation()),
+         lambda: (giguere_validation.run_validation(),
+                  giguere_validation.run_pecharsky_ratio_check())),
         ("9. Sobol global sensitivity analysis (constant-loss model)",
          lambda: sensitivity.run_sobol(out_path="results/sobol_results_phase2_constant.txt",
                                         use_state_dependent_losses=False)),
@@ -392,21 +461,22 @@ def main():
         _banner(name)
         t0 = time.time()
         try:
-            if name.startswith("4."):
-                rows = run_baseline_sweep()
-                representative_row = next(
-                    r for r in rows if abs(r["span_K"] - REPRESENTATIVE_SPAN_K) < 1e-9
-                )
-            elif name.startswith("5."):
-                run_economics(representative_row)
-            elif name.startswith("6."):
-                run_emissions(representative_row)
-            elif name.startswith("7. "):
-                cascade_rows_gd = run_cascade_comparison()
-            elif name.startswith("7b."):
-                run_graded_cascade_comparison(cascade_rows_gd)
-            else:
-                fn()
+            with contextlib.redirect_stdout(_StreamToLogger(logger)):
+                if name.startswith("4."):
+                    rows = run_baseline_sweep()
+                    representative_row = next(
+                        r for r in rows if abs(r["span_K"] - REPRESENTATIVE_SPAN_K) < 1e-9
+                    )
+                elif name.startswith("5."):
+                    run_economics(representative_row)
+                elif name.startswith("6."):
+                    run_emissions(representative_row)
+                elif name.startswith("7. "):
+                    cascade_rows_gd = run_cascade_comparison()
+                elif name.startswith("7b."):
+                    run_graded_cascade_comparison(cascade_rows_gd)
+                else:
+                    fn()
         except Exception:
             logger.error(f"!!! STAGE FAILED: {name}")
             logger.error(traceback.format_exc())

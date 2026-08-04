@@ -11,9 +11,11 @@ import numpy as np
 import pytest
 
 from core.first_order_mce import (
-    GD5SI2GE2_FIRST_ORDER, LAFESIH_FIRST_ORDER,
+    GD5SI2GE2_FIRST_ORDER, LAFESIH_FIRST_ORDER, MNFEPSI_FIRST_ORDER,
     composition_tuned_material, lafesih_composition_tuned_material,
+    mnfepsi_composition_tuned_material,
     GIANT_MCE_TC_MIN_K, GIANT_MCE_TC_MAX_K, LAFESIH_TC_MIN_K, LAFESIH_TC_MAX_K,
+    MNFEPSI_TC_MIN_K, MNFEPSI_TC_MAX_K,
 )
 
 
@@ -52,13 +54,24 @@ def test_lafesih_peak_entropy_change_matches_calibration_target():
     assert dS_peak == pytest.approx(-31.0, rel=0.1)
 
 
+def test_mnfepsi_peak_entropy_change_matches_calibration_target():
+    """Calibration target for Mn0.68Fe1.22P0.62Si0.38: peak |DeltaS_M| ~ 17.6
+    J/(kg K) at 2T near Tc=331.2K (Hanggai et al., Acta Materialia 302
+    (2026) 121677) -- NOTE this target is at 2T, not the 5T used for
+    GD5SI2GE2_FIRST_ORDER/LAFESIH_FIRST_ORDER."""
+    dS_peak, _ = _peak_dS_and_dT(MNFEPSI_FIRST_ORDER, (316.0, 356.0), 2.0)
+    assert dS_peak == pytest.approx(-17.6, rel=0.1)
+
+
 def test_dTad_correction_defaults_to_uncorrected_for_calibrated_materials():
-    """GD5SI2GE2_FIRST_ORDER and LAFESIH_FIRST_ORDER are the base
-    calibrations documented in the module -- neither should silently carry
-    an applied Giguere correction; only composition_tuned_material() with
-    apply_giguere_correction=True should."""
+    """GD5SI2GE2_FIRST_ORDER, LAFESIH_FIRST_ORDER and MNFEPSI_FIRST_ORDER
+    are the base calibrations documented in the module -- none should
+    silently carry an applied Giguere correction; only
+    composition_tuned_material() with apply_giguere_correction=True
+    should."""
     assert GD5SI2GE2_FIRST_ORDER.dTad_correction == 1.0
     assert LAFESIH_FIRST_ORDER.dTad_correction == 1.0
+    assert MNFEPSI_FIRST_ORDER.dTad_correction == 1.0
 
 
 def test_composition_tuned_material_applies_giguere_correction_by_default():
@@ -119,6 +132,31 @@ def test_lafesih_composition_tuned_material_never_applies_giguere_correction():
     LAFESIH_FIRST_ORDER's own (uncorrected, 1.0) default."""
     mat = lafesih_composition_tuned_material(300.0)
     assert mat.dTad_correction == LAFESIH_FIRST_ORDER.dTad_correction == 1.0
+
+
+def test_mnfepsi_composition_tuned_material_rejects_out_of_range_tc():
+    with pytest.raises(ValueError):
+        mnfepsi_composition_tuned_material(MNFEPSI_TC_MIN_K - 1.0)
+    with pytest.raises(ValueError):
+        mnfepsi_composition_tuned_material(MNFEPSI_TC_MAX_K + 1.0)
+
+
+def test_mnfepsi_composition_tuned_material_never_applies_giguere_correction():
+    """No Giguere-style cross-check exists for this material family (per
+    the docstring), so dTad_correction should always pass through
+    MNFEPSI_FIRST_ORDER's own (uncorrected, 1.0) default."""
+    mat = mnfepsi_composition_tuned_material(310.0)
+    assert mat.dTad_correction == MNFEPSI_FIRST_ORDER.dTad_correction == 1.0
+
+
+def test_mnfepsi_composition_tuned_material_shifts_tc_only():
+    mat = mnfepsi_composition_tuned_material(300.0)
+    assert mat.Tc == 300.0
+    assert mat.A == MNFEPSI_FIRST_ORDER.A
+    assert mat.B == MNFEPSI_FIRST_ORDER.B
+    assert mat.C == MNFEPSI_FIRST_ORDER.C
+    assert mat.theta_D == MNFEPSI_FIRST_ORDER.theta_D
+    assert mat.M_molar == MNFEPSI_FIRST_ORDER.M_molar
 
 
 def test_composition_tuned_material_shifts_tc_only():

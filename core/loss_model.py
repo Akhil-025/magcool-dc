@@ -82,10 +82,50 @@ from scipy.optimize import nnls
 
 # (device, f_Hz, mu0H_T, mdot_kg_s, Qc_W, W_parasitic_required_W)
 # CORE: the stable, well-behaved 3-point set used as the production default.
+#
+# FIX (Paper-Mining Pass Part 4): all three mdot values below were stale.
+# Verified by directly checking whether they reproduce their own literature
+# Qc under amr_cycle.py's CURRENT cooling_capacity() -- none did:
+#   Astronautics: old mdot=1.0854 -> predicted 10734W, not 2502W (4.3x off)
+#   DTU:          old mdot=0.3251 -> predicted 1343W,  not  818W (1.64x off)
+#   Tusek:        old mdot=0.0045 -> predicted   12W,  not  6.5W (1.86x off)
+# i.e. the cooling-capacity model was changed at some point after these
+# were hardcoded (most likely the NTU thermal-model work) and this
+# calibration set was never re-synced -- meaning every downstream user of
+# the default StateDependentLossModel() (Sobol 9b, the RSM surrogate,
+# NSGA-III) had been running against a loss model fit to inputs the cycle
+# model itself could no longer reproduce. Re-calibrated below via the same
+# brentq(qc_residual, 1e-6, 5.0) procedure validation_system.py uses, with
+# GADOLINIUM material and T_cold=289K for all three (matching the original
+# CORE set's convention -- this is a deliberately-separate, Gd-only
+# approximation from validation_system.py's newer LAFESIH_FIRST_ORDER-based
+# system-validation row for the same physical Astronautics device; see that
+# module's docstring for why the two are intentionally different).
+# W_parasitic_required recomputed at the same time (Wp = Qc*(1/COP_lit -
+# 1/COP_ideal)); interestingly these barely moved even though mdot did
+# (COP_ideal turns out to be fairly stable across the corrected mdot
+# range), so the NNLS fit's target vector was mostly fine -- only the
+# mdot^2 pumping-term *inputs* (the A matrix) were wrong.
+# `tests/test_loss_model.py::test_core_calibration_points_are_self_consistent`
+# guards against this drifting again silently.
 CALIBRATION_POINTS_CORE = [
-    ("Astronautics_rotary_2014", 4.0, 1.44, 1.0854, 2502.0, 0.453 * 2502.0),
-    ("DTU_rotary_Gd_2016", 1.4, 1.44, 0.3251, 818.0, 0.171 * 818.0),
-    ("Tusek_singlebed_Gd_2010", 0.25, 1.69, 0.0045, 6.5, 0.118 * 6.5),
+    ("Astronautics_rotary_2014", 4.0, 1.44, 0.252999, 2502.0, 1133.70),
+    ("DTU_rotary_Gd_2016", 1.4, 1.44, 0.198062, 818.0, 139.79),
+    # Tusek: deliberately still uses the PRE-correction field/mass/frequency
+    # (1.69T, 0.196kg, 0.25Hz) rather than data/amr_experimental_benchmarks
+    # .csv's now-corrected values (1.15T, 0.1763kg, 0.3Hz -- see that CSV's
+    # row note). Checked directly: with the corrected, paper-verified 1.15T
+    # field, (span=15K, Qc=6.5W) does NOT calibrate at all (NO CALIBRATION
+    # FOUND) -- suggesting the old 1.69T value may have been silently
+    # inflated specifically to make an arbitrarily-chosen Qc/span pair
+    # reachable. Keeping the old self-consistent-but-unverified combination
+    # here as a stopgap (better than dropping to an underdetermined 2-point
+    # CORE fit) until Figs. 10-11 are properly digitized to get a genuinely
+    # verified (span, Qc) pair at the confirmed 1.15T/0.1763kg/0.3Hz
+    # operating point -- see data/amr_experimental_benchmarks.csv and
+    # results/tusek_ate2013_figs_notes.md. Flagged, not silently carried
+    # forward.
+    ("Tusek_singlebed_Gd_2010", 0.25, 1.69, 0.002422, 6.5, 0.76),
 ]
 # EXTENDED: CORE + Okamura & Hirano (2013). Retained only as a
 # diagnostic comparison; not used as the default calibration.
@@ -283,6 +323,65 @@ def run_further_extended_diagnostic():
     analyze_parasitic_fraction_scaling(CALIBRATION_POINTS_FURTHER_EXTENDED, verbose=True)
 
 
+# Lozano et al. (2016), Table 3, WM column: electrical power to drive the
+# rotary permanent-magnet assembly + rotary valve system (measured
+# SEPARATELY from WP, the pump power -- see Table 3 and Eq. 2, COP =
+# Qc/(WP+WM)). Digitized directly from the paper (Table 3 row 1-8),
+# NOT derived/backed-out from Qc and COP, unlike CALIBRATION_POINTS_CORE's
+# Wp_required column.
+LOZANO_DRIVE_CALIBRATION_HZ_W = [
+    # (f_Hz, WM_W)
+    (1.4, 145.0), (0.8, 108.1), (0.8, 106.5), (0.4, 89.5),
+    (0.8, 107.5), (0.8, 103.8), (0.4, 87.6), (0.8, 103.0),
+]
+
+
+def fit_rotary_drive_term(points=None, verbose=True):
+    """Fits W_drive(f) = k_drive0 + k_drive1*f to Lozano's own WM
+    (rotary magnet-assembly + valve drive motor) measurements.
+
+    This is a LINEAR fit in f, not f^2 -- deliberately, because the data
+    itself is close to linear (R^2=0.965 for linear vs. a visibly worse
+    fit for f^2) and because linear-in-f is what Coulomb/viscous bearing
+    and detent-cogging friction (torque roughly independent of speed,
+    power = torque*omega ~ f) predicts, whereas eddy-current loss (~f^2 H^2,
+    already covered by StateDependentLossModel.k_eddy) is a DIFFERENT
+    physical mechanism this term is not meant to re-fit.
+
+    Why this needs its own term rather than folding into CORE's k_eddy/
+    k_pump/base_frac: Table 3 shows WM (87-145 W) is comparable to or
+    EXCEEDS Qc itself (61-120 W) in every row, and barely scales with
+    frequency (3.5x frequency change -> only 1.6x WM change) -- far too
+    weak for f^2 eddy scaling and far too large relative to Qc for
+    base_frac (CORE's fitted base_frac=0.061 would predict only
+    ~4-7W of base overhead at these Qc values, an order of magnitude
+    below the measured 87-145W). This is mechanical drivetrain power
+    (bearing friction, detent/cogging torque to move the permanent-magnet
+    array and rotary valve), not eddy-current or Darcy-flow pumping loss,
+    and CORE's 3 calibration devices (Astronautics, DTU, Tusek) do not
+    include a rotary-drive-dominated device, so CORE has no information
+    about this loss channel at all.
+    """
+    f = np.array([p[0] for p in points or LOZANO_DRIVE_CALIBRATION_HZ_W])
+    WM = np.array([p[1] for p in points or LOZANO_DRIVE_CALIBRATION_HZ_W])
+    A = np.vstack([np.ones_like(f), f]).T
+    coeffs, _, _, _ = np.linalg.lstsq(A, WM, rcond=None)
+    k_drive0, k_drive1 = coeffs
+    pred = A @ coeffs
+    ss_res = float(np.sum((WM - pred) ** 2))
+    ss_tot = float(np.sum((WM - WM.mean()) ** 2))
+    r2 = 1 - ss_res / ss_tot
+    if verbose:
+        print(f"Rotary-drive term fit to Lozano et al. (2016) Table 3 WM data "
+              f"({len(f)} points):")
+        print(f"  W_drive(f) = {k_drive0:.2f} + {k_drive1:.2f} * f    "
+              f"[W, f in Hz]   R^2={r2:.3f}")
+        print(f"  (i.e. a large near-constant ~{k_drive0:.0f}W drivetrain "
+              f"overhead plus a weak, roughly-linear-in-f term -- NOT an "
+              f"eddy-current f^2 scaling)")
+    return {"k_drive0": float(k_drive0), "k_drive1": float(k_drive1), "r2": r2}
+
+
 class StateDependentLossModel:
     def __init__(self, k_eddy=None, k_pump=None, base_frac=None):
         if k_eddy is None or k_pump is None or base_frac is None:
@@ -300,6 +399,39 @@ class StateDependentLossModel:
         W_base = self.base_frac * Qc
         return W_eddy + W_pump + W_base
 
+
+
+class RotaryDriveLossModel(StateDependentLossModel):
+    """StateDependentLossModel (eddy/pump/base_frac, CORE-calibrated by
+    default) PLUS an additional rotary magnet-assembly/valve drivetrain
+    term W_drive = k_drive0 + k_drive1*frequency, calibrated to Lozano et
+    al. (2016)'s own directly-measured WM data (see fit_rotary_drive_term()
+    docstring for why this needs to be a separate additive term rather than
+    a re-fit of k_eddy/k_pump/base_frac).
+
+    Intended for devices whose cooling is dominated by a rotary permanent-
+    magnet-assembly + rotary valve drivetrain of a similar class to the
+    Lozano/POLO-UFSC prototype -- NOT a general "rotary AMR" flag (both
+    Astronautics and DTU are also rotary and are already well-represented
+    by CORE; what distinguishes Lozano is the drivetrain's overhead
+    relative to its own small Qc, not rotary operation per se). Use
+    per-device, not as a blanket replacement for StateDependentLossModel.
+    """
+
+    def __init__(self, k_eddy=None, k_pump=None, base_frac=None,
+                 k_drive0=None, k_drive1=None):
+        super().__init__(k_eddy=k_eddy, k_pump=k_pump, base_frac=base_frac)
+        if k_drive0 is None or k_drive1 is None:
+            fit = fit_rotary_drive_term(verbose=False)
+            k_drive0 = k_drive0 if k_drive0 is not None else fit["k_drive0"]
+            k_drive1 = k_drive1 if k_drive1 is not None else fit["k_drive1"]
+        self.k_drive0 = k_drive0
+        self.k_drive1 = k_drive1
+
+    def parasitic_power(self, frequency, mu0H, mdot, Qc):
+        base = super().parasitic_power(frequency, mu0H, mdot, Qc)
+        W_drive = self.k_drive0 + self.k_drive1 * frequency
+        return base + W_drive
 
 if __name__ == "__main__":
     calibrate_loss_coefficients()

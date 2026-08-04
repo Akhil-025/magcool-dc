@@ -22,6 +22,11 @@ magnetic work per cycle as functions of:
     - operating frequency f
     - fluid utilization factor U (heat capacity ratio, fluid/regenerator)
     - regenerator effectiveness eps (NTU-based, from thermal.py)
+    - blow fraction (fraction of the cycle period spent in cold-to-hot
+      flow vs. hot-to-cold flow) -- see BLOW_FRACTION_MASCHE and
+      AMRSystem's blow_fraction parameter below (Paper-Mining Pass
+      recommendation #1). Default 0.5 (symmetric blow) reproduces this
+      model's original behavior exactly.
 
 This is a first-order performance model (matches the level of the AMR
 "characteristic curve" approach used in Tusek et al., Int. J. Refrig. 33
@@ -34,6 +39,75 @@ COMSOL_setup.md in the roadmap for that follow-on step).
 import numpy as np
 from dataclasses import dataclass
 from core.mce_material import MagnetocaloricMaterial
+
+
+# --- Flow-waveform asymmetry (blow fraction), Paper-Mining Pass
+#     recommendation #1 ---
+#
+# Source: Masche, Liang, Engelbrecht & Bahl, "Improving magnetic cooling
+# efficiency and pulldown by varying flow profiles," Applied Thermal
+# Engineering 215 (2022) 118945. DTU rotary AMR device, 13 trapezoidal beds,
+# 295g Gd spheres/bed, solenoid-valve-controlled blow fraction (the fraction
+# of the cycle period during which fluid flows cold-to-hot vs hot-to-cold).
+#
+# This model previously had no notion of blow fraction at all -- Qc and the
+# magnetic-cycle second-law efficiency implicitly assumed a symmetric 50/50
+# split between the two flow directions. The two data points below are the
+# ONLY reported operating condition (T_span=16K, U=0.32, f=1.4Hz) with
+# reported values at two different blow fractions, so BLOW_FRACTION_MASCHE
+# is a two-point calibration, not a full characteristic curve:
+BLOW_FRACTION_MASCHE = {
+    "source": "Masche, Liang, Engelbrecht & Bahl, Appl. Thermal Eng. 215 (2022) "
+              "118945 -- DTU rotary AMR, 13 trapezoidal beds, 295g Gd spheres/bed",
+    "operating_point": {"T_span_K": 16.0, "U": 0.32, "frequency_Hz": 1.4},
+    "low": {"blow_fraction": 0.250, "Qc_W": 70.0, "exergy_eff": 0.026},
+    "best_found": {"blow_fraction": 0.416, "Qc_W": 330.0, "exergy_eff": 0.174},
+    # Best blow fraction found across BOTH the 6K and 16K spans the paper
+    # tested (i.e. not span-specific, per the source paper's own framing).
+    # Lower blow fractions favor faster pulldown (~30% faster to reach ~14K
+    # span at a lower blow fraction) -- a transient-dynamics effect this
+    # steady-state 0-D cycle model does not represent and is NOT calibrated
+    # against here.
+}
+
+
+def _blow_fraction_multiplier(blow_fraction, value_at_low, value_at_peak,
+                                bf_low=BLOW_FRACTION_MASCHE["low"]["blow_fraction"],
+                                bf_peak=BLOW_FRACTION_MASCHE["best_found"]["blow_fraction"],
+                                bf_symmetric=0.5):
+    """Relative correction factor for a blow-fraction-sensitive quantity
+    (Qc or the second-law efficiency), calibrated to a parabola through the
+    two Masche et al. (2022) data points at bf_low and bf_peak, and
+    NORMALIZED so that bf_symmetric=0.5 (this model's pre-existing implicit
+    symmetric-blow assumption) returns a multiplier of 1.0 -- i.e. this is
+    a RELATIVE correction layered on top of the model's existing behavior,
+    not an absolute reproduction of the DTU device.
+
+    Honesty flags:
+      1. Only TWO (blow_fraction, value) points are available, at ONE
+         operating condition (T_span=16K, U=0.32, f=1.4Hz). A parabola
+         needs three points to be fit outright, so bf_peak is additionally
+         TREATED as the location of the true continuous-curve maximum --
+         the source paper only reports it as "best blow fraction found
+         across both spans tested," not as a confirmed peak. This is an
+         explicit modeling choice, not a literature-derived shape.
+      2. This calibration is applied identically regardless of T_span, U or
+         frequency -- the source paper only reports the two-point comparison
+         at ONE (T_span, U, f) combination, so extrapolating the SHAPE of
+         this curve to other operating points is unvalidated.
+      3. Values are clipped to stay within [0.05, 3.0]x, since the raw
+         parabola diverges (goes negative, then blows up) far from bf_peak
+         -- physically nonsensical outside roughly the tested 0.1-0.6 window.
+    """
+    k = (value_at_peak - value_at_low) / (bf_low - bf_peak) ** 2
+
+    def value(bf):
+        return max(value_at_peak - k * (bf - bf_peak) ** 2, 0.0)
+
+    baseline = value(bf_symmetric)
+    if baseline <= 0:
+        return 1.0
+    return float(np.clip(value(blow_fraction) / baseline, 0.05, 3.0))
 
 
 @dataclass
@@ -58,7 +132,8 @@ class AMRSystem:
                  fluid_cp: float = 4186.0, fluid_mdot: float = 0.05,
                  regenerator_effectiveness: float = 0.85,
                  parasitic_fraction: float = 0.15,
-                 loss_model=None, use_ntu_thermal_model: bool = False):
+                 loss_model=None, use_ntu_thermal_model: bool = False,
+                 blow_fraction: float = 0.5):
         """
         material               : MagnetocaloricMaterial instance
         mu0H_max                : peak applied field, Tesla
@@ -92,6 +167,25 @@ class AMRSystem:
                                     parasitic_fraction*Qc. This restores
                                     field-, frequency-, and flow-dependent
                                     electrical losses to COP_electrical.
+        blow_fraction              : fraction of the AMR cycle period during
+                                     which fluid flows cold-to-hot (vs.
+                                     hot-to-cold) -- a real degree of freedom
+                                     this model previously had no notion of
+                                     (Masche et al. 2022; see
+                                     BLOW_FRACTION_MASCHE above). Default
+                                     0.5 (symmetric blow) exactly reproduces
+                                     this model's pre-existing behavior --
+                                     passing a different value applies a
+                                     RELATIVE correction to Qc and the
+                                     second-law efficiency via
+                                     _blow_fraction_multiplier(), calibrated
+                                     to the one reported (Qc, exergy_eff)
+                                     pair at each of two tested blow
+                                     fractions. See
+                                     _blow_fraction_multiplier's docstring
+                                     for the honesty flags on this
+                                     calibration (two points, one operating
+                                     condition, extrapolated shape).
         """
         self.mat = material
         self.mu0H_max = mu0H_max
@@ -103,7 +197,20 @@ class AMRSystem:
         self.parasitic_fraction = parasitic_fraction
         self.loss_model = loss_model
         self.use_ntu_thermal_model = use_ntu_thermal_model
+        self.blow_fraction = blow_fraction
         self._last_ntu_info = None
+
+    def _blow_fraction_qc_multiplier(self):
+        ref = BLOW_FRACTION_MASCHE
+        return _blow_fraction_multiplier(
+            self.blow_fraction,
+            value_at_low=ref["low"]["Qc_W"], value_at_peak=ref["best_found"]["Qc_W"])
+
+    def _blow_fraction_eta_multiplier(self):
+        ref = BLOW_FRACTION_MASCHE
+        return _blow_fraction_multiplier(
+            self.blow_fraction,
+            value_at_low=ref["low"]["exergy_eff"], value_at_peak=ref["best_found"]["exergy_eff"])
 
     def _effective_eps(self):
         """If use_ntu_thermal_model is enabled, compute regenerator
@@ -133,6 +240,7 @@ class AMRSystem:
         span_fraction = max(0.0, 1.0 - T_span / (2 * dTad_noload))
         eps = self._effective_eps()
         Qc = eps * self.mdot_f * self.cp_f * dTad_noload * span_fraction
+        Qc *= self._blow_fraction_qc_multiplier()
         return max(Qc, 0.0), dTad_noload
 
     def magnetic_work(self, T_cold, T_span, Qc):
@@ -148,6 +256,8 @@ class AMRSystem:
         T_hot = T_cold + T_span
         carnot_work = Qc * (T_hot / T_cold - 1.0) if T_cold > 0 else np.inf
         eta_2nd_law = 0.35 + 0.20 * self._effective_eps()  # 0.35 at eps=0 .. 0.52 at eps=0.85
+        eta_2nd_law *= self._blow_fraction_eta_multiplier()
+        eta_2nd_law = float(np.clip(eta_2nd_law, 0.02, 0.95))
         W = carnot_work / max(eta_2nd_law, 1e-3)
         return W, eta_2nd_law
 

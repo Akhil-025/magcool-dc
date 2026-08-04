@@ -86,6 +86,19 @@ the only one, and note the real spread when citing this in the paper.
     cascade.py's Curie-graded cascade) are not built on the ~2.4x-optimistic
     raw number. Treat that correction as an honest fudge factor from a
     single field/composition point, not a validated model extension.
+  3. This (A,B,C)=(10,-4,8) Landau expansion's delta_T_adiabatic(T) does
+     NOT peak at T=Tc -- it peaks systematically ABOVE Tc, by ~+10 to
+     +11.5 K at the ~1.4-2.0T fields used in this codebase. Confirmed
+     twice, independently: GD5SI2GE2_FIRST_ORDER (Tc=276K) peaks at
+     ~286.4K at 2T (+10.4K), and cascade.py's Astronautics graded-bed
+     reproduction needs per-stage composition Tc's offset by +11.1 to
+     +11.5K below each stage's actual operating temperature to match
+     Jacobs et al. (2014) Table 1's six real layer Curie temperatures.
+     See core.giant_mce_analysis.landau_peak_offset_K() for the
+     computation and full citation trail. This is a genuine, stable
+     model property (not a bug) -- do not "fix" it by shifting Tc to
+     equal a target operating temperature; composition_tuned_material()
+     already accounts for it by construction.
 """
 
 import numpy as np
@@ -414,6 +427,158 @@ def lafesih_composition_tuned_material(Tc_target_K, name=None):
     )
 
 
+# --- (Mn,Fe)2(P,Si) (Fe2P-type itinerant-electron metamagnetic giant-MCE
+#     family), for a third pluggable GradedFamily alongside GD_FAMILY and
+#     LAFESIH_FAMILY (Paper-Mining Pass recommendation #3) ---
+#
+# Source: Hanggai, Yibole, Guillou, Kwakernaak, van Dijk, Brück, "Preparation
+# of Fe-rich giant magnetocaloric (Mn,Fe)2(P,Si) ribbons and calorimetric
+# analysis of the first-order magnetic transition," Acta Materialia 302
+# (2026) 121677. Melt-spun Mn0.60+xFe1.3-xP0.66-ySi0.34+y (0<=x<=0.08, x=2y)
+# ribbons. Like La(Fe,Si)13Hy, this is a room-temperature isostructural
+# (no symmetry change) first-order magnetic transition driven by itinerant-
+# electron metamagnetism, not the magnetostructural Gd5(SixGe1-x)4 mechanism
+# -- grouped with LAFESIH's simplification below (J, g held at the same
+# mean-field-proxy values) for the same reason LAFESIH_FIRST_ORDER's
+# docstring gives: no itinerant-electron-specific Landau parameterization
+# exists in this codebase, and reusing the Brillouin-style h_reduced/J/g
+# machinery is a documented approximation, not a first-principles fit.
+#
+# Composition & Tc window: Table 1 of the source paper reports Curie
+# temperature TC (minimum of dM/dT at 0.01T) increasing linearly with the
+# simultaneous Mn/Si increase across the five compositions measured:
+#   Mn0.60Fe1.30P0.66Si0.34 (x=0.00, parent):        TC = 295.3 K
+#   Mn0.62Fe1.28P0.65Si0.35 (x=0.02):                 TC = 305.2 K
+#   Mn0.64Fe1.26P0.64Si0.36 (x=0.04):                 TC = 312.3 K
+#   Mn0.66Fe1.24P0.63Si0.37 (x=0.06):                 TC = 322.1 K
+#   Mn0.68Fe1.22P0.62Si0.38 (x=0.08, highest tested): TC = 331.2 K
+# This 295.3-331.2K window is DIRECTLY MEASURED (not extrapolated beyond the
+# tested compositions like GIANT_MCE_TC_MIN_K/_MAX_K's Ga-alloying endpoint
+# or LAFESIH_TC_MIN_K/_MAX_K's general literature reading), and -- unlike
+# either of those two families -- it sits almost entirely AT OR ABOVE the
+# ASHRAE 291.15-300.15K data-center supply range: the parent composition's
+# 295.3K already falls inside that range, which is the specific tension
+# giant_mce_analysis.py flags as an open question for Gd5(SixGe1-x)4 (whose
+# documented giant-MCE ceiling, GIANT_MCE_TC_MAX_K=290K, sits just BELOW it).
+#
+# Calibration target: peak |DeltaS_M| ~ 17.6 J/(kg K) at mu0*DeltaH = 2T for
+# the highest-Mn/Si (x=0.08, TC=331.2K) composition -- the source paper
+# reports this from TWO independent methods that cross-validate each other:
+# 16.66 J/(kg K) from calorimetry (SPM) and 17.61 J/(kg K) from magnetization
+# (Maxwell relation) at the same 2T field change, a ~40% enhancement over the
+# parent compound's 12 J/(kg K) at the same field. NOTE mu0*DeltaH=2T here,
+# NOT the 5T used to calibrate GD5SI2GE2_FIRST_ORDER/LAFESIH_FIRST_ORDER --
+# this paper's own calorimetry/magnetization measurements were made at 2T,
+# so 2T is the only field this specific calibration is validated against.
+#
+# Molar mass (x=0.08 composition, Mn0.68Fe1.22P0.62Si0.38): 0.68*54.938
+# (Mn) + 1.22*55.845 (Fe) + 0.62*30.974 (P) + 0.38*28.085 (Si) = 135.36 g/mol.
+# n_atoms_per_fu = round(0.68+1.22+0.62+0.38) = 3 (the (Mn,Fe)2(P,Si) family
+# name is a rounded/conventional label; the actual measured stoichiometry
+# per formula unit is slightly metal-deficient, ~2.90 total atoms -- 3 is
+# used here as the nearest integer, same rounding approach LAFESIH_FIRST_ORDER
+# uses for its ~15.1-atom formula unit).
+#
+# (A, B, C) = (1.16, -0.464, 0.928) found by grid search, SAME B/A=-0.4,
+# C/A=0.8 ratio as GD5SI2GE2_FIRST_ORDER/LAFESIH_FIRST_ORDER (only A
+# rescaled) -- reproduces -17.6 J/(kg K) at T=343.7K (mu0*DeltaH=2T), a
+# ~12.5K field-shifted peak above the nominal TC=331.2K, the same
+# field-shift pattern documented for the other two families. A is far
+# smaller here than GD5SI2GE2_FIRST_ORDER's A=10 or LAFESIH_FIRST_ORDER's
+# A=15 mainly because this material's much lower molar mass gives a much
+# larger N=NA/M_molar (mol/kg) prefactor in the entropy formula -- NOT
+# because the transition itself is weaker; the fixed B/A, C/A ratio gives
+# all three families the same reduced-order-parameter jump magnitude
+# (m0^2 = -3B/(4C) = 0.375 in all three cases).
+#
+# theta_D=300K is NOT a literature-measured value for this specific
+# composition -- like LAFESIH_FIRST_ORDER's 350K, this paper reports low-T
+# heat-capacity/latent-heat separation data but no single tabulated
+# room-temperature-relevant Debye temperature for this exact alloy was
+# located for this addition. 300K is an order-of-magnitude placeholder
+# from comparable Fe2P-type/Fe-intermetallic compounds; treat
+# lattice_heat_capacity() and therefore delta_T_adiabatic() as
+# correspondingly less trustworthy than delta_S_isothermal(), same caveat
+# structure as both other first-order families in this module.
+#
+# dTad_correction is left at the class default (1.0, uncorrected). This is
+# the SAME honesty flag LAFESIH_FIRST_ORDER carries: the source paper
+# reports ΔS_max (Maxwell-relation/calorimetric-entropy, an INDIRECT
+# method), not a directly-measured ΔT_ad -- exactly the indirect-vs-direct
+# gap core.giguere_validation quantifies as a ~2.4x overstatement for
+# Gd5Si2Ge2. No equivalent direct-measurement cross-check paper for
+# (Mn,Fe)2(P,Si) is in this codebase's literature corpus, so the Giguere
+# correction factor (derived from a DIFFERENT compound family) is NOT
+# applied here -- doing so would fabricate a validation that doesn't exist,
+# same reasoning LAFESIH_FIRST_ORDER's docstring gives. This model's raw
+# peak DeltaT_ad at 2T comes out to ~11.4K (uncorrected); treat this as an
+# upper-bound-ish estimate, not a validated number, until a direct
+# measurement for this family is located.
+MNFEPSI_TC_MIN_K = 295.3
+MNFEPSI_TC_MAX_K = 331.2
+
+MNFEPSI_FIRST_ORDER = FirstOrderMCEMaterial(
+    name="Mn0.68Fe1.22P0.62Si0.38 (first-order Landau model)",
+    Tc=331.2, J=3.5, g=2.0,
+    M_molar=(0.68 * 54.938 + 1.22 * 55.845 + 0.62 * 30.974 + 0.38 * 28.085) * 1e-3,
+    theta_D=300.0, n_atoms_per_fu=3,
+    A=1.16, B=-0.464, C=0.928,
+    source="Composition/TC/DeltaS_M target: Hanggai, Yibole, Guillou, Kwakernaak, "
+           "van Dijk & Brück, Acta Materialia 302 (2026) 121677 (peak |DeltaS_M|~17.6 "
+           "J/(kg K) at 2T -- 16.66 J/(kg K) calorimetric, 17.61 J/(kg K) magnetic, "
+           "cross-validated -- for the x=0.08, TC=331.2K melt-spun composition). "
+           "Landau (A,B,C) and theta_D are this-repo calibrations/placeholders, NOT "
+           "literature values -- see the block comment above for exact provenance of "
+           "each parameter and its honesty flags. NOT independently validated against "
+           "a second dataset (same caveat as GD5SI2GE2_FIRST_ORDER/LAFESIH_FIRST_ORDER).",
+)
+
+
+def mnfepsi_composition_tuned_material(Tc_target_K, name=None):
+    """Returns a FirstOrderMCEMaterial representing a hypothetical
+    composition-tuned (Mn,Fe)2(P,Si) alloy with Curie temperature
+    Tc_target_K, for use in a Curie-graded bed -- the (Mn,Fe)2(P,Si) analog
+    of composition_tuned_material() / lafesih_composition_tuned_material().
+
+    SAME simplifying assumption as the other two families: only Tc is
+    shifted. (A, B, C), theta_D, M_molar and n_atoms_per_fu are all held
+    fixed at the MNFEPSI_FIRST_ORDER calibration. Unlike the Gd5(SixGe1-x)4
+    case, this family's 295.3-331.2K window is DIRECTLY MEASURED across five
+    real compositions (Table 1 of the source paper), not read from two
+    endpoint papers or a general literature survey -- but the underlying
+    per-composition (A,B,C)/DeltaS_M variation is still not resolved (same
+    caveat as both other families' tuned_fn helpers).
+
+    No Giguere-style empirical dTad_correction is applied (or available) --
+    MNFEPSI_FIRST_ORDER's own dTad_correction default (1.0, uncorrected)
+    carries through unchanged, same as lafesih_composition_tuned_material().
+
+    Raises ValueError if Tc_target_K falls outside MNFEPSI_TC_MIN_K to
+    MNFEPSI_TC_MAX_K.
+    """
+    if not (MNFEPSI_TC_MIN_K <= Tc_target_K <= MNFEPSI_TC_MAX_K):
+        raise ValueError(
+            f"Tc_target_K={Tc_target_K:.1f}K is outside the directly-measured "
+            f"tunability range for the (Mn,Fe)2(P,Si) family "
+            f"({MNFEPSI_TC_MIN_K:.1f}-{MNFEPSI_TC_MAX_K:.1f}K -- Table 1, Hanggai "
+            f"et al., Acta Materialia 302 (2026) 121677; see the block comment "
+            f"above MNFEPSI_TC_MIN_K for the five measured compositions)."
+        )
+    return FirstOrderMCEMaterial(
+        name=name or f"(Mn,Fe)2(P,Si)-type, composition-tuned to Tc={Tc_target_K:.1f}K",
+        Tc=Tc_target_K, J=MNFEPSI_FIRST_ORDER.J, g=MNFEPSI_FIRST_ORDER.g,
+        M_molar=MNFEPSI_FIRST_ORDER.M_molar, theta_D=MNFEPSI_FIRST_ORDER.theta_D,
+        n_atoms_per_fu=MNFEPSI_FIRST_ORDER.n_atoms_per_fu,
+        A=MNFEPSI_FIRST_ORDER.A, B=MNFEPSI_FIRST_ORDER.B, C=MNFEPSI_FIRST_ORDER.C,
+        dTad_correction=MNFEPSI_FIRST_ORDER.dTad_correction,
+        source="Composition-tuned analog of Mn0.68Fe1.22P0.62Si0.38 -- (A,B,C)/"
+               "theta_D/M_molar held fixed at the MNFEPSI_FIRST_ORDER calibration "
+               "(approximation, see docstring); Tc tunability range is directly "
+               "measured across five compositions (see MNFEPSI_TC_MIN_K/_MAX_K "
+               "comment above), unlike LAFESIH's general literature-survey window.",
+    )
+
+
 if __name__ == "__main__":
     mu0_ = 4 * np.pi * 1e-7
     print("First-order Landau model calibration check, Gd5Si2Ge2")
@@ -454,3 +619,21 @@ if __name__ == "__main__":
           "see the block comment above LAFESIH_FIRST_ORDER for the full honesty-flag "
           "list, in particular that the dTad match is expected to be worse than the "
           "dS match, same as for GD5SI2GE2_FIRST_ORDER.)")
+
+    print("\nFirst-order Landau model calibration check, Mn0.68Fe1.22P0.62Si0.38 "
+          "((Mn,Fe)2(P,Si) family)")
+    Ts_mn = np.linspace(316.0, 356.0, 401)
+    for B_T in [1, 2]:
+        H = B_T / mu0_
+        dS_scan = MNFEPSI_FIRST_ORDER.delta_S_isothermal(Ts_mn, H)
+        i_peak = int(np.argmin(dS_scan))
+        T_peak = Ts_mn[i_peak]
+        dS_peak = dS_scan[i_peak]
+        dT_peak = MNFEPSI_FIRST_ORDER.delta_T_adiabatic(np.array([T_peak]), H)[0]
+        print(f"  {B_T}T: peak dS={dS_peak:.2f} J/(kg K) at T={T_peak:.1f}K   "
+              f"dTad(at peak)={dT_peak:.2f} K")
+    print("\nTarget: peak dS ~ -17.6 J/(kg K) at 2T near Tc=331.2K (Hanggai et al. 2026, "
+          "16.66 J/(kg K) calorimetric / 17.61 J/(kg K) magnetic, cross-validated -- "
+          "note this calibration target is at 2T, not the 5T used for the other two "
+          "families above). No dTad target is given: see the block comment above "
+          "MNFEPSI_TC_MIN_K for why no direct-measurement dTad_correction is applied.")

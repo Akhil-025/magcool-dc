@@ -116,6 +116,7 @@ from scipy.optimize import brentq
 from core.mce_material import GADOLINIUM
 from core.first_order_mce import LAFESIH_FIRST_ORDER
 from core.amr_cycle import AMRSystem
+from core.loss_model import StateDependentLossModel, RotaryDriveLossModel
 
 BENCH_CSV = "data/amr_experimental_benchmarks.csv"
 T_COLD_ASSUMED_K = 294.0 - 5.0     # assume device centered near Gd's Tc=294K,
@@ -141,6 +142,49 @@ def _material_for_row(row):
 
 def _t_cold_for_row(row):
     return T_COLD_LAFESIH_K if "La" in row["material"] else T_COLD_ASSUMED_K
+
+
+# BUGFIX (found while diagnosing why a prior loss-model fix produced no change
+# in this module's output): AMRSystem() was never being given a loss_model=
+# argument anywhere in this file, so every device below -- including Lozano --
+# silently fell back to AMRSystem's flat parasitic_fraction=0.15 default
+# instead of either calibrated model. loss_model.py's StateDependentLossModel
+# (CORE-calibrated) and RotaryDriveLossModel (Lozano-specific) were built and
+# tested in isolation but never actually reached this validation pipeline.
+# Cached at module scope so the (cheap but non-trivial) NNLS/least-squares
+# calibration in loss_model.py only runs once per process, not once per row.
+_CORE_LOSS_MODEL = None
+_LOZANO_LOSS_MODEL = None
+
+
+def _get_core_loss_model():
+    global _CORE_LOSS_MODEL
+    if _CORE_LOSS_MODEL is None:
+        _CORE_LOSS_MODEL = StateDependentLossModel()
+    return _CORE_LOSS_MODEL
+
+
+def _get_lozano_loss_model():
+    global _LOZANO_LOSS_MODEL
+    if _LOZANO_LOSS_MODEL is None:
+        _LOZANO_LOSS_MODEL = RotaryDriveLossModel()
+    return _LOZANO_LOSS_MODEL
+
+
+def _loss_model_for_row(row):
+    """Select the calibrated parasitic-loss model for a benchmark row.
+
+    Lozano_POLO_UFSC_2016 rows use RotaryDriveLossModel -- CORE's eddy/pump/
+    base terms plus an additional rotary magnet-assembly/valve drivetrain
+    term fit to Lozano et al. (2016)'s own directly-measured WM data (see
+    loss_model.RotaryDriveLossModel's docstring for why this is device-
+    specific rather than a general "rotary AMR" flag; Astronautics and DTU
+    are also rotary devices and are deliberately left on plain CORE).
+    Every other device uses the plain CORE-calibrated StateDependentLossModel.
+    """
+    if row["device_group"] == "Lozano_POLO_UFSC_2016":
+        return _get_lozano_loss_model()
+    return _get_core_loss_model()
 
 
 def load_benchmarks(path=BENCH_CSV):
@@ -170,10 +214,12 @@ def calibrate_and_check(row, verbose=True):
     material_note = ("La(Fe,Si)13Hy (LAFESIH_FIRST_ORDER, single-Tc "
                       "approximation of the real 6-layer graded bed)"
                       if "La" in row["material"] else "Gd (matches device)")
+    loss_model = _loss_model_for_row(row)
 
     def qc_residual(mdot):
         sys_ = AMRSystem(material=material, mu0H_max=mu0H, mass_regenerator=mass,
-                          frequency=freq, fluid_mdot=max(mdot, 1e-6))
+                          frequency=freq, fluid_mdot=max(mdot, 1e-6),
+                          loss_model=loss_model)
         Qc_model, _ = sys_.cooling_capacity(t_cold, span)
         return Qc_model - Qc_lit
 
@@ -190,7 +236,7 @@ def calibrate_and_check(row, verbose=True):
                 "at this field/mass/frequency)", "material_note": material_note}
 
     sys_ = AMRSystem(material=material, mu0H_max=mu0H, mass_regenerator=mass,
-                      frequency=freq, fluid_mdot=mdot_cal)
+                      frequency=freq, fluid_mdot=mdot_cal, loss_model=loss_model)
     result = sys_.run(t_cold, span)
     cop_err_pct = 100 * (result.COP_electrical - cop_lit) / cop_lit
     implied_parasitic_frac = (1 / cop_lit - 1 / result.COP) if result.COP > 0 else float("nan")
@@ -211,6 +257,53 @@ def calibrate_and_check(row, verbose=True):
     return out
 
 
+def run_capacity_only_calibration_check(verbose=True):
+    """run_system_validation() silently skips any row without a reported
+    COP (`calibrate_and_check()`'s own comment: "capacity-only rows aren't
+    COP validation targets") -- which is correct for COP comparison, but
+    means those rows (zerospan/maxspan companions, the Chubu Electric/
+    Toshiba pair, and now Cooltech_2013_rotary/DTU_MagQueen_2018) never
+    get ANY reported result. This function reuses `_calibrate_mdot()`
+    (which only needs span/Qc/field/mass/frequency, not COP) to report
+    whether each one calibrates at all -- in particular the
+    Cooltech_2013_rotary row, which Paper-Mining Pass Part 3, §1 flags as
+    a genuine STRESS TEST: 42K is the largest span in this benchmark set
+    (next is Risoe_DTU_Gd_2011 at 30K, which itself does NOT calibrate --
+    see run_system_validation()'s own printed output).
+    """
+    rows = load_benchmarks()
+    results = []
+    for row in rows:
+        span = float(row["span_K"])
+        Qc_lit = row["Qc_W"]
+        cop_lit = row["COP"]
+        if span <= 0 or not Qc_lit or cop_lit:
+            continue  # zero-span rows, or rows that already have a reported COP (covered by run_system_validation() instead)
+        Qc_lit = float(Qc_lit)
+        cal = _calibrate_mdot(row)
+        material_note = ("La(Fe,Si)13Hy (LAFESIH_FIRST_ORDER)" if "La" in row["material"]
+                          else "Gd (matches device)")
+        if cal is None:
+            out = {"device": row["device"], "span_K": span, "Qc_lit_W": Qc_lit,
+                   "status": "no calibration found", "material_note": material_note}
+            if verbose:
+                print(f"{row['device']:<28} span={span:5.1f}K  Qc_lit={Qc_lit:7.1f}W  "
+                      f"NO CALIBRATION FOUND (capacity-only row, no COP to compare -- "
+                      f"reports whether the span/Qc pair alone is achievable)  "
+                      f"[{material_note}]")
+        else:
+            mdot_cal, sys_ = cal
+            out = {"device": row["device"], "span_K": span, "Qc_lit_W": Qc_lit,
+                   "status": "calibrated", "mdot_calibrated_kg_s": round(mdot_cal, 4),
+                   "material_note": material_note}
+            if verbose:
+                print(f"{row['device']:<28} span={span:5.1f}K  Qc_lit={Qc_lit:7.1f}W  "
+                      f"calibrated at mdot={mdot_cal:.4f}kg/s (no COP reported -- "
+                      f"capacity-only check)  [{material_note}]")
+        results.append(out)
+    return results
+
+
 def run_system_validation():
     rows = load_benchmarks()
     results = [calibrate_and_check(r) for r in rows]
@@ -227,10 +320,12 @@ def _calibrate_mdot(row):
     freq = float(row["frequency_Hz"]) if row["frequency_Hz"] else 1.0
     material = _material_for_row(row)
     t_cold = _t_cold_for_row(row)
+    loss_model = _loss_model_for_row(row)
 
     def qc_residual(mdot):
         sys_ = AMRSystem(material=material, mu0H_max=mu0H, mass_regenerator=mass,
-                          frequency=freq, fluid_mdot=max(mdot, 1e-6))
+                          frequency=freq, fluid_mdot=max(mdot, 1e-6),
+                          loss_model=loss_model)
         Qc_model, _ = sys_.cooling_capacity(t_cold, span)
         return Qc_model - Qc_lit
 
@@ -239,7 +334,7 @@ def _calibrate_mdot(row):
     except ValueError:
         return None
     sys_ = AMRSystem(material=material, mu0H_max=mu0H, mass_regenerator=mass,
-                      frequency=freq, fluid_mdot=mdot_cal)
+                      frequency=freq, fluid_mdot=mdot_cal, loss_model=loss_model)
     return mdot_cal, sys_
 
 
@@ -327,6 +422,84 @@ def run_curve_validation(verbose=True):
     return results
 
 
+def run_field_sensitivity_check(verbose=True, device_group="ChubuToshiba_Gd_2016"):
+    """Field-axis analog of run_curve_validation() (which checks the
+    model's predicted Qc(span) shape): checks the model's predicted
+    Qc(field) sensitivity, using the Chubu Electric/Toshiba two-field-point
+    pair (ChubuToshiba_Gd_2016_4T/_2T, Paper-Mining Pass Part 2, §1) --
+    the only field-sensitivity data point in this benchmark set; every
+    other device here is reported at a single, fixed field.
+
+    Calibrates fluid mdot to reproduce the HIGHER-field (4T) row's own
+    (span, Qc) -- same _calibrate_mdot() this module already uses, note it
+    only needs (span, Qc, mu0H, mass, freq), NOT a reported COP, so the
+    lack of a COP column for these two rows (not in the source review's
+    table) is not a blocker here, unlike run_curve_validation()'s
+    COP-anchored anchor selection. Reuses that SAME calibrated
+    mdot/mass/frequency system at the LOWER field (2T) to predict Qc at
+    the companion row's own reported span, and compares against its
+    reported Qc.
+
+    SAME secondary-source caveat as the CSV rows themselves and the
+    existing Okamura_Hirano_2013 row: both points are read from a review's
+    table (Kamran, Ahmad & Wang, Renew. Sustain. Energy Rev. 133 (2020)
+    110247, Table 2), not the primary device paper (ref [69] in that
+    review), which is not in this repo's Papers/.
+    """
+    rows = load_benchmarks()
+    group = [r for r in rows if r["device_group"] == device_group]
+    if len(group) < 2:
+        if verbose:
+            print(f"{device_group:<28} fewer than 2 rows found -- field-sensitivity "
+                  f"check skipped")
+        return None
+
+    anchor = max(group, key=lambda r: float(r["mu0H_T"]))
+    companion = next((r for r in group if r is not anchor), None)
+
+    cal = _calibrate_mdot(anchor)
+    if cal is None:
+        if verbose:
+            print(f"{device_group:<28} no calibration found at anchor field="
+                  f"{anchor['mu0H_T']}T")
+        return {"device_group": device_group, "status": "no calibration found at anchor field"}
+    mdot_cal, _ = cal
+
+    material = _material_for_row(anchor)
+    mass = float(anchor["mass_MCM_kg"])
+    freq = float(anchor["frequency_Hz"])
+    t_cold = _t_cold_for_row(anchor)
+    companion_field = float(companion["mu0H_T"])
+    companion_span = float(companion["span_K"])
+    Qc_companion_lit = float(companion["Qc_W"])
+
+    sys_companion = AMRSystem(material=material, mu0H_max=companion_field,
+                               mass_regenerator=mass, frequency=freq, fluid_mdot=mdot_cal,
+                               loss_model=_loss_model_for_row(anchor))
+    Qc_companion_model, _ = sys_companion.cooling_capacity(t_cold, companion_span)
+    err_pct = 100 * (Qc_companion_model - Qc_companion_lit) / Qc_companion_lit
+
+    lit_field_ratio = float(anchor["Qc_W"]) / Qc_companion_lit
+    model_field_ratio = float(anchor["Qc_W"]) / Qc_companion_model if Qc_companion_model > 0 else float("inf")
+
+    out = {"device_group": device_group,
+           "anchor_field_T": float(anchor["mu0H_T"]), "anchor_Qc_W": float(anchor["Qc_W"]),
+           "companion_field_T": companion_field, "companion_Qc_lit_W": Qc_companion_lit,
+           "companion_Qc_model_W": round(Qc_companion_model, 1),
+           "companion_Qc_error_pct": round(err_pct, 1),
+           "lit_field_ratio": round(lit_field_ratio, 2),
+           "model_field_ratio": round(model_field_ratio, 2),
+           "mdot_calibrated_kg_s": round(mdot_cal, 4)}
+    if verbose:
+        print(f"{device_group:<28} anchor field={out['anchor_field_T']:.1f}T "
+              f"(Qc={out['anchor_Qc_W']:.0f}W, calibrated) -> predict Qc at "
+              f"companion field={companion_field:.1f}T: model={Qc_companion_model:7.1f}W  "
+              f"lit={Qc_companion_lit:7.1f}W  err={err_pct:+.1f}%")
+        print(f"{'':<28} literature Qc({out['anchor_field_T']:.0f}T)/Qc({companion_field:.0f}T) "
+              f"ratio={lit_field_ratio:.2f}  vs. model ratio={model_field_ratio:.2f}")
+    return out
+
+
 if __name__ == "__main__":
     print("System-level validation against published AMR prototype data")
     print("=" * 110)
@@ -376,3 +549,23 @@ if __name__ == "__main__":
         for r in curve_results:
             w.writerow({k: r.get(k, "") for k in fieldnames})
     print("\nSaved results/curve_validation.csv")
+
+    print("\n" + "=" * 110)
+    print("Field-sensitivity (2-point Qc-vs-field) check (Paper-Mining Pass Part 2, §1)")
+    print("=" * 110)
+    field_result = run_field_sensitivity_check()
+    if field_result and "companion_Qc_error_pct" in field_result:
+        print(
+            "\nSummary: only one device group in this benchmark set (Chubu Electric/"
+            "Toshiba, secondary-source via Kamran, Ahmad & Wang 2020) reports the "
+            "same device at two different fields, so this is necessarily a single "
+            "check, not a statistical sample -- but it is genuinely independent: "
+            "the companion (2T) point is NOT used in calibration, only predicted "
+            "from the mdot fitted at the anchor (4T) point."
+        )
+
+    print("\n" + "=" * 110)
+    print("Capacity-only rows: calibration-reachability check (Paper-Mining Pass "
+          "Part 3, §1's Cooltech 42K stress test, among others)")
+    print("=" * 110)
+    run_capacity_only_calibration_check()

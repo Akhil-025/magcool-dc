@@ -101,10 +101,27 @@ COLOR_CYCLE  = plt.cm.viridis(np.linspace(0.15, 0.85, 4))
 COLOR_CYCLE8 = plt.cm.viridis(np.linspace(0.15, 0.85, 8))
 
 
+def _atomic_savefig(fig, final_path, **kwargs):
+    """Saves to a temp file in the same directory, then atomically renames
+    into place. Prevents a mid-write OS-level failure (e.g. an Errno 22
+    seen intermittently on Windows, likely AV/file-lock interference) from
+    leaving a truncated/corrupted figure file at final_path -- previously,
+    fig05's .pdf pass failed partway through and left a malformed PDF
+    (missing 'trailer <<...>> startxref' in its final bytes) on disk even
+    though the pipeline correctly logged the stage as failed."""
+    tmp_path = final_path.with_name(final_path.stem + '.tmp' + final_path.suffix)
+    try:
+        fig.savefig(tmp_path, **kwargs)
+        os.replace(tmp_path, final_path)
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
+
+
 def save(fig, name):
     path = FIG_DIR / name
-    fig.savefig(path.with_suffix('.png'), bbox_inches='tight', dpi=150)
-    fig.savefig(path.with_suffix('.pdf'), bbox_inches='tight')
+    _atomic_savefig(fig, path.with_suffix('.png'), bbox_inches='tight', dpi=150)
+    _atomic_savefig(fig, path.with_suffix('.pdf'), bbox_inches='tight')
     plt.close(fig)
     print(f"  Saved -> {path}.png / .pdf")
 

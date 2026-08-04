@@ -4,24 +4,24 @@ Physics-based simulation suite evaluating **magnetocaloric (magnetic) cooling
 for data centers**, benchmarked against vapor-compression CRAC/CRAH and
 direct liquid cooling.
 
-## Status: Phase 7 in progress (loss-model solver fix + scale-term hypothesis test, curve-level validation, lifetime operating cost, COMSOL setup guide, geometry-dependent pumping power for packed-bed AND parallel-plate AMRs done; Tušek 2013 (Appl. Therm. Eng.) figure calibration and full-system BOM cost still open), Phase 8 (code-quality: solver perf, entropy-bug fix, test suite) done, Phase 9 (added La(Fe,Si)13Hy to the materials library, replacing the Gd stand-in used for the Astronautics benchmark; addendum generalized cascade.py's Curie-graded bed to any composition-tunable family and used it to reproduce the real Astronautics device to -11% COP error, plus 2 bugfixes and new cascade.py test coverage) done — see `ROADMAP.md`
+## Status: Phase 7 in progress (loss-model solver fix + scale-term hypothesis test, curve-level validation, lifetime operating cost, COMSOL setup guide, geometry-dependent pumping power for packed-bed AND parallel-plate AMRs done; Tušek 2013 (Appl. Therm. Eng.) figure calibration and full-system BOM cost still open), Phase 8 (code-quality: solver perf, entropy-bug fix, test suite) done, Phase 9 (added La(Fe,Si)13Hy to the materials library, replacing the Gd stand-in used for the Astronautics benchmark; addendum generalized cascade.py's Curie-graded bed to any composition-tunable family and used it to reproduce the real Astronautics device to -11% COP error, plus 2 bugfixes and new cascade.py test coverage) done, Phase 10 (paper-mining pass: added blow-fraction asymmetry as a real AMR cycle degree of freedom and 6th NSGA-III design variable, and a third pluggable material family, (Mn,Fe)2(P,Si), alongside Gd5(SixGe1-x)4 and La(Fe,Si)13Hy; flagged the parallel-plate validation gap for the still-open Tušek 2013 digitization) done, Phase 11 (paper-mining pass part 2: extended validation.py's Gd checks to 7T via Giguere et al.'s own pure-Gd cross-check, added a Curie-point field-shift held-out check against Dan'kov et al. -- which the model does NOT pass, a documented finding, not a bug; added a Chubu Electric/Toshiba field-sensitivity CSV pair and a new run_field_sensitivity_check(), which honestly reports "no calibration found" at this device's scale) done, Phase 12 (paper-mining pass part 3: added a Cooltech 42K-span stress-test row and a DTU MagQueen LAFESIH cross-check row (derived Qc/COP, clearly flagged) plus run_capacity_only_calibration_check(); cross-checked the Gd5Si2Ge2 dTad correction factor against Pecharsky & Gschneidner (1997)'s own ~1.3x peak ratio -- found the RAW model matches better than the Giguere-corrected one at 5T, evidence the correction isn't field-independent; confirmed the economics paper and one "rotary refrigerator" paper are fully mined/design-only respectively) done — see `ROADMAP.md`
 
 ## What's implemented
 
 | Module | Purpose |
 |---|---|
 | `core/mce_material.py` | Mean-field (Brillouin/Weiss) model for continuous-transition materials (Gd, La0.7Ca0.3MnO3); Gd validated, Gd5Si2Ge2 flagged as invalid for this framework |
-| `core/first_order_mce.py` | Extended (6th-order) Landau model for first-order/giant-MCE materials |
+| `core/first_order_mce.py` | Extended (6th-order) Landau model for first-order/giant-MCE materials: Gd5Si2Ge2, La(Fe,Si)13Hy, and (Mn,Fe)2(P,Si) |
 | `core/giant_mce_analysis.py` | Formal Gd vs. giant-MCE comparison → `results/giant_mce_analysis.txt` |
 | `core/emissions.py` | Refrigerant-free GWP/emissions comparison |
-| `core/amr_cycle.py` | 0-D AMR cycle model: cooling capacity, ideal/electrical COP, optional NTU-derived effectiveness |
+| `core/amr_cycle.py` | 0-D AMR cycle model: cooling capacity, ideal/electrical COP, optional NTU-derived effectiveness, optional blow-fraction asymmetry (Phase 10) |
 | `core/thermal.py` | NTU packed-bed regenerator effectiveness model |
 | `core/loss_model.py` | State-dependent eddy/pumping/base loss model — **Phase 6: added a 4th benchmark device and found the extended fit is unstable (negative coefficients, leave-one-out errors up to +1639%); production default stays on the stable 3-point CORE fit, instability documented via `run_extended_diagnostic()`** |
-| `core/optimize.py` | NSGA-III multi-objective optimization — **Phase 6: cost objective now uses `economics.material_cost()`, grounded in Bjørk et al. (2011)'s $40/kg magnet + $20/kg MCM figures** |
-| `core/cascade.py` | Multi-stage cascade AMR design, Gd and Gd5Si2Ge2 |
+| `core/optimize.py` | NSGA-III multi-objective optimization over 6 design variables (field, frequency, flow, mass, effectiveness, blow fraction) — **Phase 6: cost objective now uses `economics.material_cost()`, grounded in Bjørk et al. (2011)'s $40/kg magnet + $20/kg MCM figures** |
+| `core/cascade.py` | Multi-stage cascade AMR design; Curie-graded beds pluggable across Gd5Si2Ge2, La(Fe,Si)13Hy, and (Mn,Fe)2(P,Si) families |
 | `core/baseline_cooling.py` | Vapor-compression and liquid-cooling COP correlations |
 | `core/economics.py` | CAPEX/OPEX comparison, materials-cost floor grounded in Bjørk et al. (2011) |
-| `core/validation.py`, `validation_system.py` | Material- and system-level validation against literature/prototypes |
+| `core/validation.py`, `validation_system.py`, `giguere_validation.py` | Material- and system-level validation against literature/prototypes; `validation.py` also cross-checks Gd at 7T (Giguere et al.) and a Dan'kov et al. Curie-shift held-out prediction (not reproduced by the model, documented); `validation_system.py` also field-sensitivity-checks the Chubu Electric/Toshiba pair and reachability-checks capacity-only rows (Cooltech's 42K stress test); `giguere_validation.py` also cross-checks the Gd5Si2Ge2 dTad correction against Pecharsky & Gschneidner (1997)'s independent peak-ratio figure |
 | `core/sensitivity.py`, `rsm.py` | Sobol sensitivity, RSM surrogate |
 | `main.py` | Full comparison across the ASHRAE TC9.9 thermal envelope |
 
@@ -42,6 +42,99 @@ python -m core.optimize                       # NSGA-III Pareto front, grounded 
 python -m core.cascade                         # multi-stage cascade, Gd vs. Gd5Si2Ge2
 python main.py                                   # single-stage AMR vs. VCC vs. liquid cooling
 ```
+
+## Phase 12 findings (paper-mining pass, part 3)
+
+Went through everything not yet touched in Parts 1-2 (the economics paper
+in full, both "rotary refrigerator" papers, the 1997 discovery paper, the
+solid-state caloric cooling review, both reference books) — see
+`Paper_Mining_Recommendations_Part3.md`. Full details in `ROADMAP.md`'s
+Phase 12 section.
+
+- **Cooltech 2013 (42K span stress test) and DTU MagQueen (LAFESIH
+  cross-check)** added to `data/amr_experimental_benchmarks.csv`, both
+  numbers confirmed directly against the source PDF. Cooltech's 42K span
+  is the largest in this benchmark set; it does not calibrate at any flow
+  rate — consistent with the model's existing struggles at large spans.
+  MagQueen is genuinely a heat pump (Qh=1500W, COP_h=5, not Qc/COP_c) —
+  its CSV row's Qc=1200W/COP=4.0 are derived via the standard Qh=Qc+W
+  identity, clearly flagged as derived rather than measured. Added
+  `run_capacity_only_calibration_check()` so capacity-only rows (which
+  `run_system_validation()` silently skips) get an actual reported result.
+- **Cross-checked the Gd5Si2Ge2 ΔT_ad correction factor** against
+  Pecharsky & Gschneidner (1997)'s own ~1.30 peak-ratio figure — a second
+  independent source and field range. Genuinely interesting result: the
+  raw (uncorrected) model's ratio at 5T (~1.24) is close to 1.30, but the
+  Giguere-corrected model's ratio (~0.51) predicts Gd5Si2Ge2
+  *underperforms* plain Gd — evidence the correction factor (fit at a
+  single 7T point) shouldn't be treated as field-independent.
+- **Documentation-only findings**: confirmed the economics paper
+  (Bjørk et al. 2011) is fully mined; identified which of two similarly-
+  named "rotary refrigerator" papers is design-only (no performance
+  numbers) and corrected a mis-attributed citation in `Literature_Review.md`
+  as a result; flagged (not added) an unconfirmed 18K span number for the
+  Astronautics device and two under-documented reference books.
+
+## Phase 11 findings (paper-mining pass, part 2)
+
+A deeper second pass through the remaining unmined papers (tables, in-text
+numeric callouts, secondary reviews' own citation tables) — see
+`Paper_Mining_Recommendations_Part2.md`. Full details in `ROADMAP.md`'s
+Phase 11 section.
+
+- **Two free, zero-new-sourcing checks from papers already in the repo**:
+  extended `validation.py`'s Gd checks to 7T using Giguere et al. (1999)'s
+  own pure-Gd cross-check paragraph (the model overestimates relative to
+  it, a real cross-paper literature disagreement — reported, not hidden),
+  and added a Curie-point field-shift check against Dan'kov et al.
+  (1998)'s reported ~6 K/T rate. The shift check does **not** pass: the
+  model's own emergent peak-ΔT_ad temperature is pinned at ~294.5K
+  regardless of field (fitted ~0 K/T), confirmed with a sub-Kelvin-
+  precision optimizer rather than a coarse grid — a genuine, documented
+  limitation of this mean-field formulation.
+- **Chubu Electric/Toshiba field-sensitivity pair**: added to
+  `data/amr_experimental_benchmarks.csv` as a secondary-source entry
+  (same caveat as the existing Okamura row), plus a new
+  `run_field_sensitivity_check()` (the field-axis analog of the existing
+  span-axis `run_curve_validation()`) to actually exercise it. Honest
+  result: the 4T anchor point doesn't calibrate at all — this device's
+  reported 26K span at 4.856kg Gd/0.167Hz exceeds what any fluid flow
+  rate in this single-stage 0-D model can achieve — the same kind of
+  finding already on record for `Risoe_DTU_Gd_2011`.
+- **Flagged, not built**: a second, independent Riso Lab data point and
+  the Institute of Tech./Chubu near-zero-span extreme (both from the same
+  comparative prototype table) were identified but not added — neither
+  was on the paper-mining pass's own "updated priority list," and the
+  Riso point's primary source isn't in this repo's `Papers/`.
+
+## Phase 10 findings (paper-mining pass)
+
+A cross-reference of this repo's current state against the papers in
+`Papers/` (see `Paper_Mining_Recommendations.md`) surfaced two concrete,
+numerically-anchored additions and two documentation-only flags. Full
+details in `ROADMAP.md`'s Phase 10 section.
+
+- **Blow-fraction asymmetry** (Masche et al. 2022): the AMR cycle model
+  previously had no notion of flow-waveform asymmetry at all — Qc and
+  second-law efficiency implicitly assumed a symmetric 50/50 blow split.
+  A calibrated `blow_fraction` parameter now exists in `amr_cycle.py`
+  (default 0.5 reproduces every prior result exactly) and as a 6th NSGA-III
+  design variable in `optimize.py`. The optimizer independently converges
+  toward blow_fraction≈0.37-0.43 across the Pareto front — close to the
+  source paper's own 0.416 "best found" value, though not itself
+  independent validation since the same calibration data feeds both.
+- **(Mn,Fe)2(P,Si) material family** (Hanggai et al. 2026): a third
+  pluggable Curie-graded family (`MNFEPSI_FAMILY`), calibrated to the
+  paper's cross-validated peak |ΔS_max|~17.6 J/(kg K) at 2T. Notable
+  because its Tc window (295.3-331.2K, directly measured across five real
+  compositions) sits almost entirely at or above the ASHRAE data-center
+  range — the opposite tension from Gd5(SixGe1-x)4, whose giant-MCE ceiling
+  sits just below it.
+- **Flagged, not built**: the Tušek 2013 comprehensive-comparison paper is
+  the only corpus candidate that could validate `geometry_analysis.py`'s
+  parallel-plate effectiveness model against a real device — but the exact
+  numbers are in the same undigitized Figs. 10-11 already open since
+  Phase 7.
 
 ## Phase 7 findings (so far)
 

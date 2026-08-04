@@ -51,7 +51,10 @@ from core.first_order_mce import (composition_tuned_material,
                                     GIANT_MCE_TC_MIN_K, GIANT_MCE_TC_MAX_K,
                                     lafesih_composition_tuned_material,
                                     LAFESIH_TC_MIN_K, LAFESIH_TC_MAX_K,
-                                    GD5SI2GE2_FIRST_ORDER, LAFESIH_FIRST_ORDER)
+                                    mnfepsi_composition_tuned_material,
+                                    MNFEPSI_TC_MIN_K, MNFEPSI_TC_MAX_K,
+                                    GD5SI2GE2_FIRST_ORDER, LAFESIH_FIRST_ORDER,
+                                    MNFEPSI_FIRST_ORDER)
 
 _LOSS_MODEL = StateDependentLossModel()
 USE_NTU_THERMAL_MODEL = True
@@ -86,6 +89,20 @@ LAFESIH_FAMILY = GradedFamily(
     tuned_fn=lafesih_composition_tuned_material,
     tc_min=LAFESIH_TC_MIN_K, tc_max=LAFESIH_TC_MAX_K,
     reference_material=LAFESIH_FIRST_ORDER, fallback_material=GADOLINIUM,
+)
+
+# Paper-Mining Pass recommendation #3: (Mn,Fe)2(P,Si), a third pluggable
+# giant-MCE family alongside GD_FAMILY/LAFESIH_FAMILY. Unlike those two
+# families' Tc windows, this one (295.3-331.2K, see MNFEPSI_TC_MIN_K/_MAX_K
+# in core/first_order_mce.py) is directly measured across five real
+# compositions and sits almost entirely AT OR ABOVE the ASHRAE data-center
+# supply range -- the opposite tension from GD_FAMILY, whose documented
+# giant-MCE ceiling sits just below it.
+MNFEPSI_FAMILY = GradedFamily(
+    name="(Mn,Fe)2(P,Si)",
+    tuned_fn=mnfepsi_composition_tuned_material,
+    tc_min=MNFEPSI_TC_MIN_K, tc_max=MNFEPSI_TC_MAX_K,
+    reference_material=MNFEPSI_FIRST_ORDER, fallback_material=GADOLINIUM,
 )
 
 

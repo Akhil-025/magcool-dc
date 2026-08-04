@@ -30,11 +30,53 @@ def find_peak_temperature(material, mu0H, T_range=(260, 320), n=601):
     return float(Ts[int(np.argmax(dT))])
 
 
+def landau_peak_offset_K(material, mu0H, T_range=(260, 330), n=701):
+    """Quantifies a real, load-bearing property of this repo's extended
+    Landau formulation (first_order_mce.py): the temperature at which
+    delta_T_adiabatic(T) actually PEAKS at a given field is NOT the
+    material's nominal Tc parameter -- it sits systematically ABOVE Tc.
+
+    This was found during a paper-mining/cross-check pass and confirmed
+    TWICE, independently, at the same field (mu0H~1.4-1.6T):
+      1. GD5SI2GE2_FIRST_ORDER (Tc=276.0K, per Pecharsky & Gschneidner,
+         Phys. Rev. Lett. 78, 4494 (1997)) has its dTad(T) peak at
+         ~286.4K at 2T -- an offset of ~+10.4K.
+      2. cascade.py's Astronautics graded-bed reproduction (see
+         run_astronautics_graded_bed_check() and ROADMAP.md Phase 9
+         addendum) back-solves the composition Tc needed, PER STAGE, for
+         the model's peak effect to land on each stage's actual operating
+         temperature (T_mid). Compared against Jacobs et al. (2014,
+         Int. J. Refrig. 37, 84-91), Table 1's six ACTUAL layer Curie
+         temperatures (30.5-43.0 C = 303.65-316.15 K), the offset is
+         +11.1 to +11.5 K across all six stages -- consistent within
+         ~1K of finding (1), despite being a completely independent check
+         (different composition target per stage, different field regime
+         within the cascade).
+
+    This is a genuine, stable characteristic of the (A,B,C)=(10,-4,8)
+    Landau free-energy expansion used here (see first_order_mce.py's
+    module docstring for the functional form) -- NOT a bug, and NOT
+    something to "fix" by shifting Tc, since Tc is itself calibrated
+    to the transition temperature reported in the source literature
+    (Pecharsky & Gschneidner 1997; Jacobs et al. 2014's Table 1). It
+    means: whenever this codebase composition-tunes a first-order
+    material to hit a target operating temperature (composition_tuned_
+    material() in first_order_mce.py), the resulting nominal `Tc` will
+    read ~10-11K BELOW that target -- this is expected, and downstream
+    code should not be "corrected" to make Tc equal the target T_mid.
+
+    Returns the offset in K (peak_T - material.Tc) at the given field.
+    """
+    peak_T = find_peak_temperature(material, mu0H, T_range=T_range, n=n)
+    return peak_T - material.Tc
+
+
 def run_analysis(out_path="results/giant_mce_analysis.txt"):
     lines = []
     mu0H = 2.0
     peak_T_giant = find_peak_temperature(GD5SI2GE2_FIRST_ORDER, mu0H)
     peak_T_gd = find_peak_temperature(GADOLINIUM, mu0H)
+    landau_offset = landau_peak_offset_K(GD5SI2GE2_FIRST_ORDER, mu0H)
 
     lines.append("Giant-MCE (Gd5Si2Ge2, first-order Landau model) vs. Gd, at their")
     lines.append("own favorable operating points vs. the ASHRAE 18-27C (291-300K) range")
@@ -44,7 +86,16 @@ def run_analysis(out_path="results/giant_mce_analysis.txt"):
     lines.append(f"Gd5Si2Ge2 peak-effect temperature: {peak_T_giant:.1f} K "
                  f"({peak_T_giant-273.15:.1f} C) -- BELOW the ASHRAE range by "
                  f"~{291.0-peak_T_giant:.1f} K")
+    lines.append(f"Landau-model Tc-vs-peak-effect offset at {mu0H:.1f}T: "
+                 f"peak sits {landau_offset:+.1f} K above the nominal Tc="
+                 f"{GD5SI2GE2_FIRST_ORDER.Tc:.1f}K parameter -- a real, stable "
+                 f"property of this extended Landau formulation (see "
+                 f"landau_peak_offset_K() docstring), independently confirmed "
+                 f"to within ~1K by the Astronautics graded-bed cascade check "
+                 f"(+11.1 to +11.5K offset across all 6 stages vs. Jacobs et "
+                 f"al. 2014 Table 1's actual layer Curie temperatures).")
     lines.append("")
+
 
     def eval_at(material, T_cold, span, mass=5.0):
         sys_ = AMRSystem(material=material, mu0H_max=mu0H, mass_regenerator=mass,
@@ -77,6 +128,14 @@ def run_analysis(out_path="results/giant_mce_analysis.txt"):
 
     vcc = vapor_compression_cop(291.0, 291.0 + span)
     liq = liquid_cooling_cop(291.0, 291.0 + span)
+    # CITATION FIX: verified directly against Pecharsky & Gschneidner, Appl.
+    # Phys. Lett. 70, 3299 (1997). The abstract's own tunability claim is
+    # "the ordering temperature is tunable from ~30 to ~276 K by adjusting
+    # the Si:Ge ratio" -- the "~20K" previously used here conflated this with
+    # the paper's TITLE ("...for magnetic refrigeration from ~20 to ~290K"),
+    # a broader claim about the achievable refrigeration range across the
+    # whole Gd5(SixGe1-x)4 family (including Gd5Ge4-rich, non-giant-MCE
+    # compositions), not the tunable-while-still-giant-MCE window quoted here.
     lines.append("CONCLUSION:")
     lines.append("The giant-MCE effect is real and large when the material is operated within")
     lines.append("its own narrow first-order transition window -- but Gd5Si2Ge2's window sits")
@@ -85,8 +144,8 @@ def run_analysis(out_path="results/giant_mce_analysis.txt"):
     lines.append("conclusion (Gd trails vapor-compression/liquid cooling on COP within the")
     lines.append("ASHRAE range). What it DOES support: literature confirms the Gd5(SixGe1-x)4")
     lines.append("family has composition-tunable ordering temperature (Pecharsky & Gschneidner,")
-    lines.append("Appl. Phys. Lett. 70, 3299 (1997), report tunability from ~20K to ~276K by")
-    lines.append("Si:Ge ratio, with Gd5Si4 itself ordering at 335K) -- so a composition between")
+    lines.append("Appl. Phys. Lett. 70, 3299 (1997), report tunability from ~30K to ~276K by")
+    lines.append("Si:Ge ratio, with Gd5Si4 itself ordering at ~335K) -- so a composition between")
     lines.append("Gd5Si2Ge2 and Gd5Si4 tuned to ~291-300K, IF it retains first-order/giant")
     lines.append("character at that composition, is the genuinely promising untested direction")
     lines.append("for closing the COP gap. This is a materials-synthesis question outside what")

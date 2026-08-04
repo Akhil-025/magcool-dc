@@ -11,6 +11,18 @@ Design variables:
     fluid_mdot                [0.02, 0.5]  kg/s
     mass_regenerator          [1.0, 15.0]  kg
     regenerator_effectiveness [0.6, 0.95]  -
+    blow_fraction              [0.1, 0.6]   -  (Paper-Mining Pass
+                                recommendation #1: fraction of the cycle
+                                period spent in cold-to-hot flow. Bounds
+                                bracket the 0.25-0.416 window Masche et al.
+                                (2022) actually tested, widened somewhat to
+                                let the optimizer explore nearby -- values
+                                near the edges of [0.1,0.6] are extrapolated
+                                beyond that paper's tested range; see
+                                core.amr_cycle._blow_fraction_multiplier's
+                                docstring for the calibration's honesty
+                                flags. 0.5 reproduces the model's original
+                                symmetric-blow behavior.)
 
 Objectives (all converted to minimization for pymoo):
     f1 = -COP_electrical        (maximize electrical COP; uses the
@@ -59,16 +71,17 @@ def cost_index(mu0H, mass_regenerator):
 class AMRDesignProblem(ElementwiseProblem):
     def __init__(self):
         super().__init__(
-            n_var=5, n_obj=3, n_constr=0,
-            xl=np.array([1.0, 0.3, 0.02, 1.0, 0.6]),
-            xu=np.array([3.0, 5.0, 0.5, 15.0, 0.95]),
+            n_var=6, n_obj=3, n_constr=0,
+            xl=np.array([1.0, 0.3, 0.02, 1.0, 0.6, 0.1]),
+            xu=np.array([3.0, 5.0, 0.5, 15.0, 0.95, 0.6]),
         )
 
     def _evaluate(self, x, out, *args, **kwargs):
-        mu0H, freq, mdot, mass, eps = x
+        mu0H, freq, mdot, mass, eps, blow_fraction = x
         sys_ = AMRSystem(material=GADOLINIUM, mu0H_max=mu0H, mass_regenerator=mass,
                           frequency=freq, fluid_mdot=mdot, regenerator_effectiveness=eps,
-                          loss_model=_LOSS_MODEL, use_ntu_thermal_model=USE_NTU_THERMAL_MODEL)
+                          loss_model=_LOSS_MODEL, use_ntu_thermal_model=USE_NTU_THERMAL_MODEL,
+                          blow_fraction=blow_fraction)
         result = sys_.run(T_COLD_K, SPAN_K)
         f1 = -result.COP_electrical
         f2 = -result.Qc
@@ -89,7 +102,7 @@ def run_optimization(pop_size=60, n_gen=40, seed=1,
         rows.append({
             "mu0H_max_T": round(x[0], 3), "frequency_Hz": round(x[1], 3),
             "fluid_mdot_kgs": round(x[2], 4), "mass_regenerator_kg": round(x[3], 2),
-            "regen_effectiveness": round(x[4], 3),
+            "regen_effectiveness": round(x[4], 3), "blow_fraction": round(x[5], 3),
             "COP_electrical": round(-f[0], 3), "Qc_W": round(-f[1], 2),
             "cost_index_USD": round(f[2], 1),
         })
@@ -117,7 +130,8 @@ def run_optimization(pop_size=60, n_gen=40, seed=1,
         r = rows[idx]
         print(f"{label:<24} H={r['mu0H_max_T']}T  f={r['frequency_Hz']}Hz  "
               f"mdot={r['fluid_mdot_kgs']}kg/s  mass={r['mass_regenerator_kg']}kg  "
-              f"eps={r['regen_effectiveness']}  -> COP_elec={r['COP_electrical']}, "
+              f"eps={r['regen_effectiveness']}  bf={r['blow_fraction']}  "
+              f"-> COP_elec={r['COP_electrical']}, "
               f"Qc={r['Qc_W']}W, cost=${r['cost_index_USD']}")
 
     masses = [r["mass_regenerator_kg"] for r in rows]

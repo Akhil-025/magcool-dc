@@ -1,7 +1,7 @@
 import pytest
 
 from core.mce_material import GADOLINIUM
-from core.amr_cycle import AMRSystem
+from core.amr_cycle import AMRSystem, BLOW_FRACTION_MASCHE, _blow_fraction_multiplier
 from core.loss_model import StateDependentLossModel
 
 
@@ -54,6 +54,40 @@ def test_ntu_thermal_model_lets_mass_affect_cooling_capacity():
     Qc_small, _ = small.cooling_capacity(291.0, 10.0)
     Qc_large, _ = large.cooling_capacity(291.0, 10.0)
     assert Qc_large >= Qc_small
+
+
+def test_default_blow_fraction_is_symmetric_and_backward_compatible():
+    """blow_fraction defaults to 0.5 (symmetric blow), which must return a
+    multiplier of exactly 1.0 -- i.e. every pre-existing (pre-blow-fraction)
+    result is reproduced exactly unless the caller opts in."""
+    mult = _blow_fraction_multiplier(0.5, value_at_low=70.0, value_at_peak=330.0)
+    assert mult == pytest.approx(1.0, rel=1e-9)
+
+
+def test_blow_fraction_reproduces_masche_relative_qc_swing():
+    """At the two Masche et al. (2022) reported blow fractions, Qc should
+    scale by the same ~4.7x relative factor the paper reports between
+    25.0% and 41.6% blow fraction (70W -> 330W at fixed T_span/U/f)."""
+    sys_low = make_system(blow_fraction=BLOW_FRACTION_MASCHE["low"]["blow_fraction"])
+    sys_peak = make_system(blow_fraction=BLOW_FRACTION_MASCHE["best_found"]["blow_fraction"])
+    Qc_low, _ = sys_low.cooling_capacity(291.0, 10.0)
+    Qc_peak, _ = sys_peak.cooling_capacity(291.0, 10.0)
+    expected_ratio = (BLOW_FRACTION_MASCHE["best_found"]["Qc_W"]
+                       / BLOW_FRACTION_MASCHE["low"]["Qc_W"])
+    assert Qc_peak / Qc_low == pytest.approx(expected_ratio, rel=1e-6)
+
+
+def test_blow_fraction_at_best_found_beats_symmetric_default():
+    """The paper's best-found blow fraction (41.6%) should outperform the
+    model's pre-existing implicit symmetric (50%) assumption, matching the
+    paper's own qualitative finding that flow-profile asymmetry is a real,
+    exploitable lever."""
+    sys_peak = make_system(blow_fraction=BLOW_FRACTION_MASCHE["best_found"]["blow_fraction"])
+    sys_symmetric = make_system(blow_fraction=0.5)
+    r_peak = sys_peak.run(291.0, 10.0)
+    r_symmetric = sys_symmetric.run(291.0, 10.0)
+    assert r_peak.Qc > r_symmetric.Qc
+    assert r_peak.COP_electrical > r_symmetric.COP_electrical
 
 
 def test_amr_run_is_reasonably_fast():

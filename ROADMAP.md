@@ -578,3 +578,299 @@ above:**
       or bounded before this addendum (`cascade.py` had no prior benchmark
       to regress against); this is stated here as a known characteristic,
       not chased further given the accuracy fixes it was needed for.
+
+## Phase 10 — Paper-mining pass: blow-fraction asymmetry & (Mn,Fe)2(P,Si) family — done
+Cross-referenced this repo's current state against `Papers/` for content the
+roadmap had not yet mined; see `Paper_Mining_Recommendations.md` for the full
+pass. Two of its four findings were concrete, numerically-anchored model
+additions; the other two are documentation-only flags (below).
+
+- [x] **Flow-waveform asymmetry (blow fraction)** added to `amr_cycle.py`
+      (`AMRSystem.blow_fraction`, `BLOW_FRACTION_MASCHE`,
+      `_blow_fraction_multiplier()`) — a real degree of freedom the model
+      previously had no notion of at all (Qc/second-law efficiency
+      implicitly assumed a symmetric 50/50 cold-to-hot/hot-to-cold split).
+      Calibrated to the ONLY two-point comparison in the source paper
+      (Masche, Liang, Engelbrecht & Bahl, Appl. Thermal Eng. 215 (2022)
+      118945 — DTU rotary AMR, 13 trapezoidal beds, 295g Gd spheres/bed, at
+      T_span=16K/U=0.32/f=1.4Hz): blow fraction 25.0%→41.6% raised Qc
+      70W→330W (4.7x) and second-law efficiency 2.6%→17.4%. Default
+      `blow_fraction=0.5` exactly reproduces every pre-existing result
+      (multiplier=1.0 at the symmetric baseline); verified numerically that
+      the model reproduces the reported 4.71x relative Qc swing between the
+      two tested blow fractions. Honesty flags (stated in
+      `_blow_fraction_multiplier`'s docstring, not smoothed over): only two
+      points at one operating condition are available, so the parabola's
+      shape and its extrapolation to other T_span/U/frequency combinations
+      are unvalidated; the "best found" point is treated as the curve's
+      true peak, which the source paper does not itself claim.
+      Also added as a **6th NSGA-III decision variable** in `optimize.py`
+      (bounds [0.1, 0.6], bracketing/widening the paper's tested
+      0.25-0.416 window) — the optimizer independently converges toward
+      blow_fraction≈0.37-0.43 across the Pareto front, landing close to the
+      paper's own 0.416 "best found" value, a reasonable sanity check on
+      the calibration (not itself independent validation, since it's the
+      same calibration data driving both).
+      `tests/test_amr_cycle.py`: 3 new tests (default-is-symmetric,
+      reproduces the 4.71x Qc swing, best-found beats symmetric-default).
+- [x] **Added `(Mn,Fe)2(P,Si)` as a third pluggable `GradedFamily`**
+      (`MNFEPSI_FAMILY` in `cascade.py`, `MNFEPSI_FIRST_ORDER` +
+      `mnfepsi_composition_tuned_material()` in `first_order_mce.py`),
+      alongside `GD_FAMILY`/`LAFESIH_FAMILY` — confirmed the Phase 9
+      `GradedFamily` generalization is genuinely pluggable: no changes to
+      `run_graded_cascade()` or `_target_composition_for_peak()` were
+      needed. Source: Hanggai, Yibole, Guillou, Kwakernaak, van Dijk &
+      Brück, Acta Materialia 302 (2026) 121677 — Fe-rich melt-spun
+      Mn0.60+xFe1.3-xP0.66-ySi0.34+y ribbons (0<=x<=0.08, x=2y). Tc window
+      295.3-331.2K is DIRECTLY MEASURED across five real compositions
+      (Table 1 of the source paper) — unlike GD_FAMILY's Ga-alloying
+      endpoint or LAFESIH_FAMILY's general literature-survey window — and
+      sits almost entirely AT OR ABOVE the ASHRAE 291.15-300.15K
+      data-center range (the parent composition's 295.3K already falls
+      inside it), the opposite tension from GD_FAMILY's ceiling sitting
+      just below that range. Calibrated (A,B,C)=(1.16,-0.464,0.928) —
+      same B/A=-0.4, C/A=0.8 ratio as `GD5SI2GE2_FIRST_ORDER`/
+      `LAFESIH_FIRST_ORDER`, only A rescaled — by grid search to
+      reproduce the source paper's cross-validated (calorimetric AND
+      magnetization) peak |DeltaS_M|~17.6 J/(kg K) at 2T (NOT the 5T used
+      for the other two families' calibration targets; this is the field
+      the source paper's own measurements were made at). No Giguere-style
+      dTad_correction is applied — same honesty flag `LAFESIH_FIRST_ORDER`
+      carries: the source paper reports DeltaS_M (indirect, Maxwell
+      relation/calorimetric), not a direct DeltaT_ad measurement, and no
+      independent cross-check paper for this family is in the corpus.
+      `tests/test_first_order_mce.py` + `tests/test_cascade.py`: 6 new
+      tests (peak-DeltaS calibration match, dTad_correction defaults,
+      out-of-range rejection, Tc-only shift assumption, root-finder
+      convergence, in-range graded-cascade feasibility). Full suite:
+      **137/137 passing** (was 125/125 before this pass).
+- [ ] **Flagged, not built**: `Papers/AMR Theory and Modeling/...Tušek...
+      2013 comprehensive experimental analysis...` reports a 20K span,
+      1.15T, ~25%-porosity parallel-plate AMR (the largest reported
+      parallel-plate span at that field at time of publication) — this is
+      the ONLY candidate in the corpus that could validate
+      `geometry_analysis.py`'s `regenerator_effectiveness_parallel_plate()`
+      model against a real device (every row in
+      `data/amr_experimental_benchmarks.csv` today is packed-bed or
+      layered packed-bed). The exact (Qc, COP) pair needed for a full
+      calibrate-then-validate CSV row is only in Figs. 10-11, the SAME
+      digitization already flagged as open in Phase 7 — this entry exists
+      only to name the parallel-plate validation gap as the SPECIFIC
+      target for whoever picks that digitization up, not to re-flag the
+      digitization itself.
+- [x] **Confirmed duplicate, no action**: `Papers/AMR Theory and
+      Modeling/Performance evaluation of a nine-layer active
+      regenerator.pdf` and `Papers/AMR systems and prototypes/The
+      performance of a large-scale rotary magnetic refrigerator.pdf` are
+      the same accepted-manuscript PDF (Jacobs, Auringer, Boeder, Chell,
+      Komorowski, Leonard, Russek & Zimm, Int. J. Refrig., DOI
+      10.1016/j.ijrefrig.2013.09.025 — identical title/DOI/abstract,
+      already cited in `data/amr_experimental_benchmarks.csv` as
+      `Astronautics_rotary_2014` with its actual 3042W/2502W@11K-span
+      numbers). Noted here only so neither filename is searched again for
+      "nine-layer" content that isn't actually in it.
+
+
+## Phase 11 — Paper-mining pass, Part 2: deeper search — done
+Went back through the remaining unmined papers a second time (tables,
+in-text numeric callouts, secondary reviews' own citation tables) rather
+than abstract-level skims; see `Paper_Mining_Recommendations_Part2.md` for
+the full pass. Three findings became concrete additions; one is a
+documentation-only note (below).
+
+- [x] **Extended `validation.py`'s Gd checks to 7T** using Giguere et al.
+      (1999)'s own pure-Gd methods-section cross-check paragraph (a paper
+      already in this repo, previously mined only for its Gd5Si2Ge2 content
+      by `giguere_validation.py`) — `GIGUERE_GD_CROSSCHECK`,
+      `run_giguere_gd_extension()`. Confirmed the paper's own numbers
+      directly from the PDF (not just the recommendations doc): "on high
+      purity Gd agrees with the value of AMES laboratory within 1K (10.5
+      and 11.5K, respectively, both for 5T)... For 7T, our value (12 and
+      13K for industrial- and high-purity Gd, respectively) agrees well
+      with that of Brown (14K)." Honest result: the model (calibrated to
+      Dan'kov et al.'s HIGHER 5T value, 14.6K) overestimates relative to
+      Giguere et al.'s Gd range at both 5T (13.5K model vs. 10.5-11.5K,
+      +22.8% vs. midpoint) and 7T (16.7K model vs. 12-13K, +33.7% vs.
+      midpoint) — a real, reported disagreement between two published Gd
+      measurements, not a bug in this repo; both numbers are reported, not
+      reconciled.
+- [x] **Added a Curie-point field-shift check** against Dan'kov et al.
+      (1998)'s own reported "~6 K/T above 2T, up to 7.5T" rate —
+      `DANKOV_CURIE_SHIFT_RATE_K_PER_T`, `run_curie_shift_check()`. This is
+      a genuine held-out prediction check (the peak-of-ΔT_ad(T) location is
+      an EMERGENT output of mce_material.py's self-consistent M(T,H) Newton
+      solve, not a hardcoded input) — and it does NOT pass: using a
+      bounded-Brent sub-Kelvin-precision peak locator (not a coarse grid,
+      to rule out a resolution artifact) across 12 points from 2-7.5T, the
+      model's peak-ΔT_ad temperature comes out pinned at 294.5K regardless
+      of field — a fitted shift rate of ~0 K/T, not ~6 K/T. Documented as a
+      genuine limitation of this specific mean-field/Weiss-molecular-field
+      Brillouin formulation (see run_curie_shift_check()'s docstring for
+      why), not smoothed over or hidden.
+- [x] **Added the Chubu Electric/Toshiba two-field-point row** to
+      `data/amr_experimental_benchmarks.csv` (`ChubuToshiba_Gd_2016_4T`/
+      `_2T`) — a genuine field-sensitivity pair (4T→100W/26K,
+      2T→40W/24K at fixed geometry), the only such pair in the benchmark
+      set (every other device here is single-field). SECONDARY SOURCE,
+      same caveat as the existing `Okamura_Hirano_2013` row: cited via
+      Kamran, Ahmad & Wang, Renew. Sustain. Energy Rev. 133 (2020) 110247,
+      Table 2 (original ref [69] not in this repo's `Papers/`). The
+      source table gives volume (V_reg=484cm³, n_reg=2) and no mass or
+      COP — `mass_MCM_kg` is therefore an ESTIMATE (V_reg×n_reg×RHO_GD×
+      (1-porosity), reusing `core/thermal.py`'s own existing RHO_GD=7900
+      kg/m³ and porosity=0.365 constants, not an invented number), and
+      COP is left blank (capacity/span-only row, same treatment as this
+      CSV's existing zerospan/maxspan rows).
+      Added `run_field_sensitivity_check()` to `validation_system.py` —
+      the field-axis analog of the existing `run_curve_validation()` —
+      to actually EXERCISE this pair rather than leave it decorative:
+      calibrates mdot to the 4T anchor point, reuses that calibrated
+      system at 2T, and compares the predicted Qc against the 2T
+      companion row. Honest result: the 4T anchor (26K span, 4.856kg Gd,
+      0.167Hz) itself does NOT calibrate — `dTad_noload` at 4T for this
+      mass/frequency is too small relative to a 26K span for ANY mdot in
+      [1e-6, 5] kg/s to reach the reported 100W, so the check correctly
+      reports "no calibration found," the SAME honest outcome already
+      documented for `Risoe_DTU_Gd_2011` and (pre-Phase-9)
+      `Astronautics_rotary_2014`. Kept in the codebase anyway: this is a
+      real, informative finding about the model's achievable-span ceiling
+      at this device's scale, not a wasted addition.
+      `tests/test_validation.py` (new file, 8 tests) and
+      `tests/test_validation_system.py` (+4 tests, +1 exemption-logic
+      generalization for the pre-existing device-group identity test).
+      Also wired both `validation.py` extensions and
+      `run_field_sensitivity_check()` into `main.py`'s pipeline (stages 1
+      and 2) so they run as part of the normal full pipeline, not just
+      standalone. Full suite: **148/148 passing** (was 137/137 before this
+      pass).
+- [ ] **Flagged, not built** (everything else in Part 1's §1 comparative-
+      prototype table): the Institute of Tech./Chubu near-zero-span
+      extreme (540W at 0.2K span, 844cm³×4 regenerators — a genuinely
+      different high-mass operating regime than anything currently
+      calibrated) and the second, independent Riso Lab data point (23cm³,
+      24 regenerators, 2.25Hz, 1.24T — does NOT match the existing
+      `Risoe_DTU_Gd_2011` row's parameters, so likely a different Risø/DTU
+      device generation, not a duplicate) were both left OUT of the CSV.
+      Neither was on Part 2's own "updated priority list" (only the Chubu
+      Electric/Toshiba pair was), and the Riso point's primary source
+      (refs [18,50,62,72-74] in the Kamran/Ahmad/Wang review) isn't in
+      this repo's `Papers/` — adding it would need identifying which of
+      five possible citations is the real source first. Noted here so
+      neither gets silently forgotten, not built without a clearer
+      go-ahead on scope.
+
+
+## Phase 12 — Paper-mining pass, Part 3: remaining papers + reference books — done
+Went through everything not yet touched in Parts 1-2: the economics paper in
+full, both "Development of a rotary..." papers, the 1997 discovery paper,
+the solid-state caloric cooling review, and both reference books; see
+`Paper_Mining_Recommendations_Part3.md`. Two findings became concrete
+additions; three are documentation-only notes (below).
+
+- [x] **Added Cooltech 2013 (42K span stress test) and DTU MagQueen
+      (LAFESIH cross-check) rows** to `data/amr_experimental_benchmarks.csv`.
+      Both confirmed directly from the source PDF (Greco, Aprea, Maiorino
+      & Masselli, Int. J. Refrigeration (2019), Table 2 AND body text, not
+      table-only) before adding, not just taken from the recommendations
+      doc's summary.
+      `Cooltech_2013_rotary`: 42K span is the largest in this benchmark
+      set (next is Risoe_DTU_Gd_2011 at 30K). No mass reported in the
+      source (unlike Part 2's Kamran table, this one has no volume/mass
+      column at all) -- left blank, falls back to
+      `calibrate_and_check()`'s existing mass=1.0kg default, flagged as
+      illustrative-only. No COP reported either (capacity/span-only row).
+      Its own stress test does NOT calibrate at any mdot in [1e-6,5]kg/s
+      -- consistent with the model's existing struggles at large spans
+      (Risoe 30K also fails to calibrate).
+      `DTU_MagQueen_2018`: the source paper reports this is a HEAT PUMP
+      (Qh=1500W heating power, COP_h=5), not a Qc/COP_c pair -- Qc_W=1200
+      and COP=4.0 in the CSV are DERIVED via the standard Qh=Qc+W identity
+      (Qc=Qh*(1-1/COP_h), COP_c=COP_h-1), clearly flagged as derived, not
+      measured, in the row's own source note. Material field
+      ("La(Fe,Mn,Si)13Hz spheres") correctly routes to LAFESIH_FIRST_ORDER
+      via the existing `_material_for_row()` "La" substring match -- the
+      first LAFESIH-material benchmark point independent of
+      Astronautics_rotary_2014. Also does NOT calibrate (same class of
+      finding as Astronautics itself).
+      Added `run_capacity_only_calibration_check()` to
+      `validation_system.py` -- `run_system_validation()` silently skips
+      any row without a reported COP (correct for COP comparison, but it
+      meant Cooltech's 42K stress test would otherwise produce NO reported
+      result at all). Reuses the existing `_calibrate_mdot()` (span/Qc/
+      field/mass/frequency only, no COP needed) to report calibration
+      reachability for every capacity-only row in the CSV, not just the
+      new ones. Wired into `main.py`'s pipeline stage 2 alongside the
+      other two validation_system.py checks.
+      `tests/test_validation_system.py`: +6 tests, +1 hardcoded-count-test
+      update (13->14 total rows in run_system_validation(), since
+      DTU_MagQueen_2018 now has a derived COP and enters that count as a
+      "no calibration found" result).
+- [x] **Cross-checked the Gd5Si2Ge2 ΔT_ad correction factor** against
+      Pecharsky & Gschneidner (1997)'s own text (confirmed directly from
+      the PDF, garbled font-encoding notwithstanding): "the DeltaT_ad
+      values of Gd5Si2Ge2 are larger than the corresponding DeltaT_ad
+      values for Gd by about 30%, comparing the peak values, regardless
+      of the temperature" -- a SECOND independent primary source
+      (heat-capacity-based, not pulse-field-thermometry-based like
+      Giguere et al. 1999) AND a second, independent field range (2T/5T,
+      confirmed from the same paper's Fig. 6, vs. the single 7T point
+      `DTAD_CORRECTION_FACTOR` was fit to).
+      Added `run_pecharsky_ratio_check()` to `core/giguere_validation.py`.
+      Genuinely interesting, non-obvious result: the RAW (uncorrected)
+      model's peak-DeltaT_ad(Gd5Si2Ge2)/peak-DeltaT_ad(Gd) ratio at 5T
+      (~1.24) lands close to Pecharsky & Gschneidner's ~1.30 -- an
+      unexpected agreement, since the model was never fit to this number.
+      But applying `DTAD_CORRECTION_FACTOR` (fit at 7T) drags that SAME
+      ratio down to ~0.51 at 5T (and ~0.87 at 2T) -- i.e. the CORRECTED
+      model predicts Gd5Si2Ge2 underperforms plain Gd, contradicting the
+      entire "giant" MCE premise. This is not treated as grounds to
+      change `DTAD_CORRECTION_FACTOR` (re-fitting a two-point correction
+      would just repeat the same single-point-calibration problem one
+      level up) -- it's documented as concrete evidence that the
+      correction should not be read as field-independent, added to
+      `first_order_mce.py`'s existing honesty-flag block as item 3.
+      `tests/test_giguere_validation.py`: +5 tests.
+- [ ] **Flagged, not built**: the Astronautics 2014 device's table entry
+      in the Greco et al. review lists ΔT_span,max=18K -- the review's own
+      body text independently confirms the 3042W zero-span and 2502W-at-
+      11K numbers already in this repo's CSV, but does NOT explain where
+      "18K" comes from; it appears only in the table, not the surrounding
+      prose, and wasn't found independently confirmed anywhere else in
+      this corpus. NOT added as a third Astronautics data point --
+      flagged here as "worth checking against the original Jacobs et al.
+      2013/2014 IJR paper's figures before using," per the recommendations
+      doc's own caution.
+- [x] **Confirmed identity of the two "rotary refrigerator development"
+      papers, no code impact**: `Development of a novel rotary magnetic
+      refrigerator.pdf` = Lozano et al. (2016), already the primary
+      source behind the `Lozano_POLO_UFSC_2016` CSV rows -- no new
+      content. `Development of a rotary magnetic refrigerator.pdf` =
+      Tušek, Zupan, Šarlah, Prebil & Poredoš (2010), an EARLIER Ljubljana
+      prototype's mechanical/magnet-design paper with zero Qc/span
+      numbers -- design and "pros and cons" (shaft-seal leakage,
+      magnet-structure weight, assembly complexity) only. Noted here so
+      nobody expects performance data from this specific file; added to
+      `Literature_Review.md` as qualitative engineering-realism context
+      (real mechanical parasitic losses `amr_cycle.py`'s idealized cycle
+      doesn't capture), not a numeric validation source.
+- [x] **Economics paper (Bjørk et al. 2011) confirmed fully mined, no
+      action**: checked the full text, not just the abstract already
+      behind `economics.py`. The only content not already reflected in
+      `COST_MCM_PER_KG`/`COST_MAGNET_PER_KG` is Fig. 9 (cost vs. operating
+      frequency, qualitative trend only, not a digitizable value) --
+      wouldn't move the already-documented open BOM-cost gap even if
+      digitized. No code change.
+- [ ] **Reference books, flagged not acted on**: Kitanovski et al.,
+      *Magnetocaloric Energy Conversion* (2015) -- the corpus copy is
+      front-matter + ~9 pages of Ch.1 only (not the full book); Chapters
+      4/7/9 (AMR performance, prototypes-by-country, costs) are listed in
+      the TOC but not present. Tishin & Spichkin, *The Magnetocaloric
+      Effect and its Applications* (2003) -- 486 pages, scanned images
+      with NO OCR text layer (confirmed via `pdfplumber`, zero pages
+      return extractable text); likely the richest materials-property
+      compendium in the corpus, but OCR'ing the whole book wasn't
+      attempted given the effort/yield tradeoff vs. primary sources
+      already mined. Per the recommendations doc: if specific data tables
+      from this book are wanted, OCR can be run on a targeted page
+      range/topic rather than the whole 486 pages -- not done here absent
+      a specific target.
