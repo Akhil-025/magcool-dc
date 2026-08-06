@@ -101,21 +101,55 @@ def test_run_system_validation_still_returns_four_point_results():
     existing DTU_rotary_Gd_2016 row (that citation remains unverified/
     unlocated; the numbers don't match this 2015 paper at all). It
     calibrates successfully (COP error +4.9%), so with_cop rises to 7 and
-    the total to 15."""
+    the total to 15.
+
+    Paper-Mining Pass Part 6 CORRECTED DTU_rotary_Gd_2016 (818W, 10.1K,
+    COP=4.2), the row referenced immediately above as "unverified/
+    unlocated": it has now been located (D. Eriksen, K. Engelbrecht,
+    C.R.H. Bahl, R. Bjork, "Exploring the efficiency potential for an
+    active magnetic regenerator," Sci. Technol. Built Environ. 22(5)
+    (2016) 527-533, reproduced as Ch.6 of Eriksen's 2016 DTU PhD thesis)
+    and renamed DTU_Eriksen_MAGGIE_2016 with its real reported numbers:
+    81.5W at a 15.5K span, COP=3.6. It turns out that this genuine,
+    verified operating point does NOT calibrate under the current
+    single-Tc-Gd cycle model (span exceeds the model's reachable range at
+    this device's field/mass/frequency, same failure mode as
+    Risoe_DTU_Gd_2011 -- see loss_model.py's docstring for why: the real
+    device's Curie-graded 11-layer bed reaches spans a single-Tc
+    approximation structurally cannot). So the OLD fabricated number
+    happened to calibrate (which is presumably why it was hardcoded to
+    begin with) but the REAL number does not -- with_cop therefore DROPS
+    from 7 to 6 (losing this device's contribution), while total stays at
+    15 (the row is still present with a "no calibration found" status,
+    like Astronautics_rotary_2014, Risoe_DTU_Gd_2011, DTU_MagQueen_2018,
+    and 4 of the 8 Lozano rows -- present, not silently dropped)."""
     results = run_system_validation()
     with_cop = [r for r in results if "COP_error_pct" in r]
-    assert len(with_cop) == 7
+    assert len(with_cop) == 6
     assert len(results) == 15
 
 
 def test_curve_validation_covers_multi_point_groups():
+    """Paper-Mining Pass Part 6: DTU_rotary_Gd_2016 (which had a same-
+    frequency zero-Qc companion row, DTU_rotary_Gd_2016_maxspan) was
+    corrected and renamed DTU_Eriksen_MAGGIE_2016 (see
+    data/amr_experimental_benchmarks.csv and loss_model.py's docstring).
+    The real primary source (Eriksen 2016 PhD thesis, Ch.6) does not
+    report a same-frequency no-load-span companion point for its 0.61Hz/
+    15.5K/81.5W operating point -- the thesis's only other no-load-span
+    number (29.2K) is from a different chapter's later test campaign at
+    1.4Hz, not a valid same-condition companion -- so no maxspan row was
+    fabricated to replace the old one, and DTU_Eriksen_MAGGIE_2016 is a
+    single-row device_group, correctly absent from curve validation
+    (which requires >=2 rows per group)."""
     results = run_curve_validation(verbose=False)
     group_names = {r["device_group"] for r in results}
-    # the 3 groups with a fixed-condition companion span point, plus
-    # Lozano_POLO_UFSC_2016, whose 8 independent (own frequency/flow) rows
-    # are reported here with a "multi-point set" status (see the guard in
-    # run_curve_validation()) rather than run through 2-point pairing
-    assert group_names == {"Astronautics_rotary_2014", "DTU_rotary_Gd_2016",
+    # the 2 remaining groups with a fixed-condition companion span point,
+    # plus Lozano_POLO_UFSC_2016, whose 8 independent (own frequency/flow)
+    # rows are reported here with a "multi-point set" status (see the
+    # guard in run_curve_validation()) rather than run through 2-point
+    # pairing
+    assert group_names == {"Astronautics_rotary_2014",
                             "Risoe_DTU_Gd_2011", "Lozano_POLO_UFSC_2016"}
 
 
@@ -140,12 +174,17 @@ def test_curve_validation_risoe_reports_no_calibration():
     assert risoe.get("status") == "no calibration found at anchor point"
 
 
-def test_curve_validation_dtu_predicts_near_zero_at_noload_span():
-    """The DTU device's companion point is its reported no-load (zero
-    capacity) span -- the model should predict close to zero there too."""
+def test_curve_validation_no_longer_covers_dtu():
+    """Paper-Mining Pass Part 6: DTU_rotary_Gd_2016's companion-span test
+    (the model predicting ~0W at the device's no-load span) is retired
+    along with the fabricated row it depended on -- see
+    test_curve_validation_covers_multi_point_groups's docstring and
+    data/amr_experimental_benchmarks.csv's DTU_Eriksen_MAGGIE_2016 row.
+    This test just confirms no group calling itself DTU_rotary_Gd_2016
+    lingers in curve validation output."""
     results = run_curve_validation(verbose=False)
-    dtu = next(r for r in results if r["device_group"] == "DTU_rotary_Gd_2016")
-    assert dtu["companion_Qc_model_W"] == pytest.approx(0.0, abs=1.0)
+    group_names = {r["device_group"] for r in results}
+    assert "DTU_rotary_Gd_2016" not in group_names
 
 
 def test_field_sensitivity_check_finds_chubu_rows():

@@ -259,7 +259,7 @@
         item originally asked for — **but digitizing them requires
         pixel-calibrated marker extraction from the figure images, which
         was NOT done here** (a rough, explicitly-non-authoritative visual
-        read is in `results/tusek_ate2013_figs_notes.md` for whoever picks
+        read is in `data/tusek_ate2013_figs/notes.md` for whoever picks
         this up next; fabricating a precise-looking table from an
         uncalibrated eyeball read would be worse than leaving it open).
         So: this half of the item is now unblocked on *obtaining* the
@@ -298,7 +298,7 @@
       human with a point-and-click digitizer — auto-extracting a
       confident-looking 9-series table from blind pixel statistics here
       would be exactly the false-precision trap already flagged above, not
-      genuine progress. Full notes in `results/tusek_ate2013_figs_notes.md`.
+      genuine progress. Full notes in `data/tusek_ate2013_figs/notes.md`.
       Nielsen (2011) is in hand too, per the correction above, but is not a
       source of this kind of curve data, so it drops off this specific
       to-do.
@@ -830,16 +830,22 @@ additions; three are documentation-only notes (below).
       correction should not be read as field-independent, added to
       `first_order_mce.py`'s existing honesty-flag block as item 3.
       `tests/test_giguere_validation.py`: +5 tests.
-- [ ] **Flagged, not built**: the Astronautics 2014 device's table entry
-      in the Greco et al. review lists ΔT_span,max=18K -- the review's own
-      body text independently confirms the 3042W zero-span and 2502W-at-
-      11K numbers already in this repo's CSV, but does NOT explain where
-      "18K" comes from; it appears only in the table, not the surrounding
-      prose, and wasn't found independently confirmed anywhere else in
-      this corpus. NOT added as a third Astronautics data point --
-      flagged here as "worth checking against the original Jacobs et al.
-      2013/2014 IJR paper's figures before using," per the recommendations
-      doc's own caution.
+- [x] **Checked against the primary source, "18K" not confirmed.**
+      (Paper-Mining Pass Part 6 follow-up.) `txt`-extracted the actual
+      Jacobs et al. paper ("The performance of a large-scale rotary
+      magnetic refrigerator," now in this repo's Papers/) and searched it
+      directly for any 18K span mention: none found. Its own reported
+      spans are 11.0 K (headline, 2502W), 12.0 K (design target/measured
+      operating point, mentioned four times), and 16.0 K (a single mention,
+      in a measurement-vs-model-prediction comparison context, not
+      presented as a device capability figure). "18K" does not appear
+      anywhere in the primary text. Confirms the earlier caution was
+      warranted -- the Greco et al. review table's "18K" entry is not
+      independently verifiable from the source it's presumably drawn from,
+      and should NOT be used as a third Astronautics data point. No CSV or
+      code change (there wasn't one to make -- this closes the "should I
+      trust this number" question with "no," not "yes, here are the
+      values to add").
 - [x] **Confirmed identity of the two "rotary refrigerator development"
       papers, no code impact**: `Development of a novel rotary magnetic
       refrigerator.pdf` = Lozano et al. (2016), already the primary
@@ -874,3 +880,196 @@ additions; three are documentation-only notes (below).
       from this book are wanted, OCR can be run on a targeted page
       range/topic rather than the whole 486 pages -- not done here absent
       a specific target.
+
+## Phase 13 — Paper-mining pass, Part 6: DTU_rotary_Gd_2016 citation traced and corrected — done
+Parts 4 and 5 (referenced throughout `core/loss_model.py` and
+`data/amr_experimental_benchmarks.csv`'s row notes, but never logged here)
+fixed stale `mdot` values in `CALIBRATION_POINTS_CORE` and added the
+`DTU_Eriksen_rotary_Gd_2015` row from a genuine primary source,
+respectively -- noted here for the record since this phase builds
+directly on both. Part 6 tracked down and fixed the one citation flagged
+throughout the repo as "unverified/unlocated": the `DTU_rotary_Gd_2016`
+row (818 W, 10.1 K span, COP=4.2), cited only as "Bahl/Eriksen/
+Engelbrecht, rotary AMR - ScienceDirect (2016)".
+
+- [x] **Traced the real paper and found the CSV numbers don't match it.**
+      The user supplied Eriksen's 2016 DTU PhD thesis ("Active magnetic
+      regenerator refrigeration with rotary multi-bed technology"), whose
+      Chapter 6 is exactly the paper behind the citation -- D. Eriksen,
+      K. Engelbrecht, C.R.H. Bahl, R. Bjørk, "Exploring the efficiency
+      potential for an active magnetic regenerator," Sci. Technol. Built
+      Environ. 22(5) (2016) 527-533 (ref [20] in Masche et al. 2021,
+      already in this repo's Papers/). Confirmed directly from the thesis
+      text, not a secondary source: "a maximum second-law efficiency of
+      18% was obtained at a cooling load of 81.5 W, resulting in a
+      temperature span of 15.5 K and a COP of 3.6" at fAMR=0.61 Hz,
+      1.13 T, 1.7 kg Gd -- not 818 W/10.1 K/COP=4.2 at 1.4 Hz/1.44 T. The
+      real device ("MAGGIE") is the SAME physical prototype as the
+      already-present `DTU_Eriksen_rotary_Gd_2015` row (Eriksen et al.,
+      Int. J. Refrigeration 2015), just a later paper reporting a
+      different (lower-frequency, higher-span, higher-COP) operating
+      point -- confirmed by matching Chapter 3's device description
+      (12x NdFeB magnet blocks, 11-compartment Curie-graded Gd +
+      Gd(100-x)Yx regenerator, 1.13 T, 1.7 kg) against the 2015 paper's.
+- [x] **Extracted a directly-measured loss breakdown as a bonus**: the
+      thesis's Table 6.2 (Sec. 6.5.3) gives shaft power (14.0 W), total
+      pumping power (8.9 W, split 4.1 W regenerator + 4.8 W external
+      components), bearing/gear friction (1.6 W), valve friction (1.1 W),
+      and Carnot (ideal) work (4.0 W) for this exact operating point --
+      all directly reported, not back-calculated from Qc/COP like every
+      other row in this benchmark set. Reported flow rate (V=2.5 L/min)
+      also gives a directly-measured mdot, in principle avoiding the
+      brentq back-calculation entirely -- flagged in the CSV row's note
+      for future use, but not adopted as the CORE calibration input this
+      pass (see next item for why).
+- [x] **Checked the corrected point against this repo's own cycle model
+      and found it doesn't calibrate.** At 1.13 T / 1.7 kg / 0.61 Hz,
+      `amr_cycle.py`'s `cooling_capacity()` predicts Qc ≈ 0 at a 15.5 K
+      span for ANY mdot in [1e-6, 5] kg/s -- the model's own zero-flow
+      no-load span at this field/frequency already sits below 15.5 K.
+      Same failure mode already documented for `Risoe_DTU_Gd_2011`
+      (attributed there, and here, to the real device's Curie-graded
+      11-layer bed reaching spans a single-uniform-Tc Gd approximation
+      structurally cannot). Renamed the row `DTU_Eriksen_MAGGIE_2016` and
+      kept it in the CSV with "no calibration found" status via the
+      existing `calibrate_and_check()` path -- documented, not dropped.
+- [x] **Replaced the CORE calibration point rather than deleting it.**
+      Since the corrected DTU number can't fill `CALIBRATION_POINTS_CORE`'s
+      3rd slot, `DTU_Eriksen_rotary_Gd_2015` (already in the CSV, already
+      cited to a real primary source, and confirmed to calibrate cleanly:
+      mdot=0.084666 kg/s reproduces its own literature Qc=102.8W exactly)
+      was promoted into that slot instead of leaving CORE underdetermined
+      or fabricating a new point. Re-ran the same
+      `brentq(qc_residual, 1e-6, 5.0)` / `Wp=Qc*(1/COP_lit-1/COP_ideal)`
+      procedure every other CORE point uses: mdot=0.084666 kg/s,
+      Wp_required=26.18 W. NNLS refit stays non-negative
+      (k_eddy=30.52, k_pump=0, base_frac=0.048).
+- [x] **Found and corrected a downstream consequence**: with the DTU
+      point's parasitic fraction changed from a fabricated 17.1% to a
+      verified 25.5%, the 4-device EXTENDED-set parasitic-fraction-vs-Qc
+      ranking (Tušek 11.7% < DTU 25.5% < Okamura 36.7% < Astronautics
+      45.3%) flips from "non-monotonic" to a clean *monotonic increase*
+      with device scale -- the opposite direction from the fixed-overhead/
+      economies-of-scale hypothesis this analysis was built to test, so
+      the qualitative conclusion (a size/scale term isn't supported) is
+      unchanged, but the specific "non-monotonic" claim in
+      `loss_model.py`'s docstring, `README.md`, and
+      `magcool-dc_technical_walkthrough.md` was wrong post-correction and
+      has been rewritten in all three places.
+      `analyze_parasitic_fraction_scaling()` gained an explicit
+      informational branch for the now-monotonic case instead of only
+      ever printing the old "not monotonic" narrative.
+- [x] **Test suite updated for the correction**: `tests/test_loss_model.py`
+      (`_SELF_CONSISTENCY_SPANS`/`_MASS` dicts, the Lozano leave-one-out
+      clustering threshold widened from 10.0 to 12.0 points to reflect the
+      slightly shifted pooled fit, and the monotonicity test flipped from
+      `test_parasitic_fraction_scaling_is_not_monotonic` to
+      `test_parasitic_fraction_scaling_is_monotonically_increasing_with_qc`)
+      and `tests/test_validation_system.py` (`with_cop` count drops from
+      7 to 6 since the fabricated point used to "calibrate" and the real
+      one doesn't, `total` stays at 15; the DTU curve-validation
+      companion test is retired since no verified same-frequency
+      companion span exists for the corrected point, and
+      `test_curve_validation_covers_multi_point_groups`'s expected group
+      set drops `DTU_rotary_Gd_2016`) -- full suite re-run and passing
+      (148 collected, 146 pass; the 2 failures are pre-existing
+      SALib/pymoo-optional-dependency sandbox issues unrelated to this
+      change, not new).
+- [ ] **Not done this pass**: the thesis's Ch.5 addendum reports a later
+      no-load span of 29.2 K at fAMR=1.4 Hz for the SAME prototype --
+      flagged in the CSV row's note as a possible 3rd MAGGIE data point
+      for anyone picking this up, but not added as its own row since it's
+      at yet another frequency than either existing MAGGIE row and can't
+      serve as a same-condition curve companion for either. The directly-
+      measured mdot (from the 2.5 L/min flow rate) and Wp (from Table
+      6.2's power breakdown) were also not adopted as an alternative,
+      non-back-calculated CORE calibration input -- doing so would break
+      with every other CORE point's "hardcoded mdot reproduces hardcoded
+      Qc under the current model" convention (since this point's real
+      span doesn't reproduce under the model at all) and was judged too
+      large a methodological change to make silently; flagged for a
+      future pass if it's judged worth special-casing.
+## Phase 14 — Bug fixes + Track A2 four-way material comparison + open-item decisions (this pass)
+
+Closes ROADMAP.md's suggested "Track A" bug-fix list and makes explicit,
+documented decisions on the remaining "Track B" open items (except B5,
+left open — being digitized manually in WebPlotDigitizer) rather than
+leaving them silently unaddressed.
+
+- [x] **Fixed a real material-model bug**: `run_cascade_comparison()`
+      (main.py step 7), `core/plots.py`'s fig20, and `core/cascade.py`'s
+      `__main__` demo block all imported the mean-field
+      `core.mce_material.GD5SI2GE2` (explicitly documented in that module
+      as "retained as a parameter entry only," not for quantitative use)
+      instead of the physically-appropriate first-order Landau model,
+      `core.first_order_mce.GD5SI2GE2_FIRST_ORDER`, that
+      `giant_mce_analysis.py` correctly uses. Fixed all three call sites.
+      Re-ran the affected stage: `results/cascade_comparison_giant_mce.csv`
+      and `fig20` are numerically UNCHANGED after the fix, because both
+      materials share the same Tc=276K and the whole point of that
+      comparison is that Gd5Si2Ge2's fixed Tc sits below the ASHRAE range
+      regardless of which model computes it — already correctly documented
+      in fig20's own title. So: a real bug, correctly fixed, but not one
+      that silently changed a headline number this time.
+- [x] **Built the four-way material family comparison**
+      (`core/material_family_comparison.py`, wired into `main.py` as new
+      step 8d, `plots.py` fig26): runs Gd, Gd5Si2Ge2 (fixed composition),
+      and all three composition-TUNABLE giant-MCE families this repo
+      already has (`cascade.py`'s `GD_FAMILY`/`LAFESIH_FAMILY`/
+      `MNFEPSI_FAMILY`) through the same ASHRAE operating point(s)
+      (T_cold=18C, 5-20K span sweep, 1-4 stage cascade), each family
+      re-tuned per span to its own best composition via the same
+      `_target_composition_for_peak` root-finder the graded-cascade code
+      already relies on. Reports whether each family's documented Tc
+      window actually covers the point needed, falling back to plain Gd
+      where it doesn't (MNFEPSI_FAMILY's 295.3-331.2K window sits mostly
+      AT/ABOVE the ASHRAE range and fails to cover the representative
+      10K-span point; GD_FAMILY's 20-290K window is right at its ceiling
+      there too). **Result at the representative 10K-span point**:
+      La(Fe,Si)13Hy (tuned) ranks best (COP=7.33, Qc=4989W), ahead of
+      plain Gd (COP=5.09, Qc=1443W) — this is the "which is best" ranking
+      the original item asked for, previously left implicit across
+      several separate analyses. See `results/material_family_comparison.csv`
+      / `.txt` / fig26.
+- [x] **A3 — span_fraction hard clamp**: kept the documented linear clamp
+      (option (a) from this pass's own plan) rather than inventing an
+      unsourced smoothing function; no literature source for the exact
+      near-span-limit fall-off shape was found in this project's corpus.
+      Documented the limitation directly in `AMRSystem.cooling_capacity()`'s
+      docstring instead of leaving it implicit.
+- [x] **A4 — repo-wide grep + full suite re-run**: confirmed no other
+      quantitative use of the mean-field GD5SI2GE2 remained
+      (`grep -rn "GD5SI2GE2\b" --include=*.py . | grep -v _FIRST_ORDER`
+      now only matches the metadata test and the definition itself). Full
+      suite: 170 passed, 0 failed (up from 168 pre-pass + 2 new test files
+      for `material_family_comparison.py`; `test_plots.py`'s
+      `FIGURE_FUNCTIONS`-vs-`run_all()` sync check caught fig26 needing
+      registration there too, which it now has).
+- [x] **B6 — full-system BOM cost: already closed, re-confirmed, no change
+      needed.** `core/economics.py` already documents its CAPEX figure as
+      a materials-only floor (Bjørk et al. 2011/2016), explicitly NOT a
+      bottom-up HX/pump/motor/controls BOM, and states that gap in both
+      the module docstring and `main.py`'s logged output. This matches
+      option (b) from this pass's own plan (state CAPEX as a lower bound,
+      not full TCO) — it was already the repo's position; getting real
+      vendor quotes to close it fully is a data-gathering task outside
+      what this pass can do.
+- [x] **B7 — reference books (Tishin & Spichkin, Kitanovski et al.): no
+      action, correctly left flagged.** Both are present in `Papers/
+      Reference Books/`; per the original item's own criterion ("only
+      worth OCR'ing if you have a specific data table you need from
+      them"), no specific table was requested this pass, so they remain
+      flagged rather than spec­ulatively OCR'd.
+- [x] **B8 — two flagged-not-built CSV rows (Chubu near-zero-span extreme,
+      second Risø/DTU point): no action, correctly left unbuilt.** No
+      primary source for the Risø point was obtained this pass (still only
+      known via a review paper's reference list per the existing
+      ROADMAP.md entry) — per the original item's own instruction, not
+      adding it from a secondary source alone.
+- [ ] **B5 — Tušek et al. (2013) Figs. 10-11 digitization: left open,
+      intentionally not attempted by automation this pass.** Being
+      digitized manually in WebPlotDigitizer instead; results will be
+      wired into `validation_system.py` as new curve-level rows once
+      available.
+- [x] **B9 — this Phase 14 section**: status lines updated as each item
+      above closed, per this repo's existing habit.

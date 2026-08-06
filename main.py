@@ -17,13 +17,14 @@ in the repository in one pass, in dependency order, so a single
     7b. Curie-graded cascade           (core/cascade.py, ROADMAP.md Phase 7 item)
     7c. Astronautics graded-bed check  (core/cascade.py, ROADMAP.md Phase 9 addendum)
     8.  Giant-MCE materials analysis   (core/giant_mce_analysis.py)
+    8d. Material family comparison     (core/material_family_comparison.py, Track A2 item)
     8b. First-order Landau model demo  (core/first_order_mce.py)
     8c. Giguere et al. (1999) direct-measurement cross-check + Pecharsky &
         Gschneidner (1997) peak-ratio check (core/giguere_validation.py)
     9.  Sobol sensitivity analysis     (core/sensitivity.py)
     10. RSM surrogate fit              (core/rsm.py)
     11. NSGA-III design optimization   (core/optimize.py)
-    12. Figure generation (25 figures) (plots.py -> results/figures/*.png, *.pdf)
+    12. Figure generation (26 figures) (plots.py -> results/figures/*.png, *.pdf)
 
 Steps 3b and 8b reproduce core/thermal.py's and core/first_order_mce.py's
 own __main__ demo blocks. Both modules are otherwise only reached
@@ -78,7 +79,7 @@ import contextlib
 import numpy as np
 import csv
 
-from core.mce_material import GADOLINIUM, GD5SI2GE2
+from core.mce_material import GADOLINIUM
 from core.amr_cycle import AMRSystem
 from core.baseline_cooling import vapor_compression_cop, liquid_cooling_cop
 from core import validation
@@ -87,7 +88,9 @@ from core import loss_model
 from core import economics
 from core import emissions
 from core import cascade
+from core.cascade import staged_baseline_result
 from core import giant_mce_analysis
+from core import material_family_comparison
 from core import sensitivity
 from core import rsm
 from core import optimize as optimize_module
@@ -198,12 +201,27 @@ def run_baseline_sweep():
     """Step 4: AMR vs vapor-compression vs liquid cooling vs Carnot,
     swept over the ASHRAE 5-20K temperature-lift range. Returns the full
     list of row dicts so later steps can pull the representative point
-    out of it instead of recomputing or hardcoding numbers."""
+    out of it instead of recomputing or hardcoding numbers.
+
+    Uses core.cascade.staged_baseline_result() rather than a bare
+    single-stage AMRSystem.run(). A single Gd stage at this operating
+    point (2T, 5kg, 2Hz, mdot=0.08kg/s) runs out of its own no-load
+    DeltaT_ad above ~16K span (amr_cycle.py's cooling_capacity() correctly
+    returns Qc=0 past that point -- see its MODEL LIMITATION docstring),
+    which previously showed up here as a flat AMR_COP_electrical=0.0 for
+    17-20K span, reading as "AMR stops working" rather than "a single
+    stage stops working." staged_baseline_result() automatically falls
+    back to the minimum number of identical stages in series (2-4,
+    same per-stage mass/field/flow as the single-stage case) needed to
+    reach a positive Qc -- exactly the staging approach step 7's own
+    cascade comparison already validates for this material at this span
+    range. n_stages=1 whenever the single stage already worked, so every
+    span that previously had a nonzero value is completely unchanged."""
     T_cold_C = 18.0
     T_cold_K = T_cold_C + 273.15
     spans = np.arange(5, 21, 1)
 
-    amr = AMRSystem(
+    amr_kwargs = dict(
         material=GADOLINIUM,
         mu0H_max=2.0,
         mass_regenerator=5.0,
@@ -216,7 +234,7 @@ def run_baseline_sweep():
     rows = []
     for span in spans:
         T_hot_K = T_cold_K + span
-        amr_res = amr.run(T_cold_K, span)
+        amr_res = staged_baseline_result(T_cold_K, float(span), **amr_kwargs)
         vcc = vapor_compression_cop(T_cold_K, T_hot_K)
         liq = liquid_cooling_cop(T_cold_K, T_hot_K)
         rows.append({
@@ -226,6 +244,7 @@ def run_baseline_sweep():
             "AMR_COP_electrical": round(amr_res.COP_electrical, 2),
             "AMR_Qc_W": round(amr_res.Qc, 1),
             "AMR_2ndlaw_eff": round(amr_res.exergy_eff, 3),
+            "AMR_n_stages": amr_res.n_stages,
             "VaporCompression_COP": round(vcc.COP, 2),
             "LiquidCooling_COP": round(liq.COP, 2),
             "Carnot_COP": round(vcc.COP_carnot, 2),
@@ -236,17 +255,21 @@ def run_baseline_sweep():
         writer.writeheader()
         writer.writerows(rows)
 
-    logger.info(f"{'span(K)':>8} {'AMR elec COP':>13} {'VCC COP':>9} {'Liquid COP':>11} {'Carnot':>8}")
+    logger.info(f"{'span(K)':>8} {'AMR elec COP':>13} {'stages':>7} {'VCC COP':>9} {'Liquid COP':>11} {'Carnot':>8}")
     for r in rows:
-        logger.info(f"{r['span_K']:>8} {r['AMR_COP_electrical']:>13} {r['VaporCompression_COP']:>9} "
-                    f"{r['LiquidCooling_COP']:>11} {r['Carnot_COP']:>8}")
+        logger.info(f"{r['span_K']:>8} {r['AMR_COP_electrical']:>13} {r['AMR_n_stages']:>7} "
+                    f"{r['VaporCompression_COP']:>9} {r['LiquidCooling_COP']:>11} {r['Carnot_COP']:>8}")
     logger.info(f"Wrote {RESULTS_CSV}")
     logger.info(
         "Note: AMR_COP_electrical includes estimated parasitic losses and is "
         "the appropriate quantity for comparison with vapor-compression and "
         "liquid-cooling COP values, which are also reported on an electrical "
         "basis. AMR_COP_ideal represents the thermodynamic cycle alone and is "
-        "provided for reference."
+        "provided for reference. AMR_n_stages=1 rows are the plain single-stage "
+        "cycle; AMR_n_stages>1 rows (span >16K here) used the automatic cascade "
+        "fallback in core.cascade.staged_baseline_result() because a single "
+        "stage's own no-load DeltaT_ad could not cover that span -- see that "
+        "function's docstring."
     )
     return rows
 
@@ -294,8 +317,8 @@ def run_cascade_comparison():
                                        out_csv="results/cascade_comparison.csv")
     logger.info(f"Wrote results/cascade_comparison.csv ({len(rows_gd)} rows)")
 
-    logger.info("Material: Gd5Si2Ge2 (giant MCE)")
-    rows_giant = cascade.compare_staging(material=GD5SI2GE2, mass_per_stage=5.0,
+    logger.info("Material: Gd5Si2Ge2 (giant MCE, first-order Landau model)")
+    rows_giant = cascade.compare_staging(material=GD5SI2GE2_FIRST_ORDER, mass_per_stage=5.0,
                                           out_csv="results/cascade_comparison_giant_mce.csv")
     logger.info(f"Wrote results/cascade_comparison_giant_mce.csv ({len(rows_giant)} rows)")
     return rows_gd
@@ -382,7 +405,7 @@ def run_first_order_mce_demo():
 
 
 def run_plot_generation():
-    """Step 12: renders all 25 figures in plots.py (results/figures/*.png
+    """Step 12: renders all 26 figures in plots.py (results/figures/*.png
     and *.pdf) covering material validation, AMR characteristic curves,
     thermal/geometry modelling, loss-model calibration, system/curve
     validation, cascade and Curie-graded staging, Sobol sensitivity, RSM
@@ -434,6 +457,8 @@ def main():
          run_astronautics_graded_validation),
         ("8. Giant-MCE materials analysis (Gd vs Gd5Si2Ge2)",
          lambda: giant_mce_analysis.run_analysis()),
+        ("8d. Four-way material family comparison (Gd, Gd5Si2Ge2-fixed, GD/LAFESIH/MNFEPSI-tuned; Track A2 item)",
+         lambda: material_family_comparison.run_analysis()),
         ("8b. First-order Landau model calibration check (core/first_order_mce.py, reached transitively otherwise)",
          run_first_order_mce_demo),
         ("8c. Giguere et al. (1999) direct-measurement cross-check (core/giguere_validation.py)",
@@ -449,7 +474,7 @@ def main():
          lambda: rsm.fit_rsm()),
         ("11. NSGA-III multi-objective design optimization",
          lambda: optimize_module.run_optimization()),
-        ("12. Figure generation: 25 figures covering validation, AMR curves, "
+        ("12. Figure generation: 26 figures covering validation, AMR curves, "
          "cascade/graded staging, sensitivity, RSM, NSGA-III, economics, emissions (plots.py)",
          run_plot_generation),
     ]
@@ -498,9 +523,10 @@ def main():
         logger.info("All stages completed. Files written to results/:")
         logger.info("  comparison_table.csv, cascade_comparison.csv, "
                      "cascade_comparison_giant_mce.csv, giant_mce_analysis.txt, "
+                     "material_family_comparison.csv, material_family_comparison.txt, "
                      "sobol_results.txt, sobol_results_phase2_constant.txt, "
                      "rsm_coefficients.txt, pareto_front.csv, "
-                     "geometry_optimization_analysis.txt, figures/*.png+*.pdf (25 figures)")
+                     "geometry_optimization_analysis.txt, figures/*.png+*.pdf (26 figures)")
     logger.info(f"Full run log: {LOG_FILE}")
 
 

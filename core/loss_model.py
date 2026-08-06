@@ -55,19 +55,35 @@ change to the model, not just a better-behaved solver.
 `analyze_parasitic_fraction_scaling()` checks the natural next
 hypothesis -- that this is a simple device-size effect, i.e. that
 smaller devices carry proportionally more fixed (non-Qc-scaling)
-overhead. Sorting the four devices by Qc shows this does NOT hold:
-the smallest device (Tušek, 6.5 W) has one of the *lowest* parasitic
-fractions (11.8%), and the largest (Astronautics, 2502 W) has the
-*highest* (45.3%) -- the opposite of what a fixed-overhead/economies-
-of-scale story predicts, and non-monotonic in between (Okamura,
-200 W, at 36.7%; DTU, 818 W, at 17.1%). The Astronautics figure is
-independently flagged by its own source paper as reflecting "mediocre"
-electrical-component efficiency at that scale (a device-specific
-engineering choice), not a generic size law. So a size/scale *term* --
-as the Phase 6 write-up speculated -- is not supported by the data
-actually in hand; what varies device-to-device looks more like
-motor/inverter efficiency class and drivetrain topology (rotary vs.
-reciprocating single-bed) than raw cooling capacity. Flagged as a
+overhead. Sorting the four devices by Qc shows this does NOT hold in
+the fixed-overhead/economies-of-scale direction: the smallest device
+(Tušek, 6.5 W) has the *lowest* parasitic fraction (11.7%), and the
+largest (Astronautics, 2502 W) has the *highest* (45.3%) -- the
+opposite of what a fixed-overhead story predicts (which would put
+small devices at the top, not the bottom). Paper-Mining Pass Part 6
+correction: with the DTU point corrected from the old fabricated
+818 W/17.1% figure to the verified 102.8 W/25.5% figure (see this
+module's correction note above), the four-device ranking by Qc
+(Tušek 6.5 W/11.7%, DTU 102.8 W/25.5%, Okamura 200 W/36.7%,
+Astronautics 2502 W/45.3%) is now cleanly MONOTONICALLY INCREASING
+with device scale -- the opposite trend from a fixed-overhead story,
+and no longer "non-monotonic in between" as the old fabricated DTU
+figure had made it appear. This strengthens rather than reverses the
+original conclusion: a fixed-overhead/economies-of-scale size term is
+still not what's happening (that would predict the fraction falling
+with scale, not rising), it just turns out the actual relationship
+between the four verified devices is a clean trend in the opposite
+direction rather than a scattered non-pattern. The Astronautics figure
+is independently flagged by its own source paper as reflecting
+"mediocre" electrical-component efficiency at that scale (a
+device-specific engineering choice), not a generic size law, and with
+only 4 points spanning orders of magnitude in scale and design era,
+a genuinely monotonic trend by itself is not strong evidence of a real
+physical size law either. So a size/scale *term* -- as the Phase 6
+write-up speculated -- is still not adopted here; what varies
+device-to-device looks more like motor/inverter efficiency class and
+drivetrain topology (rotary vs. reciprocating single-bed) than raw
+cooling capacity. Flagged as a
 correction to the Phase 7 roadmap: more benchmark devices with
 independently reported component efficiencies, not a size term, is the
 concrete next step.
@@ -75,6 +91,43 @@ concrete next step.
 A fifth candidate dataset (Risø/DTU 2011, 30 K span) could not be
 calibrated because the corresponding operating point does not yield
 positive cooling capacity under the present AMR model.
+
+Paper-Mining Pass Part 6 correction: the CORE point previously labeled
+"DTU_rotary_Gd_2016" (818 W, 10.1 K span, COP=4.2, cited only as
+"Bahl/Eriksen/Engelbrecht, rotary AMR - ScienceDirect (2016)") was never
+actually located in this repo's Papers/ and has now been checked directly
+against the real paper behind that citation -- D. Eriksen, K. Engelbrecht,
+C.R.H. Bahl, R. Bjørk, "Exploring the efficiency potential for an active
+magnetic regenerator," Sci. Technol. Built Environ. 22(5) (2016) 527-533
+(reproduced as Chapter 6 of Eriksen's 2016 DTU PhD thesis, now in this
+repo's Papers/). The real paper's own headline result is 81.5 W at a
+15.5 K span with COP=3.6 (18% second-law efficiency) at fAMR=0.61 Hz,
+1.13 T, 1.7 kg Gd -- not 818 W/10.1 K/COP=4.2. See
+data/amr_experimental_benchmarks.csv's DTU_Eriksen_MAGGIE_2016 row for
+the full correction note, including a directly-measured loss breakdown
+(shaft power, pump power split, Carnot work) taken straight from the
+thesis's Table 6.2 -- no back-calculation needed for those numbers.
+
+That corrected point does NOT calibrate under this module's cycle model,
+however: at 1.13 T / 1.7 kg / 0.61 Hz, amr_cycle.py's cooling_capacity()
+predicts Qc ≈ 0 at a 15.5 K span for any mdot in [1e-6, 5] kg/s -- the
+model's own zero-flow no-load span at this field/frequency already sits
+below 15.5 K, the same failure mode already documented above for
+Risø/DTU 2011. This is attributed to the real device's Curie-graded
+11-layer regenerator (Gd + three Gd(100-x)Yx alloys) reaching spans a
+single-uniform-Tc Gd approximation structurally cannot reach, not a
+data error -- the row is kept in the CSV as a documented
+non-calibrating point, not silently dropped.
+
+The 3rd CORE slot vacated by this correction is now filled by
+DTU_Eriksen_rotary_Gd_2015 (10.2 K span, 102.8 W, COP=3.1 at 0.75 Hz --
+the SAME physical prototype, "MAGGIE", at an earlier paper's
+lower-span operating point), which was already in this repo's benchmark
+set with a verified primary citation and DOES calibrate cleanly under
+the model. The parasitic-fraction comparison two paragraphs above (Astronautics
+45.3%, Okamura 36.7%, old-DTU 17.1%, Tušek 11.8%) is retained as
+historical context but the "old-DTU 17.1%" figure describes the now-
+retracted 818 W point and should not be treated as current.
 """
 
 import numpy as np
@@ -110,7 +163,20 @@ from scipy.optimize import nnls
 # guards against this drifting again silently.
 CALIBRATION_POINTS_CORE = [
     ("Astronautics_rotary_2014", 4.0, 1.44, 0.252999, 2502.0, 1133.70),
-    ("DTU_rotary_Gd_2016", 1.4, 1.44, 0.198062, 818.0, 139.79),
+    # FIX (Paper-Mining Pass Part 6): replaces the fabricated/unlocated
+    # "DTU_rotary_Gd_2016" point (818W, mdot=0.198062, Wp=139.79 -- these
+    # numbers do not correspond to any real published operating point, see
+    # this module's docstring and data/amr_experimental_benchmarks.csv's
+    # DTU_Eriksen_MAGGIE_2016 row for the correction). DTU_Eriksen_rotary_Gd_2015
+    # is the same physical prototype ("MAGGIE") at a genuinely verified,
+    # primary-sourced operating point (Eriksen et al., Int. J. Refrigeration
+    # 2015) that calibrates cleanly under the current cooling_capacity()
+    # model. mdot and Wp_required recomputed with the same brentq(
+    # qc_residual, 1e-6, 5.0)/Wp=Qc*(1/COP_lit-1/COP_ideal) procedure used
+    # for every other CORE point, GADOLINIUM material, T_cold=289K:
+    #   mdot_cal = 0.084666 kg/s  ->  Qc_model = 102.8W (exact match)
+    #   COP_ideal = 14.73  ->  Wp_required = 102.8*(1/3.1 - 1/14.73) = 26.18W
+    ("DTU_Eriksen_rotary_Gd_2015", 0.75, 1.13, 0.084666, 102.8, 26.18),
     # Tusek: deliberately still uses the PRE-correction field/mass/frequency
     # (1.69T, 0.196kg, 0.25Hz) rather than data/amr_experimental_benchmarks
     # .csv's now-corrected values (1.15T, 0.1763kg, 0.3Hz -- see that CSV's
@@ -251,6 +317,15 @@ def analyze_parasitic_fraction_scaling(points=None, verbose=True):
                   "ALL Lozano points clustered in the low-to-mid Qc range, sitting "
                   "well above Okamura (200W, 0.367) and Astronautics (2502W, "
                   "0.453) -- i.e. grouped by device/paper, not ordered by scale.")
+        else:
+            print(f"  NOTE (Paper-Mining Pass Part 6): with the DTU point corrected "
+                  "from its old fabricated 818W/0.171 figure to the verified "
+                  "102.8W/0.255 figure, this 4-point EXTENDED set is now "
+                  "monotonically INCREASING with Qc -- the opposite direction "
+                  "from a fixed-overhead/economies-of-scale story (which "
+                  "predicts fraction falling as Qc grows), not confirmation of "
+                  "one. See this module's docstring for the full discussion; "
+                  "a size/scale term is still not adopted as a result.")
     return rows
 
 

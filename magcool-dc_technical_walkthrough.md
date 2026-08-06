@@ -221,22 +221,31 @@ post-hoc clipping doesn't minimize anything under the actual constraint
 `scipy.optimize.nnls`) gives the constrained optimum directly:
 
 ```
-k_eddy    =   33.058  W/(Hz²·T²)
+k_eddy    =   30.520  W/(Hz²·T²)
 k_pump    =    0.000  W/(kg/s)²   <- pinned to 0 by the NNLS constraint
-base_frac =    0.015  (× Qc)
+base_frac =    0.048  (× Qc)
 ```
 
-No negative coefficients, and the worst leave-one-out error drops from
-+1638.9% to **+682.0%** (still Tušek, held out from the other three) —
-real improvement, but still an order-of-magnitude miss, so this doesn't
+(Paper-Mining Pass Part 6: these coefficients shifted slightly from an
+earlier pass's 33.058/0.015 after the CORE set's DTU point was corrected
+from a fabricated 818W/10.1K/COP=4.2 citation to the verified
+DTU_Eriksen_rotary_Gd_2015 device at 102.8W/10.2K/COP=3.1 — see
+`core/loss_model.py`'s docstring for the full correction.)
+
+No negative coefficients, and the worst leave-one-out error is
+**+671.8%** (still Tušek, held out from the other three) —
+real improvement over the unconstrained fit, but still an order-of-magnitude miss, so this doesn't
 overturn Phase 6's headline conclusion. `analyze_parasitic_fraction_scaling()`
 then checked the natural follow-up hypothesis — that a device-size term
 would fix this — by sorting the four devices' parasitic fraction
-(`W_parasitic/Qc`) by Qc: Tušek (6.5 W) = 11.8%, Okamura (200 W) = 36.7%,
-DTU (818 W) = 17.1%, Astronautics (2502 W) = 45.3%. Not monotonic — the
-smallest device does *not* carry the highest overhead fraction, and the
-largest does *not* carry the lowest — the opposite of a simple
-fixed-overhead/size story. Astronautics' own source paper attributes its
+(`W_parasitic/Qc`) by Qc: Tušek (6.5 W) = 11.7%, DTU (102.8 W, corrected)
+= 25.5%, Okamura (200 W) = 36.7%, Astronautics (2502 W) = 45.3%. This is
+now a clean *monotonic increase* with device scale — the opposite
+direction from a fixed-overhead/size story, which would predict the
+fraction *falling*, not rising, as devices get bigger. (An earlier pass's
+fabricated 818W/17.1% DTU figure broke monotonicity outright; the
+correction doesn't rescue the fixed-overhead hypothesis, it just makes
+the actual trend clean instead of scattered.) Astronautics' own source paper attributes its
 high fraction to that device's specific "mediocre" electrical-component
 efficiency, not a generic size effect. **Conclusion**: pooling four
 orders of magnitude of device scale into one linear loss model doesn't

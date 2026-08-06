@@ -4,7 +4,7 @@ Physics-based simulation suite evaluating **magnetocaloric (magnetic) cooling
 for data centers**, benchmarked against vapor-compression CRAC/CRAH and
 direct liquid cooling.
 
-## Status: Phase 7 in progress (loss-model solver fix + scale-term hypothesis test, curve-level validation, lifetime operating cost, COMSOL setup guide, geometry-dependent pumping power for packed-bed AND parallel-plate AMRs done; Tušek 2013 (Appl. Therm. Eng.) figure calibration and full-system BOM cost still open), Phase 8 (code-quality: solver perf, entropy-bug fix, test suite) done, Phase 9 (added La(Fe,Si)13Hy to the materials library, replacing the Gd stand-in used for the Astronautics benchmark; addendum generalized cascade.py's Curie-graded bed to any composition-tunable family and used it to reproduce the real Astronautics device to -11% COP error, plus 2 bugfixes and new cascade.py test coverage) done, Phase 10 (paper-mining pass: added blow-fraction asymmetry as a real AMR cycle degree of freedom and 6th NSGA-III design variable, and a third pluggable material family, (Mn,Fe)2(P,Si), alongside Gd5(SixGe1-x)4 and La(Fe,Si)13Hy; flagged the parallel-plate validation gap for the still-open Tušek 2013 digitization) done, Phase 11 (paper-mining pass part 2: extended validation.py's Gd checks to 7T via Giguere et al.'s own pure-Gd cross-check, added a Curie-point field-shift held-out check against Dan'kov et al. -- which the model does NOT pass, a documented finding, not a bug; added a Chubu Electric/Toshiba field-sensitivity CSV pair and a new run_field_sensitivity_check(), which honestly reports "no calibration found" at this device's scale) done, Phase 12 (paper-mining pass part 3: added a Cooltech 42K-span stress-test row and a DTU MagQueen LAFESIH cross-check row (derived Qc/COP, clearly flagged) plus run_capacity_only_calibration_check(); cross-checked the Gd5Si2Ge2 dTad correction factor against Pecharsky & Gschneidner (1997)'s own ~1.3x peak ratio -- found the RAW model matches better than the Giguere-corrected one at 5T, evidence the correction isn't field-independent; confirmed the economics paper and one "rotary refrigerator" paper are fully mined/design-only respectively) done — see `ROADMAP.md`
+## Status: Phase 13 (paper-mining pass part 6: traced/corrected the `DTU_rotary_Gd_2016` citation, promoted `DTU_Eriksen_rotary_Gd_2015` into the CORE calibration slot) done, Phase 14 (bug fixes: corrected a mean-field-vs-first-order GD5SI2GE2 material mixup in the cascade comparison/fig20/cascade.py demo; added `core/material_family_comparison.py`, a four-way Gd/Gd5Si2Ge2/GD-family/LAFESIH-family/MNFEPSI-family ranking at the same ASHRAE point, wired into `main.py` step 8d and `plots.py` fig26; documented the `span_fraction` linear-clamp approximation rather than inventing an unsourced smoothing function; confirmed the full-system BOM cost gap, reference-book OCR, and two flagged CSV rows are already correctly left open/flagged, no change needed; Tušek et al. (2013) Figs. 10-11 digitization still open, being done manually in WebPlotDigitizer; 170/170 tests passing) done — see `ROADMAP.md`
 
 ## What's implemented
 
@@ -13,6 +13,7 @@ direct liquid cooling.
 | `core/mce_material.py` | Mean-field (Brillouin/Weiss) model for continuous-transition materials (Gd, La0.7Ca0.3MnO3); Gd validated, Gd5Si2Ge2 flagged as invalid for this framework |
 | `core/first_order_mce.py` | Extended (6th-order) Landau model for first-order/giant-MCE materials: Gd5Si2Ge2, La(Fe,Si)13Hy, and (Mn,Fe)2(P,Si) |
 | `core/giant_mce_analysis.py` | Formal Gd vs. giant-MCE comparison → `results/giant_mce_analysis.txt` |
+| `core/material_family_comparison.py` | Four-way material family ranking (Gd, Gd5Si2Ge2-fixed, and the three composition-tunable families) at the same ASHRAE point → `results/material_family_comparison.csv`/`.txt`, fig26 (Phase 14) |
 | `core/emissions.py` | Refrigerant-free GWP/emissions comparison |
 | `core/amr_cycle.py` | 0-D AMR cycle model: cooling capacity, ideal/electrical COP, optional NTU-derived effectiveness, optional blow-fraction asymmetry (Phase 10) |
 | `core/thermal.py` | NTU packed-bed regenerator effectiveness model |
@@ -33,6 +34,7 @@ python -m core.validation            # MCE material model vs. literature
 python -m core.validation_system      # AMR system model vs. published prototypes (point-wise + curve-level)
 python -m core.first_order_mce         # first-order Landau model calibration check
 python -m core.giant_mce_analysis       # Gd vs. giant-MCE, formal comparison
+python -m core.material_family_comparison # four-way material family ranking at the ASHRAE point
 python -m core.emissions                 # refrigerant-free GWP/emissions case
 python -m core.loss_model                 # CORE calibration + Phase 6 EXTENDED diagnostic
 python -m core.thermal                     # NTU regenerator effectiveness sweeps
@@ -205,19 +207,25 @@ old code did lstsq-then-clip.)
 **2. The size/scale-term hypothesis, tested and not confirmed.** Phase 6
 speculated a device-size term would fix this. Sorting the four benchmark
 devices by Qc and comparing parasitic fraction (`W_parasitic/Qc`) shows
-no monotonic trend: Tušek (smallest, 6.5W) sits at 11.8%, Okamura (200W)
-at 36.7%, DTU (818W) at 17.1%, Astronautics (largest, 2502W) at 45.3% —
-the smallest device does *not* have the highest overhead fraction and
-the largest does *not* have the lowest, the opposite of what a simple
-fixed-overhead/economies-of-scale story predicts. Astronautics' own
-source paper attributes its high fraction to that device's specific
-"mediocre" electrical-component efficiency, not a generic size law. This
-corrects the Phase 6 roadmap item: a size/scale term isn't supported by
-the data actually in hand. The more plausible driver is heterogeneous
-drivetrain topology/component-efficiency class across devices (rotary
-vs. single-bed, motor/inverter grade) — the concrete next step is more
-benchmark devices with independently reported component efficiencies,
-not a size-dependent term. (`analyze_parasitic_fraction_scaling()` in
+Tušek (smallest, 6.5W) at 11.7%, DTU (102.8W, corrected — see
+Paper-Mining Pass Part 6 below) at 25.5%, Okamura (200W) at 36.7%,
+Astronautics (largest, 2502W) at 45.3% — a clean *monotonic increase*
+with device scale, the opposite direction from a simple fixed-overhead/
+economies-of-scale story, which would predict the fraction *falling* as
+devices get bigger. (An earlier pass had a fabricated 818W/17.1% figure
+for the DTU point that happened to break monotonicity outright; the
+qualitative conclusion — that a fixed-overhead term isn't supported —
+is unchanged by the correction, since a rising trend doesn't support it
+either, but the specific "non-monotonic" claim no longer holds and has
+been corrected here.) Astronautics' own source paper attributes its high
+fraction to that device's specific "mediocre" electrical-component
+efficiency, not a generic size law. This corrects the Phase 6 roadmap
+item: a size/scale term isn't supported by the data actually in hand.
+The more plausible driver is heterogeneous drivetrain topology/
+component-efficiency class across devices (rotary vs. single-bed,
+motor/inverter grade) — the concrete next step is more benchmark devices
+with independently reported component efficiencies, not a
+size-dependent term. (`analyze_parasitic_fraction_scaling()` in
 `core/loss_model.py`.)
 
 ## Phase 6 findings

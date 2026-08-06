@@ -230,7 +230,24 @@ class AMRSystem:
             Qc = eps * mdot*cp * (DeltaT_ad_local - T_span/2) ... averaged
         which reduces to the standard 'characteristic curve' shape: Qc is
         maximum at zero span and falls roughly linearly to zero at the
-        no-load span (Nielsen et al. 2011)."""
+        no-load span (Nielsen et al. 2011).
+
+        MODEL LIMITATION (Track A3, documented rather than "fixed" -- see
+        ROADMAP.md): `span_fraction = max(0, 1 - T_span/(2*dTad_noload))`
+        is a LINEAR approximation of that characteristic curve. It is
+        exact at its two anchor points (span_fraction=1 at zero span,
+        =0 at the no-load span) but produces a sharper, straight-line
+        cutoff near the no-load span limit than a real AMR device would
+        show -- published Qc(span) curves (e.g. Nielsen et al. 2011;
+        Tusek et al. 2013) typically round off gradually near their
+        no-load limit rather than hitting a hard corner. No literature
+        source for the exact fall-off shape near that limit was found in
+        this project's corpus, so this module intentionally keeps the
+        documented linear clamp rather than inventing an undocumented
+        smoothing function -- a soft cutoff with no citation would be a
+        downgrade (unfounded precision), not a fix. Treat Qc/COP values
+        within roughly the last ~10-15% of a material's no-load span as a
+        conservative lower bound rather than a precise prediction."""
         T_hot = T_cold + T_span
         T_mid = 0.5 * (T_cold + T_hot)
         H = self.mu0H_max / (4 * np.pi * 1e-7)

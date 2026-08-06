@@ -60,8 +60,19 @@ def model_cop(params, use_state_dependent_losses=False):
 
 def run_sobol(n_base=64, seed=42, out_path="results/sobol_results.txt",
               use_state_dependent_losses=False):
+    # NOTE: np.random.seed(seed) alone does NOT make this reproducible.
+    # SALib's Sobol sampler (this SALib version) draws from scipy's QMC
+    # Sobol-sequence generator internally, which has its own independent
+    # RNG state -- it ignores numpy's global seed entirely. That's why
+    # back-to-back runs of the identical analysis (e.g. step 9b and step
+    # 16's regeneration of the same figure, same run) previously produced
+    # slightly different S1/ST values despite both calling run_sobol(...,
+    # seed=42). Passing seed= explicitly into sobol_sample.sample() is
+    # what actually pins scipy's QMC generator, so results are now
+    # bit-for-bit reproducible across repeated calls and across machines.
     np.random.seed(seed)
-    param_values = sobol_sample.sample(PROBLEM, n_base, calc_second_order=True)
+    param_values = sobol_sample.sample(PROBLEM, n_base, calc_second_order=True,
+                                        seed=seed)
     Y = np.array([model_cop(p, use_state_dependent_losses) for p in param_values])
     Si = sobol_analyze.analyze(PROBLEM, Y, calc_second_order=True, print_to_console=False)
 

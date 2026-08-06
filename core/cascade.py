@@ -152,6 +152,111 @@ def run_cascade(T_cold_K, total_span_K, n_stages, material=None, mu0H_max=2.0,
             "COP_cascade": round(COP_cascade, 3), "feasible": True}
 
 
+@dataclass
+class StagedBaselineResult:
+    """Same fields as amr_cycle.AMRCycleResult, plus n_stages so callers
+    can tell whether a value came from the plain single-stage cycle or
+    from the automatic multi-stage fallback below."""
+    n_stages: int
+    T_span: float
+    Qc: float
+    W_mag: float
+    W_parasitic: float
+    COP: float
+    COP_electrical: float
+    exergy_eff: float
+
+
+def staged_baseline_result(T_cold_K, span, material=None, mu0H_max=2.0,
+                            mass_regenerator=5.0, frequency=2.0,
+                            fluid_cp=4186.0, fluid_mdot=0.08,
+                            regenerator_effectiveness=0.85, max_stages=4):
+    """Single-stage AMR result if the span is within that material's own
+    no-load DeltaT_ad at this operating point; otherwise, the minimum
+    number of IDENTICAL stages (up to max_stages) in series -- each
+    covering span/n_stages, same mass/frequency/field/flow per stage --
+    that reaches a positive Qc.
+
+    Why this exists: AMRSystem.cooling_capacity() (amr_cycle.py) correctly
+    returns Qc=0 once a single stage is asked to span more than ~2x its
+    own no-load DeltaT_ad (see that function's MODEL LIMITATION docstring)
+    -- that zero is honest single-stage physics, not a bug. But a
+    "Magnetic (AMR) vs. vapor-compression vs. liquid cooling" comparison
+    (main.py's run_baseline_sweep / plots.py's plot_amr_vs_baselines) that
+    silently reports COP=0 for those spans reads as "AMR stops working
+    above ~16K span," which overstates the limitation: core/cascade.py's
+    own run_cascade()/compare_staging() (used for step 7 / fig19-20) show
+    a 2-4 stage Gd cascade at the SAME mass/field/flow easily reaches
+    17-20K spans with COP well above zero (see cascade_comparison.csv).
+    This function brings that same "just add stages" fallback into the
+    baseline/vs-baselines comparison so it degrades gracefully instead of
+    hard-cutting to zero, while keeping every other modeling choice (no
+    NTU thermal model, constant parasitic_fraction=0.15, i.e. NOT
+    core/cascade.py's richer state-dependent-loss/NTU settings) identical
+    to the single-stage baseline it's falling back from, so single- and
+    multi-stage rows in the same table are still comparing the same cycle
+    model -- only the stage count differs.
+
+    Returns a StagedBaselineResult with n_stages=1 whenever the plain
+    single-stage cycle already works (i.e. this is a no-op change for
+    every span where the pre-existing single-stage number was already
+    nonzero)."""
+    if material is None:
+        material = GADOLINIUM
+
+    def _single_stage(T_cold, span_i, mass):
+        sys_ = AMRSystem(material=material, mu0H_max=mu0H_max,
+                          mass_regenerator=mass, frequency=frequency,
+                          fluid_cp=fluid_cp, fluid_mdot=fluid_mdot,
+                          regenerator_effectiveness=regenerator_effectiveness)
+        return sys_.run(T_cold, span_i)
+
+    r1 = _single_stage(T_cold_K, span, mass_regenerator)
+    if r1.Qc > 0 or max_stages <= 1:
+        return StagedBaselineResult(n_stages=1, T_span=span, Qc=r1.Qc,
+                                     W_mag=r1.W_mag, W_parasitic=r1.W_parasitic,
+                                     COP=r1.COP, COP_electrical=r1.COP_electrical,
+                                     exergy_eff=r1.exergy_eff)
+
+    for n_stages in range(2, max_stages + 1):
+        span_per_stage = span / n_stages
+        r_probe = _single_stage(T_cold_K, span_per_stage, mass_regenerator)
+        if r_probe.Qc <= 0:
+            continue
+        Qc_target = r_probe.Qc
+        T_local = T_cold_K
+        W_mag_total = 0.0
+        W_par_total = 0.0
+        feasible = True
+        for _ in range(n_stages):
+            r_i = _single_stage(T_local, span_per_stage, mass_regenerator)
+            if r_i.Qc <= 0:
+                feasible = False
+                break
+            scale = Qc_target / r_i.Qc
+            W_mag_total += r_i.W_mag * scale
+            W_par_total += r_i.W_parasitic * scale
+            T_local += span_per_stage
+        if not feasible:
+            continue
+        W_total = W_mag_total + W_par_total
+        COP = Qc_target / W_mag_total if W_mag_total > 0 else 0.0
+        COP_electrical = Qc_target / W_total if W_total > 0 else 0.0
+        T_hot = T_cold_K + span
+        COP_carnot = T_cold_K / (T_hot - T_cold_K) if T_hot > T_cold_K else np.inf
+        exergy_eff = COP / COP_carnot if np.isfinite(COP_carnot) and COP_carnot > 0 else 0.0
+        return StagedBaselineResult(n_stages=n_stages, T_span=span, Qc=Qc_target,
+                                     W_mag=W_mag_total, W_parasitic=W_par_total,
+                                     COP=COP, COP_electrical=COP_electrical,
+                                     exergy_eff=exergy_eff)
+
+    # Not feasible even at max_stages: report the honest zero (same as
+    # single-stage), tagged with the stage count that was actually tried.
+    return StagedBaselineResult(n_stages=max_stages, T_span=span, Qc=0.0,
+                                 W_mag=0.0, W_parasitic=0.0, COP=0.0,
+                                 COP_electrical=0.0, exergy_eff=0.0)
+
+
 def _peak_temperature(material, mu0H_max, T_range=(200.0, 340.0), n=1401):
     """Finds where THIS material's own DeltaT_ad is maximized (same
     approach as giant_mce_analysis.py's find_peak_temperature()). Needed
@@ -479,7 +584,7 @@ def validate_astronautics_graded_bed(apply_correction=None):
 
 
 if __name__ == "__main__":
-    from core.mce_material import GD5SI2GE2
+    from core.first_order_mce import GD5SI2GE2_FIRST_ORDER
 
     print("Cascade AMR staging vs. baselines, ASHRAE 5-20K span sweep")
     print("(mu0H=2T per stage, 5kg regenerator per stage, f=1Hz, mdot=0.08kg/s, NTU thermal model on)")
@@ -498,7 +603,7 @@ if __name__ == "__main__":
     print(f"Wrote results/cascade_comparison.csv")
 
     print("\n--- Material: Gd5Si2Ge2 (giant MCE) ---")
-    rows_giant = compare_staging(material=GD5SI2GE2, mass_per_stage=5.0,
+    rows_giant = compare_staging(material=GD5SI2GE2_FIRST_ORDER, mass_per_stage=5.0,
                                    out_csv="results/cascade_comparison_giant_mce.csv")
     print(header)
     for r in rows_giant:

@@ -44,6 +44,7 @@ FIGURE_FUNCTIONS = [
     (plots.plot_emissions, "fig23_emissions_comparison"),
     (plots.plot_giant_mce_targeting, "fig24_giant_mce_targeting_comparison"),
     (plots.plot_astronautics_validation, "fig25_astronautics_graded_bed_validation"),
+    (plots.plot_material_family_comparison, "fig26_material_family_comparison"),
 ]
 
 

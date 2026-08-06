@@ -16,7 +16,7 @@ from core.mce_material import GADOLINIUM
 # cheap, dependency-free regression guard.
 _SELF_CONSISTENCY_SPANS = {
     "Astronautics_rotary_2014": 11.0,
-    "DTU_rotary_Gd_2016": 10.1,
+    "DTU_Eriksen_rotary_Gd_2015": 10.2,
     "Tusek_singlebed_Gd_2010": 15.0,
     "Okamura_Hirano_2013": 5.0,
     "Lozano_POLO_UFSC_2016_r4": 6.1,
@@ -25,7 +25,7 @@ _SELF_CONSISTENCY_SPANS = {
     "Lozano_POLO_UFSC_2016_r8": 3.7,
 }
 _SELF_CONSISTENCY_MASS = {
-    "Astronautics_rotary_2014": 1.52, "DTU_rotary_Gd_2016": 0.98,
+    "Astronautics_rotary_2014": 1.52, "DTU_Eriksen_rotary_Gd_2015": 1.7,
     "Tusek_singlebed_Gd_2010": 0.196,  # pre-correction mass -- see loss_model.py note
 }
 T_COLD_ASSUMED_K = 294.0 - 5.0
@@ -175,25 +175,50 @@ def test_further_extended_fit_is_nonnegative():
 def test_further_extended_lozano_points_consistently_underpredicted():
     """Phase 7 finding: when each Lozano point is held out, the pooled fit
     consistently UNDERpredicts its required W_parasitic by a similar
-    amount (all leave-one-out errors strongly negative and tightly
-    clustered) rather than scattering randomly around zero -- evidence
-    that Lozano's device sits in a distinct, worse motor/inverter
-    efficiency class the model can't represent, not that the model is
-    merely noisy on this device."""
+    amount (all leave-one-out errors strongly negative and clustered
+    within about 12 points of each other) rather than scattering randomly
+    around zero -- evidence that Lozano's device sits in a distinct,
+    worse motor/inverter efficiency class the model can't represent, not
+    that the model is merely noisy on this device.
+
+    Paper-Mining Pass Part 6: the clustering threshold below was loosened
+    from 10.0 to 12.0 points after the CORE DTU_rotary_Gd_2016 point (which
+    EXTENDED/FURTHER_EXTENDED both build on) was corrected from its old
+    fabricated 818W figure to the verified DTU_Eriksen_rotary_Gd_2015 102.8W
+    figure (see loss_model.py's docstring) -- this shifted the pooled fit
+    slightly and widened the Lozano error spread from ~7 to ~10.3 points;
+    the qualitative finding (strongly negative, tightly clustered) is
+    unchanged, only the numeric margin."""
     loo = leave_one_out_cv(CALIBRATION_POINTS_FURTHER_EXTENDED, verbose=False)
     lozano_errs = [r[3] for r in loo if r[0].startswith("Lozano")]
     assert len(lozano_errs) == 4
     assert all(e < -50.0 for e in lozano_errs)  # all substantially underpredicted
-    assert max(lozano_errs) - min(lozano_errs) < 10.0  # tightly clustered
+    assert max(lozano_errs) - min(lozano_errs) < 12.0  # clustered
 
 
-def test_parasitic_fraction_scaling_is_not_monotonic():
-    """The Phase 6 write-up speculated that a size/scale term would fix the
-    loss model. Checking parasitic fraction (W_parasitic/Qc) sorted by
-    device scale shows this doesn't hold in the current 4-device set: the
-    smallest device does not have the highest overhead fraction."""
+def test_parasitic_fraction_scaling_is_monotonically_increasing_with_qc():
+    """The Phase 6 write-up speculated that a size/scale term (smaller
+    devices carrying proportionally more FIXED overhead, i.e. fraction
+    FALLING with Qc) would fix the loss model.
+
+    Paper-Mining Pass Part 6: with the CORE/EXTENDED DTU point corrected
+    from its old fabricated 818W/0.171 figure to the verified
+    DTU_Eriksen_rotary_Gd_2015 102.8W/0.255 figure, the 4-device EXTENDED
+    set (Tusek 6.5W/0.117, DTU 102.8W/0.255, Okamura 200W/0.367,
+    Astronautics 2502W/0.453) is now cleanly monotonic in Qc -- but
+    INCREASING, the opposite direction from the fixed-overhead hypothesis.
+    This still does not support adopting a size/scale term: a fixed-
+    overhead story predicts the fraction should fall as devices get
+    bigger (small fixed cost against a small Qc looks big; the same fixed
+    cost against a big Qc looks small), and that is not what happens here.
+    (Before the correction, the fabricated DTU figure happened to break
+    the monotonicity outright; now that it doesn't, the trend runs the
+    wrong way for the hypothesis it would have supported.)"""
     rows = analyze_parasitic_fraction_scaling(CALIBRATION_POINTS_EXTENDED, verbose=False)
     fracs = [r[2] for r in rows]
-    monotonic = all(fracs[i] <= fracs[i + 1] for i in range(len(fracs) - 1)) or \
-                all(fracs[i] >= fracs[i + 1] for i in range(len(fracs) - 1))
-    assert not monotonic
+    assert all(fracs[i] <= fracs[i + 1] for i in range(len(fracs) - 1)), (
+        "expected monotonically increasing parasitic fraction with Qc in the "
+        "corrected 4-point EXTENDED set -- if this fails, the underlying "
+        "calibration data has changed again and this test (and the "
+        "docstring discussion in loss_model.py) need to be revisited, not "
+        "just the assertion direction flipped back.")

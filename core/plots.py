@@ -41,7 +41,7 @@ _PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-from core.mce_material import GADOLINIUM, GD5SI2GE2
+from core.mce_material import GADOLINIUM
 from core.first_order_mce import GD5SI2GE2_FIRST_ORDER, LAFESIH_FIRST_ORDER
 from core.amr_cycle import AMRSystem
 from core.baseline_cooling import vapor_compression_cop, liquid_cooling_cop
@@ -56,6 +56,7 @@ from core import economics
 from core import emissions
 from core import cascade
 from core import giant_mce_analysis
+from core import material_family_comparison
 from core import giguere_validation
 from core import geometry_analysis
 from core import rsm as rsm_mod
@@ -423,8 +424,20 @@ def plot_amr_energy_balance():
 # ══════════════════════════════════════════════════════════════════════════
 
 def plot_amr_vs_baselines():
+    """Unlike fig06/fig07 (explicitly "Single-Stage" curves, left as pure
+    single-stage on purpose to show that limitation directly), this figure
+    claims to be the overall AMR-vs-baselines comparison, so it uses
+    core.cascade.staged_baseline_result() -- same fallback as main.py's
+    run_baseline_sweep() -- instead of a bare single-stage sweep. Without
+    it, spans past ~16K plotted as a hard 0 here (invisible on a log
+    y-axis, but still wrong: a real system would just add stages, not
+    stop cooling)."""
     T_cold_K = 291.15
-    spans, results = _baseline_amr_sweep(T_cold_K=T_cold_K)
+    spans = np.arange(5, 21, 1)
+    results = [cascade.staged_baseline_result(
+        T_cold_K, float(s), material=GADOLINIUM, mu0H_max=2.0,
+        mass_regenerator=5.0, frequency=2.0, fluid_mdot=0.08,
+        regenerator_effectiveness=0.85) for s in spans]
     cop_e = [r.COP_electrical for r in results]
     vcc_l, liq_l, carnot_l = [], [], []
     for span in spans:
@@ -804,23 +817,54 @@ def plot_cascade_staging_gd():
 # ══════════════════════════════════════════════════════════════════════════
 
 def plot_cascade_giant_vs_gd():
+    """Fixed-composition Gd5Si2Ge2 (Tc=276K, fixed) vs. Gd, PLUS a third
+    series: the same Gd5(SixGe1-x)4(-Ga) family re-tuned per span so its
+    own peak lands at that span's T_mid (core.cascade.GD_FAMILY /
+    _target_composition_for_peak -- the same machinery
+    material_family_comparison.py already uses for fig26). The
+    fixed-composition curve is kept exactly as before (still collapses to
+    ~0, honestly, since a fixed Tc really is that far from this range) --
+    the tuned curve alongside it shows that the collapse is a
+    fixed-composition artifact, not a ceiling on the giant-MCE effect
+    itself: composition-tuning the same family recovers real performance
+    at every span its documented Tc window covers."""
     rows_gd = cascade.compare_staging(material=GADOLINIUM, mass_per_stage=5.0,
                                        out_csv=str(RESULTS_DIR / 'cascade_comparison.csv'))
-    rows_giant = cascade.compare_staging(material=GD5SI2GE2, mass_per_stage=5.0,
+    rows_giant = cascade.compare_staging(material=GD5SI2GE2_FIRST_ORDER, mass_per_stage=5.0,
                                           out_csv=str(RESULTS_DIR / 'cascade_comparison_giant_mce.csv'))
     spans = [r['span_K'] for r in rows_gd]
     y_gd = [r['AMR_1stage_COP'] or 0.0 for r in rows_gd]
     y_giant = [r['AMR_1stage_COP'] or 0.0 for r in rows_giant]
 
+    T_cold_K = 18.0 + 273.15
+    y_tuned, tuned_in_range = [], []
+    for span in spans:
+        T_mid = T_cold_K + span / 2.0
+        tc = cascade._target_composition_for_peak(T_mid, 2.0, cascade.GD_FAMILY)
+        in_range = cascade.GD_FAMILY.tc_min <= tc <= cascade.GD_FAMILY.tc_max
+        tuned_in_range.append(in_range)
+        if in_range:
+            material = cascade.GD_FAMILY.tuned_fn(tc)
+            res = cascade.run_cascade(T_cold_K, span, 1, material=material, mass_per_stage=5.0)
+            y_tuned.append(res['COP_cascade'] if res['feasible'] else 0.0)
+        else:
+            y_tuned.append(np.nan)  # outside the family's documented Tc window -- not plotted
+
     fig, ax = plt.subplots(figsize=(8.5, 5.5))
     ax.plot(spans, y_gd, color=COLOR_MAIN, marker='o', label='Gd (1-stage)')
     ax.plot(spans, y_giant, color=COLOR_POWER, marker='s',
             label='Gd5Si2Ge2 (1-stage, fixed Tc=276K)')
+    ax.plot(spans, y_tuned, color='#85bb65', marker='^',
+            label='Gd5(SixGe1-x)4(-Ga) (1-stage, tuned per span)')
+    if not all(tuned_in_range):
+        first_oor = spans[tuned_in_range.index(False)] if False in tuned_in_range else None
+        if first_oor is not None:
+            ax.axvline(first_oor, color='#85bb65', linestyle=':', alpha=0.5, linewidth=1)
     ax.set_xlabel('Temperature Span [K]')
     ax.set_ylabel('Electrical COP')
     ax.set_title('Gd vs. Gd5Si2Ge2 in the ASHRAE Range\n'
-                 '(Gd5Si2Ge2 collapses to ~0: its fixed Tc is far from the operating point)')
-    ax.legend(fontsize=9)
+                 '(fixed-Tc Gd5Si2Ge2 collapses to ~0; the same family re-tuned per span does not)')
+    ax.legend(fontsize=8.5)
     fig.tight_layout()
     save(fig, 'fig20_cascade_giant_mce_vs_gd')
 
@@ -928,11 +972,21 @@ def plot_emissions():
 # ══════════════════════════════════════════════════════════════════════════
 
 def plot_giant_mce_targeting():
+    """Adds a 4th bar to the original 3-bar comparison: the Gd5(SixGe1-x)4
+    (-Ga) family composition-tuned so its OWN peak lands at the ASHRAE
+    point's T_mid (same core.cascade.GD_FAMILY machinery as fig20/fig26),
+    evaluated with the same eval_at() cycle settings as the other three
+    bars. This is the direct fix for "Gd5Si2Ge2 @ ASHRAE" reading as
+    ~0: that bar is a FIXED composition (Tc=276K) evaluated far from its
+    own transition on purpose (see giant_mce_analysis.py's module
+    docstring); the new bar shows the same family, tuned, performing
+    normally at the same operating point."""
     _loss = StateDependentLossModel()
     mu0H = 2.0
     peak_T_giant = giant_mce_analysis.find_peak_temperature(GD5SI2GE2_FIRST_ORDER, mu0H)
     peak_T_gd = giant_mce_analysis.find_peak_temperature(GADOLINIUM, mu0H)
     span = 10.0
+    T_ashrae = 291.0
 
     def eval_at(material, T_cold, mass=5.0):
         sys_ = AMRSystem(material=material, mu0H_max=mu0H, mass_regenerator=mass,
@@ -940,28 +994,41 @@ def plot_giant_mce_targeting():
                           use_ntu_thermal_model=True)
         return sys_.run(T_cold, span)
 
-    r_gd_ashrae = eval_at(GADOLINIUM, 291.0)
-    r_giant_ashrae = eval_at(GD5SI2GE2_FIRST_ORDER, 291.0)
+    r_gd_ashrae = eval_at(GADOLINIUM, T_ashrae)
+    r_giant_ashrae = eval_at(GD5SI2GE2_FIRST_ORDER, T_ashrae)
     T_cold_favorable = peak_T_giant - span / 2
     r_giant_own = eval_at(GD5SI2GE2_FIRST_ORDER, T_cold_favorable)
 
-    labels = ['Gd\n@ ASHRAE (291K)', 'Gd5Si2Ge2\n@ ASHRAE (291K)', 'Gd5Si2Ge2\n@ own peak']
-    colors3 = [COLOR_MAIN, COLOR_POWER, '#85bb65']
-    qc_vals = [r_gd_ashrae.Qc, r_giant_ashrae.Qc, r_giant_own.Qc]
-    cop_vals = [r_gd_ashrae.COP_electrical, r_giant_ashrae.COP_electrical, r_giant_own.COP_electrical]
+    T_mid_ashrae = T_ashrae + span / 2.0
+    tc_tuned = cascade._target_composition_for_peak(T_mid_ashrae, mu0H, cascade.GD_FAMILY)
+    tuned_in_range = cascade.GD_FAMILY.tc_min <= tc_tuned <= cascade.GD_FAMILY.tc_max
+    if tuned_in_range:
+        material_tuned = cascade.GD_FAMILY.tuned_fn(tc_tuned)
+        r_giant_tuned = eval_at(material_tuned, T_ashrae)
+    else:
+        r_giant_tuned = None
 
-    fig, axes = plt.subplots(1, 2, figsize=(11, 5.5))
-    axes[0].bar(labels, qc_vals, color=colors3, alpha=0.85, edgecolor='white')
+    labels = ['Gd\n@ ASHRAE (291K)', 'Gd5Si2Ge2\n@ ASHRAE (291K)', 'Gd5Si2Ge2\n@ own peak',
+              'Gd5(SixGe1-x)4(-Ga)\n@ ASHRAE, tuned']
+    colors4 = [COLOR_MAIN, COLOR_POWER, '#85bb65', '#c9a227']
+    qc_vals = [r_gd_ashrae.Qc, r_giant_ashrae.Qc, r_giant_own.Qc,
+               r_giant_tuned.Qc if r_giant_tuned else 0.0]
+    cop_vals = [r_gd_ashrae.COP_electrical, r_giant_ashrae.COP_electrical, r_giant_own.COP_electrical,
+                r_giant_tuned.COP_electrical if r_giant_tuned else 0.0]
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5.5))
+    axes[0].bar(labels, qc_vals, color=colors4, alpha=0.85, edgecolor='white')
     axes[0].set_ylabel('Qc [W]')
     axes[0].set_title('Cooling Capacity')
-    axes[1].bar(labels, cop_vals, color=colors3, alpha=0.85, edgecolor='white')
+    axes[1].bar(labels, cop_vals, color=colors4, alpha=0.85, edgecolor='white')
     axes[1].set_ylabel('Electrical COP')
     axes[1].set_title('Electrical COP')
     for ax in axes:
-        ax.tick_params(axis='x', labelsize=8)
+        ax.tick_params(axis='x', labelsize=7.5)
 
     fig.suptitle('Giant-MCE Targeting: Material Must Match the Operating Point\n'
-                 f'(Gd5Si2Ge2 own peak: {peak_T_giant:.1f}K, Gd own peak: {peak_T_gd:.1f}K)',
+                 f'(Gd5Si2Ge2 own peak: {peak_T_giant:.1f}K, Gd own peak: {peak_T_gd:.1f}K; '
+                 f'tuned composition Tc={tc_tuned:.0f}K)',
                  fontsize=12)
     fig.tight_layout()
     save(fig, 'fig24_giant_mce_targeting_comparison')
@@ -1019,6 +1086,43 @@ def plot_astronautics_validation():
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# FIG 26 — Four-way material family comparison (Track A2 item)
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_material_family_comparison():
+    rows = material_family_comparison.build_comparison_table()
+    rep = [r for r in rows if r['span_K'] == material_family_comparison.REPRESENTATIVE_SPAN_K]
+
+    labels = [r['candidate'].replace(' (', '\n(') for r in rep]
+    colors5 = [COLOR_MAIN, COLOR_POWER, '#85bb65', '#e8a33d', '#7b52ab']
+    qc_vals = [r['1stage_Qc_W'] or 0.0 for r in rep]
+    cop_vals = [r['1stage_COP'] or 0.0 for r in rep]
+    hatches = ['' if r['in_range'] else '//' for r in rep]
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5.5))
+    bars0 = axes[0].bar(labels, qc_vals, color=colors5, alpha=0.85, edgecolor='white')
+    bars1 = axes[1].bar(labels, cop_vals, color=colors5, alpha=0.85, edgecolor='white')
+    for bars in (bars0, bars1):
+        for bar, hatch in zip(bars, hatches):
+            bar.set_hatch(hatch)
+    axes[0].set_ylabel('Qc [W]')
+    axes[0].set_title('Cooling Capacity (1-stage)')
+    axes[1].set_ylabel('Electrical COP')
+    axes[1].set_title('Electrical COP (1-stage)')
+    for ax in axes:
+        ax.tick_params(axis='x', labelsize=8)
+
+    span = material_family_comparison.REPRESENTATIVE_SPAN_K
+    T_cold = material_family_comparison.T_COLD_K
+    fig.suptitle('Material Family Comparison at the ASHRAE Point '
+                 f'(T_cold={T_cold:.0f}K, span={span:.0f}K)\n'
+                 'Hatched bars: family\'s documented Tc window does not cover this point '
+                 '(fell back to Gd)', fontsize=11)
+    fig.tight_layout()
+    save(fig, 'fig26_material_family_comparison')
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # Generate all figures
 # ══════════════════════════════════════════════════════════════════════════
 
@@ -1051,6 +1155,7 @@ def run_all():
         ("23 Emissions comparison", plot_emissions),
         ("24 Giant-MCE targeting comparison", plot_giant_mce_targeting),
         ("25 Astronautics graded-bed validation", plot_astronautics_validation),
+        ("26 Material family comparison (Track A2 item)", plot_material_family_comparison),
     ]
 
     failures = []

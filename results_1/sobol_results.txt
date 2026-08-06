@@ -2,17 +2,17 @@ Sobol sensitivity analysis: AMR electrical COP at T_cold=291.0K, span=10.0K -- S
 Samples: 768 (Saltelli, N_base=64)
 
 parameter                     S1   S1_conf        ST   ST_conf
-mu0H_max_T                0.0149    0.0325    0.0080    0.0055
-frequency_Hz              0.7182    0.3438    0.9410    0.3388
-fluid_mdot_kgs            0.0834    0.1244    0.1376    0.0962
-regen_effectiveness      -0.0115    0.0347    0.0123    0.0076
+mu0H_max_T               -0.0018    0.0271    0.0058    0.0029
+frequency_Hz              0.6718    0.4211    0.8138    0.2782
+fluid_mdot_kgs            0.1018    0.1239    0.1464    0.0957
+regen_effectiveness       0.0153    0.0313    0.0104    0.0063
 parasitic_fraction        0.0000    0.0000    0.0000    0.0000
 
 Ranked by total-order sensitivity (ST):
-  frequency_Hz           ST=0.9410
-  fluid_mdot_kgs         ST=0.1376
-  regen_effectiveness    ST=0.0123
-  mu0H_max_T             ST=0.0080
+  frequency_Hz           ST=0.8138
+  fluid_mdot_kgs         ST=0.1464
+  regen_effectiveness    ST=0.0104
+  mu0H_max_T             ST=0.0058
   parasitic_fraction     ST=0.0000
 
 Interpretation: with the state-dependent loss model (eddy ~ f²H²,
