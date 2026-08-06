@@ -25,6 +25,10 @@ in the repository in one pass, in dependency order, so a single
     10. RSM surrogate fit              (core/rsm.py)
     11. NSGA-III design optimization   (core/optimize.py)
     12. Figure generation (26 figures) (plots.py -> results/figures/*.png, *.pdf)
+    13. Design-recommendations synthesis (core/design_recommendations.py) --
+        consolidates steps 3c/7b/8d/9b/11's already-computed results into
+        one ranked, actionable "how do I raise AMR electrical COP" report
+        (results/design_recommendations.txt)
 
 Steps 3b and 8b reproduce core/thermal.py's and core/first_order_mce.py's
 own __main__ demo blocks. Both modules are otherwise only reached
@@ -41,7 +45,17 @@ optimize.py. Everything else calls the same public functions each module
 already exposes for its own ``if __name__ == "__main__"`` block, so results
 are identical to running each script individually -- just aggregated.
 
-Step 12 runs last. plots.py is largely self-contained -- most of its 25
+Step 13 (design_recommendations.py) does not recompute anything either: it
+reuses the Sobol Si object, NSGA-III Pareto rows, material-family rows,
+graded-cascade row, and geometry sweep rows already produced by steps
+9b/11/8d/7b/7/3c above and reassembles them into one consolidated report,
+so its own runtime is negligible even though the analyses it summarizes
+are not.
+
+Step 12 runs before the new step 13; step 13 depends only on already
+-computed result objects from earlier stages, not on the figures
+themselves, but runs last so its consolidated report can also mention
+the figure count. plots.py is largely self-contained -- most of its 25
 figures call straight into core/ and recompute their own data rather
 than reading the CSVs the earlier steps write -- but three figures
 (cascade staging, Curie-graded cascade, NSGA-III Pareto front) also
@@ -99,6 +113,8 @@ from core.first_order_mce import GD5SI2GE2_FIRST_ORDER
 from core import giguere_validation
 from core import geometry_analysis
 from core import plots
+from core import design_recommendations
+from core import sensitivity as sensitivity_module
 
 RESULTS_DIR = "results"
 RESULTS_CSV = "results/comparison_table.csv"
@@ -349,6 +365,10 @@ def run_graded_cascade_comparison(rows_gd):
         logger.info(f"At 10K span, 3 stages: Graded Qc={graded_10K_3['Graded_3stage_Qc_W']}W, "
                     f"COP={graded_10K_3['Graded_3stage_COP']}  vs. plain-Gd "
                     f"Qc={gd_10K_3['AMR_3stage_Qc_W']}W, COP={gd_10K_3['AMR_3stage_COP']}")
+    # Returned (not previously) so main()'s new step 13 (design_recommendations.py)
+    # can report the 10K-span/3-stage graded-vs-plain-Gd comparison without
+    # re-running this ~2-minute sweep a second time.
+    return rows_graded
 
 
 def run_astronautics_graded_validation():
@@ -422,6 +442,38 @@ def run_plot_generation():
         logger.warning("No figures were generated -- check the traceback above.")
 
 
+def run_design_recommendations_synthesis(sobol_state_dependent_Si, pareto_rows, material_rows,
+                                          graded_rows, cascade_rows_gd, pb_best_cop_row,
+                                          pp_best_cop_row, n_stages=3,
+                                          representative_span_K=REPRESENTATIVE_SPAN_K):
+    """Step 13: consolidates the already-computed results from steps
+    3c/7b/8d/9b/11 into one ranked "how do I raise AMR electrical COP"
+    report via core/design_recommendations.py. Pulls out the 10K-span,
+    3-stage graded-vs-plain-Gd cascade rows (matching the comparison
+    main.py already logs at the end of step 7b) since the graded/plain
+    cascade sweeps return every span/stage-count combination, not just
+    the representative one."""
+    graded_row = None
+    gd_cascade_row = None
+    if graded_rows is not None:
+        graded_row = next((r for r in graded_rows if r["span_K"] == representative_span_K), None)
+    if cascade_rows_gd is not None:
+        gd_cascade_row = next((r for r in cascade_rows_gd if r["span_K"] == representative_span_K),
+                               None)
+    design_recommendations.build_report(
+        sobol_state_dependent_Si=sobol_state_dependent_Si,
+        pareto_rows=pareto_rows,
+        material_rows=material_rows,
+        graded_row=graded_row,
+        gd_cascade_row=gd_cascade_row,
+        n_stages=n_stages,
+        pb_best_cop_row=pb_best_cop_row,
+        pp_best_cop_row=pp_best_cop_row,
+        representative_span_K=representative_span_K,
+        out_path="results/design_recommendations.txt",
+    )
+
+
 def main():
     _attach_file_logging()
     t_start = time.time()
@@ -473,14 +525,22 @@ def main():
         ("10. Response-surface (RSM) surrogate fit",
          lambda: rsm.fit_rsm()),
         ("11. NSGA-III multi-objective design optimization",
-         lambda: optimize_module.run_optimization()),
+         None),  # handled specially below, result (pareto_rows) captured for step 13
         ("12. Figure generation: 26 figures covering validation, AMR curves, "
          "cascade/graded staging, sensitivity, RSM, NSGA-III, economics, emissions (plots.py)",
          run_plot_generation),
+        ("13. Design-recommendations synthesis (core/design_recommendations.py)",
+         None),  # handled specially below, consumes steps 3c/7b/8d/9b/11's results
     ]
 
     representative_row = None
     cascade_rows_gd = None
+    graded_rows = None
+    material_rows = None
+    pareto_rows = None
+    sobol_state_dependent_Si = None
+    pb_best_cop_row = None
+    pp_best_cop_row = None
 
     for name, fn in stages:
         _banner(name)
@@ -499,7 +559,33 @@ def main():
                 elif name.startswith("7. "):
                     cascade_rows_gd = run_cascade_comparison()
                 elif name.startswith("7b."):
-                    run_graded_cascade_comparison(cascade_rows_gd)
+                    graded_rows = run_graded_cascade_comparison(cascade_rows_gd)
+                elif name.startswith("3c."):
+                    fn()
+                    # Cheap (sub-second), non-printing re-sweep purely to capture
+                    # the best-COP geometry rows for step 13's synthesis report;
+                    # run_geometry_analysis() above already did the printed,
+                    # file-writing version of this same sweep.
+                    _, _, pb_best_cop_row = geometry_analysis.sweep_packed_bed_diameter(
+                        verbose=False)
+                    _, _, pp_best_cop_row = geometry_analysis.sweep_parallel_plate_spacing(
+                        verbose=False)
+                elif name.startswith("8d."):
+                    material_rows = fn()
+                elif name.startswith("9b."):
+                    sobol_state_dependent_Si = fn()
+                elif name.startswith("11."):
+                    pareto_rows = optimize_module.run_optimization()
+                elif name.startswith("13."):
+                    run_design_recommendations_synthesis(
+                        sobol_state_dependent_Si=sobol_state_dependent_Si,
+                        pareto_rows=pareto_rows,
+                        material_rows=material_rows,
+                        graded_rows=graded_rows,
+                        cascade_rows_gd=cascade_rows_gd,
+                        pb_best_cop_row=pb_best_cop_row,
+                        pp_best_cop_row=pp_best_cop_row,
+                    )
                 else:
                     fn()
         except Exception:
@@ -526,8 +612,103 @@ def main():
                      "material_family_comparison.csv, material_family_comparison.txt, "
                      "sobol_results.txt, sobol_results_phase2_constant.txt, "
                      "rsm_coefficients.txt, pareto_front.csv, "
-                     "geometry_optimization_analysis.txt, figures/*.png+*.pdf (26 figures)")
+                     "geometry_optimization_analysis.txt, graded_cascade_comparison.csv, "
+                     "design_recommendations.txt, figures/*.png+*.pdf (26 figures)")
     logger.info(f"Full run log: {LOG_FILE}")
+
+    _print_executive_summary(representative_row, cascade_rows_gd, graded_rows,
+                              material_rows, pareto_rows, pb_best_cop_row,
+                              pp_best_cop_row, failures)
+
+
+def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, material_rows,
+                              pareto_rows, pb_best_cop_row, pp_best_cop_row, failures):
+    """Final, well-structured overview of every implemented analysis and
+    its headline metric, printed once at the very end of the run so a
+    reader does not have to scroll back through 13 stages of log output
+    to see what this pipeline actually covers. Every number quoted here
+    is read directly from the result objects the stages above already
+    computed -- nothing is recomputed or hardcoded. Stages that failed
+    (see `failures`) are reported as unavailable rather than silently
+    skipped."""
+    _banner("EXECUTIVE SUMMARY -- implemented features, analyses, and headline metrics")
+
+    def _ok(prefix):
+        return not any(f.startswith(prefix) for f in failures)
+
+    logger.info("Validation")
+    logger.info("  - Material-level: mean-field Gd model vs. Dan'kov et al. (1998), Giguere et "
+                "al. (1999) direct-measurement cross-check, Curie-shift limitation check")
+    logger.info("  - System-level: calibrated against 16 published AMR prototype/benchmark rows "
+                "(data/amr_experimental_benchmarks.csv), including a 6-layer Curie-graded "
+                "La(Fe,Si)13Hy reproduction of Astronautics_rotary_2014")
+
+    logger.info("Baseline comparison (AMR vs. vapor-compression vs. liquid cooling vs. Carnot)")
+    if representative_row and _ok("4."):
+        logger.info(f"  - At {REPRESENTATIVE_SPAN_K:.0f}K span: AMR_COP_elec="
+                    f"{representative_row['AMR_COP_electrical']}, VCC_COP="
+                    f"{representative_row['VaporCompression_COP']}, Liquid_COP="
+                    f"{representative_row['LiquidCooling_COP']}, Carnot_COP="
+                    f"{representative_row['Carnot_COP']}  (results/comparison_table.csv)")
+    else:
+        logger.info("  - unavailable (stage failed or was skipped)")
+
+    logger.info("Economics & emissions (TCO and GWP at the representative operating point)")
+    logger.info("  - results/*: economics.py CAPEX/OPEX comparison, emissions.py refrigerant + "
+                "operational CO2e comparison")
+
+    logger.info("Cascade staging & Curie-temperature grading")
+    if cascade_rows_gd and graded_rows and _ok("7"):
+        gd10 = next((r for r in cascade_rows_gd if r["span_K"] == 10), None)
+        gr10 = next((r for r in graded_rows if r["span_K"] == 10), None)
+        if gd10 and gr10:
+            logger.info(f"  - At 10K span, 3-stage: plain-Gd COP={gd10['AMR_3stage_COP']}, "
+                        f"Curie-graded COP={gr10['Graded_3stage_COP']} "
+                        f"(results/cascade_comparison.csv, results/graded_cascade_comparison.csv)")
+    else:
+        logger.info("  - unavailable (stage failed or was skipped)")
+
+    logger.info("Material family ranking (Gd / Gd5Si2Ge2 / GD- / LAFESIH- / MNFEPSI-tuned families)")
+    if material_rows and _ok("8d."):
+        rep = [r for r in material_rows if r["span_K"] == REPRESENTATIVE_SPAN_K
+               and r.get("in_range") and r.get("1stage_COP") is not None]
+        if rep:
+            best = max(rep, key=lambda r: r["1stage_COP"])
+            logger.info(f"  - Best at {REPRESENTATIVE_SPAN_K:.0f}K span: {best['candidate']}  "
+                        f"COP_elec={best['1stage_COP']}  (results/material_family_comparison.csv)")
+    else:
+        logger.info("  - unavailable (stage failed or was skipped)")
+
+    logger.info("Global sensitivity (Sobol) & response-surface (RSM) surrogate")
+    logger.info("  - results/sobol_results.txt (state-dependent losses), "
+                "results/sobol_results_phase2_constant.txt (constant losses), "
+                "results/rsm_coefficients.txt (Qc surrogate, R^2 reported at fit time)")
+
+    logger.info("Regenerator geometry optimization (packed-bed / parallel-plate)")
+    if pb_best_cop_row and pp_best_cop_row and _ok("3c."):
+        logger.info(f"  - COP-optimal packed-bed sphere diameter: {pb_best_cop_row[0]} mm; "
+                    f"COP-optimal parallel-plate spacing: {pp_best_cop_row[0]} mm "
+                    f"(results/geometry_optimization_analysis.txt)")
+    else:
+        logger.info("  - unavailable (stage failed or was skipped)")
+
+    logger.info("NSGA-III multi-objective design optimization (COP vs. Qc vs. cost)")
+    if pareto_rows and _ok("11."):
+        best_cop = max(pareto_rows, key=lambda r: r["COP_electrical"])
+        logger.info(f"  - {len(pareto_rows)} Pareto-optimal designs; best electrical COP="
+                    f"{best_cop['COP_electrical']} at f={best_cop['frequency_Hz']}Hz "
+                    f"(results/pareto_front.csv)")
+    else:
+        logger.info("  - unavailable (stage failed or was skipped)")
+
+    logger.info("Consolidated design recommendations (NEW -- step 13)")
+    logger.info("  - Ranks all 5 COP-maximization levers above by demonstrated Sobol "
+                "sensitivity and reports a recommended starting design point "
+                "(results/design_recommendations.txt)")
+
+    logger.info("Figures")
+    n_figs = len(list(plots.FIG_DIR.glob("*.png"))) if plots.FIG_DIR.exists() else 0
+    logger.info(f"  - {n_figs} figure(s) generated (results/figures/*.png, *.pdf)")
 
 
 if __name__ == "__main__":

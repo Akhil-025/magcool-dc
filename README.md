@@ -4,7 +4,7 @@ Physics-based simulation suite evaluating **magnetocaloric (magnetic) cooling
 for data centers**, benchmarked against vapor-compression CRAC/CRAH and
 direct liquid cooling.
 
-## Status: Phase 13 (paper-mining pass part 6: traced/corrected the `DTU_rotary_Gd_2016` citation, promoted `DTU_Eriksen_rotary_Gd_2015` into the CORE calibration slot) done, Phase 14 (bug fixes: corrected a mean-field-vs-first-order GD5SI2GE2 material mixup in the cascade comparison/fig20/cascade.py demo; added `core/material_family_comparison.py`, a four-way Gd/Gd5Si2Ge2/GD-family/LAFESIH-family/MNFEPSI-family ranking at the same ASHRAE point, wired into `main.py` step 8d and `plots.py` fig26; documented the `span_fraction` linear-clamp approximation rather than inventing an unsourced smoothing function; confirmed the full-system BOM cost gap, reference-book OCR, and two flagged CSV rows are already correctly left open/flagged, no change needed; Tušek et al. (2013) Figs. 10-11 digitization still open, being done manually in WebPlotDigitizer; 170/170 tests passing) done — see `ROADMAP.md`
+## Status: Phase 13 (paper-mining pass part 6: traced/corrected the `DTU_rotary_Gd_2016` citation, promoted `DTU_Eriksen_rotary_Gd_2015` into the CORE calibration slot) done, Phase 14 (bug fixes: corrected a mean-field-vs-first-order GD5SI2GE2 material mixup in the cascade comparison/fig20/cascade.py demo; added `core/material_family_comparison.py`, a four-way Gd/Gd5Si2Ge2/GD-family/LAFESIH-family/MNFEPSI-family ranking at the same ASHRAE point, wired into `main.py` step 8d and `plots.py` fig26; documented the `span_fraction` linear-clamp approximation rather than inventing an unsourced smoothing function; confirmed the full-system BOM cost gap, reference-book OCR, and two flagged CSV rows are already correctly left open/flagged, no change needed; Tušek et al. (2013) Figs. 10-11 digitization still open, being done manually in WebPlotDigitizer; 170/170 tests passing) done, Phase 15 (design-recommendations synthesis: added `core/design_recommendations.py`, which consolidates the frequency/material/Curie-grading/geometry/field-flow COP-maximization levers already computed by earlier stages into one ranked, actionable report, wired into `main.py` as new step 13; added a final "EXECUTIVE SUMMARY" banner to `main.py`'s console/log output so every implemented analysis and its headline metric is visible in one place at the end of a run; no existing functionality changed, 171/171 tests passing) done — see `ROADMAP.md`
 
 ## What's implemented
 
@@ -24,7 +24,9 @@ direct liquid cooling.
 | `core/economics.py` | CAPEX/OPEX comparison, materials-cost floor grounded in Bjørk et al. (2011) |
 | `core/validation.py`, `validation_system.py`, `giguere_validation.py` | Material- and system-level validation against literature/prototypes; `validation.py` also cross-checks Gd at 7T (Giguere et al.) and a Dan'kov et al. Curie-shift held-out prediction (not reproduced by the model, documented); `validation_system.py` also field-sensitivity-checks the Chubu Electric/Toshiba pair and reachability-checks capacity-only rows (Cooltech's 42K stress test); `giguere_validation.py` also cross-checks the Gd5Si2Ge2 dTad correction against Pecharsky & Gschneidner (1997)'s independent peak-ratio figure |
 | `core/sensitivity.py`, `rsm.py` | Sobol sensitivity, RSM surrogate |
-| `main.py` | Full comparison across the ASHRAE TC9.9 thermal envelope |
+| `core/geometry_analysis.py` | Packed-bed sphere-diameter and parallel-plate channel-spacing COP optimization (Tušek, Kitanovski & Poredoš 2013) → `results/geometry_optimization_analysis.txt` |
+| `core/design_recommendations.py` | **(Phase 15, new)** Consolidates the frequency/material/Curie-grading/geometry/field-flow levers already computed by the stages above into one ranked, actionable COP-maximization report and a recommended starting design point → `results/design_recommendations.txt` |
+| `main.py` | Full comparison across the ASHRAE TC9.9 thermal envelope, plus a final executive-summary banner covering every stage's headline metric |
 
 ## Quick start
 
@@ -42,8 +44,81 @@ python -m core.sensitivity                  # Sobol, Phase 2 vs. Phase 3 modes
 python -m core.rsm                           # RSM surrogate for cooling capacity
 python -m core.optimize                       # NSGA-III Pareto front, grounded cost model
 python -m core.cascade                         # multi-stage cascade, Gd vs. Gd5Si2Ge2
-python main.py                                   # single-stage AMR vs. VCC vs. liquid cooling
+python -m core.geometry_analysis                 # packed-bed / parallel-plate geometry COP optimum
+python -m core.design_recommendations             # standalone smoke test of the Phase 15 synthesis report
+python main.py                                       # full pipeline: every analysis above, in order,
+                                                       # ending in results/design_recommendations.txt
+                                                       # and an EXECUTIVE SUMMARY banner in the console/log
 ```
+
+Running `python main.py` end-to-end reproduces every file under `results/`
+from scratch, including the new `results/design_recommendations.txt`
+(Phase 15) and a final `EXECUTIVE SUMMARY` section printed to the console
+and written to `results/pipeline.log` that lists every implemented
+analysis alongside its headline metric for that run — see "Phase 15
+findings" below for what that report actually says on a representative
+run, and `main.py`'s own module docstring for the full 13-step pipeline
+order.
+
+## Phase 15 findings (design-recommendations synthesis)
+
+Every other phase in this project answered one question at a time (what's
+the best material? what's the best geometry? what does the optimizer
+find?). Nothing pulled those answers into a single "how do I actually
+raise AMR electrical COP" report — `core/design_recommendations.py` now
+does that, reusing the result objects the pipeline's own stages already
+compute (no new physics, no recomputation). Representative numbers from a
+full pipeline run (`results/pipeline.log`; exact values vary run-to-run
+with the optimizer's stochastic search and are not meant to be treated as
+fixed constants):
+
+1. **Frequency — the dominant lever.** State-dependent-loss Sobol
+   analysis (`sensitivity.py` step 9b) puts total-order sensitivity of
+   electrical COP to frequency at **ST ≈ 0.85–0.87**, an order of
+   magnitude above field, flow, or regenerator effectiveness. NSGA-III's
+   own Pareto front shows the trade-off directly: the best-electrical-COP
+   design sits at **f=0.32 Hz → COP_elec=9.49**, while the
+   best-cooling-capacity design sits at **f=4.23 Hz → COP_elec=2.89** (same
+   optimizer run, `results/pareto_front.csv`) — lower frequency raises COP
+   because eddy-current loss scales with f², while cooling capacity only
+   grows sub-quadratically with it.
+2. **Material choice.** At the representative 10 K/18 °C ASHRAE point,
+   composition-tuned **La(Fe,Si)13Hy ranks first** (COP_elec=7.33,
+   Qc=4989 W), ahead of plain Gd (COP_elec=5.09, Qc=1443 W) and the tuned
+   Gd5(SixGe1−x)4(-Ga) family (COP_elec=4.95, Qc=1352 W) —
+   `results/material_family_comparison.csv` (Phase 14).
+3. **Curie-temperature grading.** At the same point, a 3-stage
+   Curie-graded cascade reaches **COP=2.78, Qc=2388 W**, vs. **COP=2.42,
+   Qc=1258 W** for a uniform-Gd 3-stage cascade — grading nearly doubles
+   capacity while also raising COP, at the cost of the composition-tuning
+   complexity documented in `cascade.py` (Phase 7/9).
+4. **Regenerator geometry.** Coupling NTU thermal effectiveness to
+   Tušek, Kitanovski & Poredoš (2013)'s hydraulic pumping-power terms
+   produces a genuine interior COP optimum: **≈0.5 mm packed-bed sphere
+   diameter** and **≈0.1 mm parallel-plate channel spacing**
+   (`results/geometry_optimization_analysis.txt`, Phase 7c). Shrinking
+   geometry further raises thermal effectiveness only marginally while
+   pumping power keeps growing.
+5. **Field / flow balance.** NSGA-III's knee-point (balanced) design sits
+   at **H≈3.0 T, f≈0.32 Hz, ṁ≈0.50 kg/s → COP_elec≈9.4, Qc≈13.7 kW**,
+   avoiding either objective's own extreme.
+
+**Known limitation, stated rather than hidden**: `optimize.py`'s NSGA-III
+search currently only spans field/frequency/flow/mass/effectiveness/
+blow-fraction (6 design variables) — it does **not** yet co-optimize over
+material family or regenerator geometry, so levers 2–4 above are reported
+as separate, not-yet-unified analyses rather than folded into one combined
+optimum. See ROADMAP.md's Future Work for the open item this creates.
+
+**Recent literature context** (cited for the reader, not used
+quantitatively in the model): Klinar, Kitanovski, Law, Franco & Moya,
+"Perspectives and Energy Applications of Magnetocaloric, Pyromagnetic,
+Electrocaloric, and Pyroelectric Materials," *Adv. Energy Mater.* **14**,
+2401739 (2024) — a 2024 roadmap-style review of caloric cooling
+technologies to 2040 that, among other things, profiles a novel
+high-frequency active caloric regenerator concept ("Hypereg") aimed
+directly at the frequency/loss trade-off this project's own Sobol analysis
+independently identifies as the dominant COP lever.
 
 ## Phase 12 findings (paper-mining pass, part 3)
 
@@ -416,10 +491,12 @@ neglects short-range spin correlations / critical fluctuations (de Oliveira
 ## Repo layout
 
 ```
-core/            physics, validation, sensitivity, surrogate, and economics modules
+core/            physics, validation, sensitivity, surrogate, economics, and
+                 design-recommendations-synthesis modules
 data/            literature-sourced parameter tables + digitized prototype benchmarks
-results/         generated comparison tables, Sobol results, RSM coefficients
-main.py          top-level comparison driver
+results/         generated comparison tables, Sobol results, RSM coefficients,
+                 geometry/design-recommendations reports, figures/
+main.py          top-level comparison driver (13-step pipeline, executive summary)
 ROADMAP.md       phased plan to reach -suite parity
 LITERATURE_REVIEW.md
 NOMENCLATURE.md
