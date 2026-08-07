@@ -3,6 +3,7 @@ import pytest
 from core.validation_system import (
     load_benchmarks, run_system_validation, run_curve_validation,
     run_field_sensitivity_check, run_capacity_only_calibration_check,
+    run_tusek_multipoint_curve_validation, _load_tusek_curve,
 )
 
 
@@ -95,6 +96,20 @@ def test_run_system_validation_still_returns_four_point_results():
     reaching either count here -- see
     run_capacity_only_calibration_check() instead, which does cover it.
 
+    ROADMAP.md Group A completion pass: Tusek_singlebed_Gd_2010's span_K/
+    Qc_W/COP were replaced with a genuinely pixel-digitized point from
+    Figs. 10-11 (AMR (A.), V*=0.95, span=7.26K/Qc=5.27W/COP=5.38 -- see
+    data/tusek_ate2013_figs/notes.md and the row's own CSV source note).
+    Unlike the placeholder it replaces, this point DOES calibrate (mdot=
+    0.0074 kg/s), so with_cop RISES from 6 to 7 here (total stays 15: the
+    row was already present as a "no calibration found" entry before).
+    A second row, Tusek_singlebed_Gd_2010_spanceiling (the paper's directly
+    -stated 19.8K/0W zero-capacity point), was also added in this pass but
+    has no COP, so calibrate_and_check() filters it out entirely (same as
+    every other zero-span/zero-Qc endpoint row) -- it does not appear in
+    run_system_validation()'s output at all, only in run_curve_validation()
+    (see test_curve_validation_covers_multi_point_groups below).
+
     Paper-Mining Pass Part 5 added DTU_Eriksen_rotary_Gd_2015, a genuinely
     new/independent DTU rotary Gd device from the primary paper (Eriksen
     et al., Int. J. Refrigeration 2015) -- NOT the same device as the
@@ -125,7 +140,7 @@ def test_run_system_validation_still_returns_four_point_results():
     and 4 of the 8 Lozano rows -- present, not silently dropped)."""
     results = run_system_validation()
     with_cop = [r for r in results if "COP_error_pct" in r]
-    assert len(with_cop) == 6
+    assert len(with_cop) == 7
     assert len(results) == 15
 
 
@@ -141,16 +156,36 @@ def test_curve_validation_covers_multi_point_groups():
     1.4Hz, not a valid same-condition companion -- so no maxspan row was
     fabricated to replace the old one, and DTU_Eriksen_MAGGIE_2016 is a
     single-row device_group, correctly absent from curve validation
-    (which requires >=2 rows per group)."""
+    (which requires >=2 rows per group).
+
+    ROADMAP.md Group A completion pass: Tusek_singlebed_Gd_2010 gained a
+    same-field/mass/frequency zero-Qc companion row (span-ceiling point,
+    19.8K/0W, stated directly in the paper's text -- see that row's CSV
+    source note), so it now joins the 2-point-companion groups here too."""
     results = run_curve_validation(verbose=False)
     group_names = {r["device_group"] for r in results}
-    # the 2 remaining groups with a fixed-condition companion span point,
-    # plus Lozano_POLO_UFSC_2016, whose 8 independent (own frequency/flow)
+    # the 3 groups with a fixed-condition companion span point, plus
+    # Lozano_POLO_UFSC_2016, whose 8 independent (own frequency/flow)
     # rows are reported here with a "multi-point set" status (see the
     # guard in run_curve_validation()) rather than run through 2-point
     # pairing
-    assert group_names == {"Astronautics_rotary_2014",
+    assert group_names == {"Astronautics_rotary_2014", "Tusek_singlebed_Gd_2010",
                             "Risoe_DTU_Gd_2011", "Lozano_POLO_UFSC_2016"}
+
+
+def test_curve_validation_tusek_spanceiling_companion_matches_model():
+    """Genuine finding (ROADMAP.md Group A): at the calibrated mdot fitted
+    to Tusek AMR(A)'s V*=0.95 anchor point (span=7.26K, Qc=5.27W), the
+    model's own predicted no-load span happens to land almost exactly on
+    the paper's directly-stated 19.8K zero-capacity point -- both model
+    and literature give Qc=0W there. Locked down so a future, unrelated
+    change to amr_cycle.py that silently changes this doesn't go
+    unnoticed."""
+    results = run_curve_validation(verbose=False)
+    tusek = next(r for r in results if r["device_group"] == "Tusek_singlebed_Gd_2010")
+    assert tusek["companion_span_K"] == pytest.approx(19.8)
+    assert tusek["companion_Qc_lit_W"] == pytest.approx(0.0)
+    assert tusek["companion_Qc_model_W"] == pytest.approx(0.0, abs=0.5)
 
 
 def test_curve_validation_companion_not_used_in_calibration():
@@ -266,3 +301,80 @@ def test_cooltech_row_has_no_reported_cop():
     rows = load_benchmarks()
     row = next(r for r in rows if r["device"] == "Cooltech_2013_rotary")
     assert row["COP"] == ""
+
+def test_load_tusek_curve_returns_sorted_points():
+    """AMR (A.) at V*=0.95 (fig10_data.csv) has 3 digitized points; must
+    come back sorted by ascending span."""
+    pts = _load_tusek_curve(amr="A", v_star=0.95)
+    assert len(pts) == 3
+    spans = [p[0] for p in pts]
+    assert spans == sorted(spans)
+
+
+def test_load_tusek_curve_missing_combo_returns_empty():
+    pts = _load_tusek_curve(amr="A", v_star=99.0)
+    assert pts == []
+
+
+def test_tusek_multipoint_curve_validation_calibrates_at_anchor():
+    """AMR (A.) V*=0.95's first (lowest-span) point is the same anchor
+    point used for the Tusek_singlebed_Gd_2010 CSV row, so the two must
+    calibrate to the identical mdot."""
+    out = run_tusek_multipoint_curve_validation(verbose=False, amr="A", v_star=0.95)
+    assert out["status"] == "ok"
+    assert out["anchor_span_K"] == pytest.approx(7.26)
+    point_results = {r["device"]: r for r in run_system_validation()}
+    tusek_point = point_results["Tusek_singlebed_Gd_2010"]
+    assert out["mdot_calibrated_kg_s"] == pytest.approx(
+        tusek_point["mdot_calibrated_kg_s"], rel=1e-6)
+
+
+def test_tusek_multipoint_curve_validation_predicts_both_other_points():
+    out = run_tusek_multipoint_curve_validation(verbose=False, amr="A", v_star=0.95)
+    spans_predicted = {p["span_K"] for p in out["predictions"]}
+    assert spans_predicted == {12.23, 14.75}
+
+
+def test_tusek_multipoint_curve_validation_genuine_finding_nonmonotonic_curve():
+    """Actual, documented finding (ROADMAP.md Group A completion pass):
+    unlike the real device's smoothly-decreasing "cooling line", this
+    repo's single-Tc 0-D Qc(span) model is NON-monotonic at this
+    calibrated mdot -- it drops to ~0W around span=8K, then rises again to
+    a large, spurious local maximum before finally falling back to 0 past
+    span~14K. The 2-point companion check (span=7.26K -> 19.8K) alone
+    would NOT have caught this, since both endpoints happen to look
+    reasonable; only a genuine 3+-point curve-shape check exposes it. This
+    is a real model limitation, not a bug in this validation code -- do
+    not silently retune the model to remove this without noting it here
+    and in ROADMAP.md. Locked down so a future, unrelated change to
+    amr_cycle.py that silently changes this doesn't go unnoticed."""
+    out = run_tusek_multipoint_curve_validation(verbose=False, amr="A", v_star=0.95)
+    mid_span_pred = next(p for p in out["predictions"] if p["span_K"] == 12.23)
+    # literature says Qc keeps falling (2.03W); model instead predicts a
+    # large overshoot far ABOVE the anchor's own 5.27W -- a genuine,
+    # large, and non-physical disagreement in curve shape.
+    assert mid_span_pred["Qc_lit_W"] == pytest.approx(2.03)
+    assert mid_span_pred["Qc_model_W"] > 10.0
+    assert mid_span_pred["Qc_error_pct"] > 500
+
+    endpoint_pred = next(p for p in out["predictions"] if p["span_K"] == 14.75)
+    assert endpoint_pred["Qc_lit_W"] == pytest.approx(0.0)
+    assert endpoint_pred["Qc_model_W"] == pytest.approx(0.0, abs=0.5)
+
+
+def test_tusek_multipoint_curve_validation_missing_curve_reports_status():
+    out = run_tusek_multipoint_curve_validation(verbose=False, amr="A", v_star=99.0)
+    assert out["status"] == "fewer than 2 points"
+
+
+def test_tusek_fig10_and_fig11_csvs_have_matching_series():
+    """fig10_data.csv (Qc) and fig11_data.csv (COP) digitize the same 9
+    series (3 AMR geometries x 3 V* ratios) from the same source figures;
+    every (amr, V_star) combination in one must also appear in the other."""
+    import csv as _csv
+    with open("data/tusek_ate2013_figs/fig10_data.csv") as f:
+        combos_10 = {(r["amr"], r["V_star"]) for r in _csv.DictReader(f)}
+    with open("data/tusek_ate2013_figs/fig11_data.csv") as f:
+        combos_11 = {(r["amr"], r["V_star"]) for r in _csv.DictReader(f)}
+    assert combos_10 == combos_11
+    assert len(combos_10) == 9

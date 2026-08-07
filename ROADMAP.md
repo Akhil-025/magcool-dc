@@ -280,8 +280,8 @@
       the original item remains open, but for a different, now-correct
       reason: the paper is here but isn't the right kind of source, rather
       than absent altogether.
-- [~] Pixel-calibrated digitization of Tušek et al. (2013) Figs. 10-11 —
-      **partial progress, not complete.** Extracted the two embedded
+- [x] Pixel-calibrated digitization of Tušek et al. (2013) Figs. 10-11 —
+      **COMPLETE as of the Group A completion pass, see below.** Extracted the two embedded
       images at native resolution (476x1093/1095 px; confirmed via
       pdfplumber that the page has 0 vector paths, so this has to be pixel
       work, not a vector-graphics shortcut). OCR (tesseract) confirmed,
@@ -302,6 +302,21 @@
       Nielsen (2011) is in hand too, per the correction above, but is not a
       source of this kind of curve data, so it drops off this specific
       to-do.
+      **UPDATE (Group A completion pass):** the above "where it stopped"
+      blockers are both resolved. y-axis gridlines calibrate cleanly (8/6/
+      4/2/0 W for Fig.10, 40/30/20/10/0 COP for Fig.11, ~35px/gridline-step,
+      consistent across all 6 panels) once verified against the actual
+      extracted bitmap rather than OCR of the tick labels. Series separation
+      was done by a human, one panel and one marker at a time, exactly as
+      flagged as unavoidable here — using automated blob-centroid detection
+      (thresholding + erosion + connected components) to get precise pixel
+      coordinates, then visually confirming/correcting each point's series
+      assignment against zoomed crops (catching several line-crossing
+      artifacts that were not real markers). All 9 series in both figures
+      are now digitized: `data/tusek_ate2013_figs/fig10_data.csv`,
+      `fig11_data.csv`, full methodology and a documented residual
+      uncertainty (including one flagged, unresolved point-count mismatch
+      between the two figures at V*=0.95/AMR F) in `notes.md`.
 - [~] **Full-system cost — partial, honest step, not the full item.** Searched
       for a published $ breakdown of AMR heat-exchanger/pump/motor-drive/
       controls capital cost and found none beyond the two Bjørk-group
@@ -644,7 +659,8 @@ additions; the other two are documentation-only flags (below).
       out-of-range rejection, Tc-only shift assumption, root-finder
       convergence, in-range graded-cascade feasibility). Full suite:
       **137/137 passing** (was 125/125 before this pass).
-- [ ] **Flagged, not built**: `Papers/AMR Theory and Modeling/...Tušek...
+- [x] **Data now available; geometry-explicit calibration still NOT
+      wired up — partial.** `Papers/AMR Theory and Modeling/...Tušek...
       2013 comprehensive experimental analysis...` reports a 20K span,
       1.15T, ~25%-porosity parallel-plate AMR (the largest reported
       parallel-plate span at that field at time of publication) — this is
@@ -658,6 +674,22 @@ additions; the other two are documentation-only flags (below).
       only to name the parallel-plate validation gap as the SPECIFIC
       target for whoever picks that digitization up, not to re-flag the
       digitization itself.
+      **UPDATE (Group A completion pass):** the digitization is done (see
+      Phase 7's entry above) and the paper's directly-stated 19.8K/0W
+      span-ceiling point (Section 3.2/Fig.6, V*=0.365, freq=0.3Hz) was
+      added as `Tusek_singlebed_Gd_2010_spanceiling` in
+      `amr_experimental_benchmarks.csv`. **What is still NOT done, and
+      remains genuinely open:** actually calling
+      `regenerator_effectiveness_parallel_plate()` with this device's own
+      geometry (Table 1: 0.1mm plate spacing, 0.25mm plate thickness,
+      dh=0.2mm, porosity=0.2564, heat-transfer area=0.1395 m²) and
+      comparing its predicted effectiveness against an effectiveness
+      backed out of the measured (span, Qc) data — that needs
+      `core/geometry_analysis.py` wiring plus a fluid-property assumption
+      for the water/ethylene-glycol mixture (density/viscosity/specific
+      heat), neither of which was fabricated here. This row only supplies
+      the previously-missing data point; the geometry-explicit validation
+      itself is a good next step for whoever picks this up.
 - [x] **Confirmed duplicate, no action**: `Papers/AMR Theory and
       Modeling/Performance evaluation of a nine-layer active
       regenerator.pdf` and `Papers/AMR systems and prototypes/The
@@ -1066,11 +1098,29 @@ leaving them silently unaddressed.
       known via a review paper's reference list per the existing
       ROADMAP.md entry) — per the original item's own instruction, not
       adding it from a secondary source alone.
-- [ ] **B5 — Tušek et al. (2013) Figs. 10-11 digitization: left open,
-      intentionally not attempted by automation this pass.** Being
-      digitized manually in WebPlotDigitizer instead; results will be
-      wired into `validation_system.py` as new curve-level rows once
-      available.
+- [x] **B5 — Tušek et al. (2013) Figs. 10-11 digitization: CLOSED (Group A
+      completion pass).** Digitized manually (pixel-calibrated gridline
+      detection + automated marker-centroid extraction, each point
+      verified against a zoomed crop by eye) rather than in an external
+      WebPlotDigitizer session — same end result, no external tool
+      dependency. All 9 series across both figures are in
+      `data/tusek_ate2013_figs/{fig10_data.csv,fig11_data.csv,notes.md}`.
+      Wired into `validation_system.py`: the `Tusek_singlebed_Gd_2010` CSV
+      row now carries a genuinely digitized point (replacing the old
+      unverified guess) plus a new `_spanceiling` companion row for the
+      existing 2-point `run_curve_validation()` mechanism, AND a new
+      `run_tusek_multipoint_curve_validation()` function that checks the
+      full 3-point-per-curve shape directly from the digitized CSVs
+      (not routed through the benchmark-row/device_group mechanism, since
+      that only ever compares 2 points at a time) — this found a genuine
+      model limitation (non-monotonic predicted Qc(span) at the calibrated
+      mdot for at least one V* condition) that the 2-point check alone
+      would have missed. See `core/validation_system.py`'s module
+      docstring and `tests/test_validation_system.py`'s new tests for
+      details. The parallel-plate-specific `regenerator_effectiveness_
+      parallel_plate()` geometry validation (line ~663 above) is still
+      NOT wired up — this closes the digitization/CSV/curve-validation
+      half of that gap, not the geometry-explicit half.
 - [x] **B9 — this Phase 14 section**: status lines updated as each item
       above closed, per this repo's existing habit.
 

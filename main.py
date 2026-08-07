@@ -637,6 +637,16 @@ def main():
                     system_validation_results = validation_system.run_system_validation()
                     validation_system.run_field_sensitivity_check()
                     validation_system.run_capacity_only_calibration_check()
+                    # ROADMAP.md Group A completion pass: full 3-point Qc(span)
+                    # curve-shape check for Tusek AMR(A) V*=0.95 (the one digitized
+                    # curve whose anchor point calibrates -- see that function's
+                    # docstring for why only this AMR/V* combo is checked here).
+                    # Reads data/tusek_ate2013_figs/fig10_data.csv directly rather
+                    # than going through the CSV benchmark rows, since
+                    # run_curve_validation() (called separately by step 12's fig15)
+                    # only ever compares one companion point, not the full
+                    # digitized curve.
+                    validation_system.run_tusek_multipoint_curve_validation()
                 elif name.startswith("4."):
                     rows = run_baseline_sweep()
                     representative_row = next(

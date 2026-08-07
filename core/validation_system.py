@@ -100,14 +100,26 @@ confirmation of that existing single-point row, and the true source of
 the 1.69T/0.196kg point remains unidentified. Its Figs. 10-11 (Qc-vs-span
 and COP-vs-span for 3 AMR geometries at 3 flow ratios, 9 lines total) are
 genuine multi-point published characteristic curves in the Tusek-2010/
-Nielsen-2011 sense this module's docstring originally flagged as blocked
--- but extracting them requires pixel-calibrated digitization from the
-figure images, which was NOT done here (out of scope for this pass); a
-rough by-eye read is in `results/tusek_ate2013_figs_notes.md` for anyone
-picking this up, clearly marked as non-authoritative. So: the Tusek/
-Nielsen full-curve item is now unblocked for Tusek 2013 (paper in hand)
-but still not actually digitized, and Nielsen 2011 is still not in the
-repository at all.
+Nielsen-2011 sense this module's docstring originally flagged as blocked.
+
+ROADMAP.md Group A completion pass: Figs. 10-11 have now been properly
+pixel-calibrated and digitized (all 9 series, both figures -- see
+data/tusek_ate2013_figs/{fig10_data.csv,fig11_data.csv,notes.md}). This
+replaces the old non-authoritative `results/tusek_ate2013_figs_notes.md`
+by-eye read referenced above. The Tusek_singlebed_Gd_2010 CSV row now
+carries a genuinely digitized (span, Qc, COP) point (AMR (A.), V*=0.95)
+instead of the old unverified guess, plus a new companion row
+(Tusek_singlebed_Gd_2010_spanceiling) for the paper's directly-stated
+19.8K/0W span-ceiling point, both feeding the existing 2-point
+run_curve_validation() mechanism below. The FULL 3-point-per-curve shape
+(not just a 2-point companion pair) is validated separately by
+`run_tusek_multipoint_curve_validation()` near the end of this module,
+which found a genuine model limitation: this repo's single-Tc 0-D
+Qc(span) curve is non-monotonic at the calibrated mdot for at least one
+V* condition, unlike the real device's smoothly-falling "cooling line"
+-- see that function's and its tests' docstrings. Nielsen 2011 is still
+not in the repository at all, so that half of the original "Tusek-2010/
+Nielsen-2011 curve" item remains open.
 """
 
 import csv
@@ -500,6 +512,102 @@ def run_field_sensitivity_check(verbose=True, device_group="ChubuToshiba_Gd_2016
     return out
 
 
+TUSEK_FIG10_CSV = "data/tusek_ate2013_figs/fig10_data.csv"
+
+
+def _load_tusek_curve(amr="A", v_star=0.95, csv_path=TUSEK_FIG10_CSV):
+    """Load one digitized (span_K, Qc_W) curve -- one AMR geometry at one
+    V* flow ratio -- from data/tusek_ate2013_figs/fig10_data.csv, sorted by
+    span. See that directory's notes.md for the digitization methodology
+    and uncertainty estimate."""
+    pts = []
+    with open(csv_path) as f:
+        for r in csv.DictReader(f):
+            if r["amr"] == amr and abs(float(r["V_star"]) - v_star) < 1e-6:
+                pts.append((float(r["span_K"]), float(r["Qc_W"]), r["point_role"]))
+    pts.sort(key=lambda t: t[0])
+    return pts
+
+
+def run_tusek_multipoint_curve_validation(verbose=True, amr="A", v_star=0.95):
+    """Multi-point Qc(span) curve-shape validation using Tusek et al.
+    (2013)'s digitized Figs. 10-11 data (ROADMAP.md Group A, step 8).
+
+    This is genuinely different in shape from run_curve_validation()'s
+    2-point anchor/companion check: at a FIXED V* (fluid-flow ratio) and
+    frequency, a single physical AMR sweeps through several (span, Qc)
+    operating points as the applied cooling load is varied (Fig. 10's
+    "cooling line") -- so a single calibrated mdot should, in principle,
+    reproduce every point on that same V*'s curve, not just one companion.
+
+    Method: calibrate mdot on the FIRST (lowest-span, highest-Qc) point of
+    the chosen AMR/V* curve, then use that same mdot/mass/frequency/field
+    system to predict Qc at every OTHER digitized span on that curve, and
+    compare against the digitized value. Unlike run_curve_validation(),
+    this does not go through the CSV benchmark rows or device_group
+    mechanism at all -- it reads the digitized curve data directly, since
+    (per the module docstring) forcing >2 same-device points through the
+    CSV's anchor/companion pairing would only ever check the first extra
+    point, silently discarding the rest.
+
+    Only AMR (A.) at V*=0.95 is validated point-by-point here because it
+    is the only one of the 9 digitized curves whose first point calibrates
+    a reachable mdot under this repo's model (see the CSV source note on
+    Tusek_singlebed_Gd_2010 for why the other 8 curves' points were left
+    out of the single-point CSV row) -- the same field/mass/frequency
+    reachability limits documented throughout this module apply per-point,
+    not just per-device, so most of the other 8 curves would report "no
+    calibration found" at their own first point too. This function accepts
+    amr/v_star arguments so any other curve can be checked the same way as
+    more of this repo's reachability range is extended.
+    """
+    pts = _load_tusek_curve(amr=amr, v_star=v_star)
+    if len(pts) < 2:
+        if verbose:
+            print(f"Tusek AMR({amr}) V*={v_star}  fewer than 2 digitized points -- skipped")
+        return {"amr": amr, "v_star": v_star, "status": "fewer than 2 points"}
+
+    anchor_span, anchor_Qc, _ = pts[0]
+    row = {"device_group": f"Tusek_fig10_AMR{amr}_Vstar{v_star}",
+           "span_K": str(anchor_span), "Qc_W": str(anchor_Qc),
+           "mu0H_T": "1.15", "mass_MCM_kg": "0.1763", "frequency_Hz": "0.3",
+           "material": "Gd (packed bed - AMR A, 0.1mm parallel plates)"}
+    cal = _calibrate_mdot(row)
+    if cal is None:
+        if verbose:
+            print(f"Tusek AMR({amr}) V*={v_star}  no calibration found at anchor "
+                  f"span={anchor_span}K -- skipped, not silently dropped")
+        return {"amr": amr, "v_star": v_star, "status": "no calibration found at anchor point"}
+    mdot_cal, sys_ = cal
+    t_cold = _t_cold_for_row(row)
+
+    if verbose:
+        print(f"Tusek AMR({amr}) V*={v_star}  anchor span={anchor_span:5.2f}K "
+              f"Qc={anchor_Qc:5.2f}W -> calibrated mdot={mdot_cal:.4f}kg/s")
+
+    predictions = []
+    for span, Qc_lit, role in pts[1:]:
+        Qc_model, _ = sys_.cooling_capacity(t_cold, span)
+        if Qc_lit > 0:
+            err_pct = 100 * (Qc_model - Qc_lit) / Qc_lit
+            err_str = f"{err_pct:+.1f}%"
+        else:
+            err_pct = None
+            err_str = f"{Qc_model:+.2f}W (lit=0, undefined %)"
+        predictions.append({"span_K": span, "Qc_lit_W": Qc_lit,
+                             "Qc_model_W": round(Qc_model, 2),
+                             "Qc_error_pct": round(err_pct, 1) if err_pct is not None else None,
+                             "point_role": role})
+        if verbose:
+            print(f"{'':<10} predict span={span:5.2f}K ({role}): model={Qc_model:6.2f}W  "
+                  f"lit={Qc_lit:6.2f}W  err={err_str}")
+
+    return {"amr": amr, "v_star": v_star, "status": "ok",
+            "anchor_span_K": anchor_span, "anchor_Qc_W": anchor_Qc,
+            "mdot_calibrated_kg_s": round(mdot_cal, 4),
+            "predictions": predictions}
+
+
 if __name__ == "__main__":
     print("System-level validation against published AMR prototype data")
     print("=" * 110)
@@ -569,3 +677,8 @@ if __name__ == "__main__":
           "Part 3, §1's Cooltech 42K stress test, among others)")
     print("=" * 110)
     run_capacity_only_calibration_check()
+
+    print("\n" + "=" * 110)
+    print("Tusek et al. (2013) multi-point Qc(span) curve validation (ROADMAP.md Group A)")
+    print("=" * 110)
+    run_tusek_multipoint_curve_validation()
