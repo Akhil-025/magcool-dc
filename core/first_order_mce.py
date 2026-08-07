@@ -99,6 +99,29 @@ the only one, and note the real spread when citing this in the paper.
      model property (not a bug) -- do not "fix" it by shifting Tc to
      equal a target operating temperature; composition_tuned_material()
      already accounts for it by construction.
+  4. Phase 16 addition: `hysteresis_loss_J_per_kg` quantifies the
+     irreversible thermal hysteresis loss of the first-order transition
+     itself -- energy dissipated per kg of magnetocaloric material per
+     FULL magnetization/demagnetization loop, i.e. per AMR cycle. This
+     model's entropy/DeltaT_ad machinery above computes the EQUILIBRIUM
+     (globally-minimizing, reversible) branch through the transition by
+     construction (see the class-level "Equilibrium m(tau,h)" note) --
+     it has no notion of hysteresis at all on its own. Before Phase 16,
+     this was a documented but entirely UNQUANTIFIED honesty flag (see
+     the module docstring's hysteresis mention and cascade.py's/
+     giguere_validation.py's prose-only caveats). It is now a real
+     number, attached per-material below, that
+     core.amr_cycle.AMRSystem.run() adds to W_parasitic as
+     hysteresis_loss_J_per_kg * mass_regenerator * frequency -- see that
+     module's _hysteresis_power_W() docstring for the full accounting
+     rationale and honesty flags on THAT side of the wiring.
+     GADOLINIUM (mce_material.py, second-order/mean-field) is not
+     touched by this addition and implicitly carries 0.0 (via getattr's
+     default in amr_cycle.py) -- a continuous, second-order transition
+     is genuinely (not just approximately) free of thermal hysteresis,
+     which is precisely why Gd is the "near-zero hysteresis" reference
+     material Kitanovski et al. (2015) Section 2.1.4 uses to frame this
+     whole selection criterion.
 """
 
 import numpy as np
@@ -132,6 +155,23 @@ class FirstOrderMCEMaterial:
     # Default 1.0 preserves the module's originally documented (uncorrected)
     # calibration for GD5SI2GE2_FIRST_ORDER below; composition_tuned_material()
     # sets this to core.giguere_validation.DTAD_CORRECTION_FACTOR by default.
+    hysteresis_loss_J_per_kg: float = 0.0
+    # Phase 16 addition (see module docstring honesty flag #4). Irreversible
+    # energy dissipated per kg of material per full field-up/field-down
+    # hysteresis loop (i.e. per AMR cycle), in J/kg -- the same quantity
+    # several MCE papers report directly (e.g. as "Wy_peak" or "hysteresis
+    # loss" alongside DeltaS_M), so this is a DIRECTLY citable literature
+    # number for each family below, not a derived/converted one. Default
+    # 0.0 preserves old behavior for any FirstOrderMCEMaterial instance
+    # that predates this field (dataclass default -- no call site breaks).
+    # This is a SINGLE fixed value per family (same simplifying assumption
+    # already used for A/B/C, theta_D, M_molar, n_atoms_per_fu): real
+    # hysteresis loss is strongly composition-dependent (see e.g. the
+    # MNFEPSI_FIRST_ORDER block comment below, where the source literature
+    # shows roughly a 3x swing in Wy_peak across a comparable composition
+    # range), so composition_tuned_material()-style tuned instances below
+    # inherit their base family's value UNCHANGED across the whole tuned
+    # Tc range -- flagged per-family where set.
 
     def __post_init__(self):
         self.N = NA / self.M_molar
@@ -200,6 +240,28 @@ GD5SI2GE2_FIRST_ORDER = FirstOrderMCEMaterial(
            "at 5T (Pecharsky & Gschneidner 1997; Gschneidner & Pecharsky "
            "review); NOT independently validated against a second dataset "
            "(see module docstring honesty flag #2).",
+    hysteresis_loss_J_per_kg=8.0,
+    # Phase 16, honesty flag #4. Undoped, stoichiometric Gd5Si2Ge2 is the
+    # textbook "large hysteresis" first-order magnetocaloric material --
+    # Provenzano, Shapiro & Shull, Nature 429, 853-857 (2004) report a
+    # >90% REDUCTION in hysteresis loss upon 2% Fe-doping (i.e. the
+    # undoped baseline this repo's GD5SI2GE2_FIRST_ORDER represents is
+    # the LARGE-hysteresis end, not the doped/optimized one), and Biswas,
+    # Pathak, McDannald, Barua & Pecharsky, J. Appl. Phys. 126, 243902
+    # (2019) directly report a 5 K thermal hysteresis width (TC=265 K on
+    # heating) for the stoichiometric compound. Neither paper's exact
+    # J/kg hysteresis-loss FIGURE (as opposed to the qualitative ">90%
+    # reduction" and the 5 K width) was extracted for this pass -- 8.0
+    # J/kg is an order-of-magnitude placeholder consistent with the
+    # handful of directly-reported Wy_peak-style hysteresis-loss values
+    # surveyed across comparable first-order giant-MCE compounds (roughly
+    # 5-60 J/kg depending on composition/hysteresis width -- see the
+    # MNFEPSI_FIRST_ORDER block comment below for a directly-tabulated
+    # example of that range), NOT a value read off this exact compound's
+    # own hysteresis loop. Treat this the same way theta_D=200K above is
+    # treated: a placeholder pending a targeted re-read of Provenzano et
+    # al. (2004) Figure 3 ("Comparison of hysteresis losses") for the
+    # actual J/kg value, not a literature-measured number.
 )
 
 # --- La(Fe,Si)13Hy (itinerant-electron metamagnetic giant-MCE family) ---
@@ -273,6 +335,28 @@ LAFESIH_FIRST_ORDER = FirstOrderMCEMaterial(
            "values -- see the block comment above for exact provenance of each "
            "parameter and its honesty flags. NOT independently validated "
            "against a second dataset (same caveat as GD5SI2GE2_FIRST_ORDER).",
+    hysteresis_loss_J_per_kg=12.3,
+    # Phase 16, honesty flag #4. Prusty, Molleti, Takanobu, Malladi &
+    # Sepehri-Amin, Sci. Technol. Adv. Mater. (2025), doi:10.1080/
+    # 14686996.2025.2525742 ("Reduced hysteresis in La0.7Ce0.3Fe11.5Si1.5
+    # hydrides by grain size reduction") directly report hysteresis losses
+    # of 12.3 J/kg (conventional-cast precursor) rising to 34 J/kg upon
+    # Ce-substitution, for a La-Ce-Fe-Si-H composition -- NOT the exact
+    # La(Fe0.90Si0.10)13H1.1 composition calibrated above (no Ce), so 12.3
+    # J/kg (the lower end of that paper's own range) is used here as the
+    # closer analog, not an exact match. NOTE this is NOT necessarily
+    # lower than GD5SI2GE2_FIRST_ORDER's 8.0 J/kg placeholder above in
+    # any validated sense -- the qualitative "La(Fe,Si)13Hy has lower
+    # hysteresis" framing common in the review literature (e.g. Scheibel
+    # et al., Phil. Trans. R. Soc. A 374, 20150308 (2016)) is usually
+    # stated in terms of thermal hysteresis WIDTH (K), not dissipated
+    # energy (J/kg) -- the two are not the same quantity (J/kg depends on
+    # both loop width AND the loop's entropy amplitude, which differs by
+    # material), and this repo does not have a like-for-like J/kg
+    # comparison across all three families from a single consistent
+    # measurement protocol. Treat any "family X has lower hysteresis than
+    # family Y" comparison drawn from these three hysteresis_loss_J_per_kg
+    # values with real caution.
 )
 
 # --- Composition tunability of the Gd5(SixGe1-x)4 family, for the
@@ -342,6 +426,13 @@ def composition_tuned_material(Tc_target_K, apply_giguere_correction=True, name=
         n_atoms_per_fu=GD5SI2GE2_FIRST_ORDER.n_atoms_per_fu,
         A=GD5SI2GE2_FIRST_ORDER.A, B=GD5SI2GE2_FIRST_ORDER.B, C=GD5SI2GE2_FIRST_ORDER.C,
         dTad_correction=dTad_correction,
+        hysteresis_loss_J_per_kg=GD5SI2GE2_FIRST_ORDER.hysteresis_loss_J_per_kg,
+        # Phase 16: held fixed at the base-composition placeholder value
+        # (same simplifying assumption as A/B/C/theta_D/M_molar above) --
+        # NOT re-derived per target Tc. See FirstOrderMCEMaterial's
+        # hysteresis_loss_J_per_kg field docstring for why this is
+        # explicitly flagged as likely wrong in DETAIL (though probably
+        # right in ORDER OF MAGNITUDE) across the tuned Tc range.
         source="Composition-tuned analog of Gd5Si2Ge2 -- (A,B,C)/theta_D/M_molar held "
                "fixed at the Gd5Si2Ge2 calibration (approximation, see docstring); Tc "
                "tunability range from Pecharsky & Gschneidner, Appl. Phys. Lett. 70, "
@@ -419,6 +510,13 @@ def lafesih_composition_tuned_material(Tc_target_K, name=None):
         n_atoms_per_fu=LAFESIH_FIRST_ORDER.n_atoms_per_fu,
         A=LAFESIH_FIRST_ORDER.A, B=LAFESIH_FIRST_ORDER.B, C=LAFESIH_FIRST_ORDER.C,
         dTad_correction=LAFESIH_FIRST_ORDER.dTad_correction,
+        hysteresis_loss_J_per_kg=LAFESIH_FIRST_ORDER.hysteresis_loss_J_per_kg,
+        # Phase 16: held fixed at the base-composition placeholder value,
+        # same caveat as composition_tuned_material() above -- real
+        # La(Fe,Si)13Hy hysteresis is known to vary with BOTH Si content
+        # and H loading (LAFESIH_FIRST_ORDER's own docstring), which is
+        # exactly the axis this function tunes, so this is a real
+        # approximation, not a conservative one in either direction.
         source="Composition-tuned analog of La(Fe0.90Si0.10)13H1.1 -- (A,B,C)/"
                "theta_D/M_molar held fixed at the LAFESIH_FIRST_ORDER calibration "
                "(approximation, see docstring); Tc tunability range is a general "
@@ -531,6 +629,30 @@ MNFEPSI_FIRST_ORDER = FirstOrderMCEMaterial(
            "literature values -- see the block comment above for exact provenance of "
            "each parameter and its honesty flags. NOT independently validated against "
            "a second dataset (same caveat as GD5SI2GE2_FIRST_ORDER/LAFESIH_FIRST_ORDER).",
+    hysteresis_loss_J_per_kg=25.0,
+    # Phase 16, honesty flag #4. The source paper (Hanggai et al. 2026)
+    # itself was not found to report a hysteresis-loss J/kg number in the
+    # material already extracted for this codebase. As a directly-relevant
+    # proxy, Zhang et al., arXiv:2312.09341 ("Giant magnetocaloric effect
+    # and hysteresis loss in MnxFe2-xP0.5Si0.5 (x=0.7-1.2) microwires")
+    # report a full Wy_peak-vs-composition table for a closely related
+    # Fe2P-type Mn-Fe-P-Si system, showing hysteresis loss RISING with Mn
+    # content: 19.6 J/kg at x=0.8 (Tc=351K) up to 60.7 J/kg at x=0.9
+    # (Tc=298.5K), then back down to 28.9 J/kg at x=1.2 (Tc=190K) -- i.e.
+    # a non-monotonic, composition-sensitive quantity, NOT a simple
+    # trend line this repo's Tc-only composition_tuned_material() pattern
+    # could safely interpolate. MNFEPSI_FIRST_ORDER (x=0.08 in the
+    # Hanggai Mn0.60+xFe1.3-x parameterization, TC=331.2K -- a DIFFERENT
+    # composition axis than Zhang et al.'s x) is the HIGH-Mn/Si, HIGH-Tc
+    # end of its own family's tested range, which is qualitatively the
+    # same direction (higher Mn substitution, higher Tc) as Zhang et
+    # al.'s higher-hysteresis compositions -- 25.0 J/kg is a
+    # mid-to-upper-range placeholder from that table, not a value read
+    # off the actual Hanggai composition's own hysteresis loop. Treat
+    # this as the least-grounded of the three hysteresis_loss_J_per_kg
+    # values in this module (proxy system, not even the same composition
+    # axis), pending a targeted re-read of the Hanggai et al. (2026)
+    # paper itself for a direct number.
 )
 
 
@@ -571,6 +693,15 @@ def mnfepsi_composition_tuned_material(Tc_target_K, name=None):
         n_atoms_per_fu=MNFEPSI_FIRST_ORDER.n_atoms_per_fu,
         A=MNFEPSI_FIRST_ORDER.A, B=MNFEPSI_FIRST_ORDER.B, C=MNFEPSI_FIRST_ORDER.C,
         dTad_correction=MNFEPSI_FIRST_ORDER.dTad_correction,
+        hysteresis_loss_J_per_kg=MNFEPSI_FIRST_ORDER.hysteresis_loss_J_per_kg,
+        # Phase 16: held fixed at the base-composition placeholder value.
+        # This is the LEAST-grounded of the three tuned_fn hysteresis
+        # values to begin with (see MNFEPSI_FIRST_ORDER's own block
+        # comment -- proxy system, different composition axis), and the
+        # directly-tabulated Zhang et al. proxy data it's based on is
+        # markedly NON-monotonic in composition, so holding it fixed
+        # across this function's whole Tc-tuning range is a weaker
+        # assumption here than for either other family.
         source="Composition-tuned analog of Mn0.68Fe1.22P0.62Si0.38 -- (A,B,C)/"
                "theta_D/M_molar held fixed at the MNFEPSI_FIRST_ORDER calibration "
                "(approximation, see docstring); Tc tunability range is directly "

@@ -4,18 +4,19 @@ Physics-based simulation suite evaluating **magnetocaloric (magnetic) cooling
 for data centers**, benchmarked against vapor-compression CRAC/CRAH and
 direct liquid cooling.
 
-## Status: Phase 13 (paper-mining pass part 6: traced/corrected the `DTU_rotary_Gd_2016` citation, promoted `DTU_Eriksen_rotary_Gd_2015` into the CORE calibration slot) done, Phase 14 (bug fixes: corrected a mean-field-vs-first-order GD5SI2GE2 material mixup in the cascade comparison/fig20/cascade.py demo; added `core/material_family_comparison.py`, a four-way Gd/Gd5Si2Ge2/GD-family/LAFESIH-family/MNFEPSI-family ranking at the same ASHRAE point, wired into `main.py` step 8d and `plots.py` fig26; documented the `span_fraction` linear-clamp approximation rather than inventing an unsourced smoothing function; confirmed the full-system BOM cost gap, reference-book OCR, and two flagged CSV rows are already correctly left open/flagged, no change needed; Tušek et al. (2013) Figs. 10-11 digitization still open, being done manually in WebPlotDigitizer; 170/170 tests passing) done, **Phase 15 (a full-system BOM cost model in `core/economics.py` — soft-magnetic-yoke cost, an order-of-magnitude full-system-cost estimate, and a CRF-based levelized cost of cooling; confirmed the multi-bed-rotary-vs-reciprocating loss question was already answered by existing `RotaryDriveLossModel`/`analyze_parasitic_fraction_scaling` infrastructure, no new term needed; a Hypereg-style parallel-hydraulic pumping-power analysis (`core/hypereg_analysis.py`), grounded in a direct reading of Klinar et al. (2024); and material+geometry co-optimization inside NSGA-III (`core/optimize.py`) — particle diameter as a 7th design variable wired through `core/amr_cycle.py`'s new geometry-aware pumping-power accounting, and material family as a per-family NSGA-III search merged post-hoc into one Pareto front; 153/153 tests passing. **Note**: `core/design_recommendations.py`, referenced in the original Phase 15 plan, does not exist in this project snapshot — see `ROADMAP.md` Phase 15 item 1 for the flagged discrepancy)** done — see `ROADMAP.md`
+## Status: Phase 13 (paper-mining pass part 6: traced/corrected the `DTU_rotary_Gd_2016` citation, promoted `DTU_Eriksen_rotary_Gd_2015` into the CORE calibration slot) done, Phase 14 (bug fixes: corrected a mean-field-vs-first-order GD5SI2GE2 material mixup in the cascade comparison/fig20/cascade.py demo; added `core/material_family_comparison.py`, a four-way Gd/Gd5Si2Ge2/GD-family/LAFESIH-family/MNFEPSI-family ranking at the same ASHRAE point, wired into `main.py` step 8d and `plots.py` fig26; documented the `span_fraction` linear-clamp approximation rather than inventing an unsourced smoothing function; confirmed the full-system BOM cost gap, reference-book OCR, and two flagged CSV rows are already correctly left open/flagged, no change needed; Tušek et al. (2013) Figs. 10-11 digitization still open, being done manually in WebPlotDigitizer; 170/170 tests passing) done, Phase 15 (a full-system BOM cost model in `core/economics.py` — soft-magnetic-yoke cost, an order-of-magnitude full-system-cost estimate, and a CRF-based levelized cost of cooling; confirmed the multi-bed-rotary-vs-reciprocating loss question was already answered by existing `RotaryDriveLossModel`/`analyze_parasitic_fraction_scaling` infrastructure, no new term needed; a Hypereg-style parallel-hydraulic pumping-power analysis (`core/hypereg_analysis.py`), grounded in a direct reading of Klinar et al. (2024); and material+geometry co-optimization inside NSGA-III (`core/optimize.py`) — particle diameter as a 7th design variable wired through `core/amr_cycle.py`'s new geometry-aware pumping-power accounting, and material family as a per-family NSGA-III search merged post-hoc into one Pareto front; 153/153 tests passing. **Note**: `core/design_recommendations.py`, referenced in the original Phase 15 plan, does not exist in this project snapshot — see `ROADMAP.md` Phase 15 item 1 for the flagged discrepancy) done, **Phase 16 (thermal-hysteresis loss quantified for the first time: new `hysteresis_loss_J_per_kg` field on `FirstOrderMCEMaterial` [core/first_order_mce.py], literature-analog placeholder values for all three first-order families (each heavily honesty-flagged), wired into `AMRSystem.run()` [core/amr_cycle.py] as an additional parasitic-power term; new `core/hysteresis_sensitivity.py` A/B diagnostic asks whether Phase 15's "100% La(Fe,Si)13Hy" merged-front result survives — result: front composition DID shift, but in the opposite direction than naively expected (MORE La(Fe,Si)13Hy-dominant, not less), confirmed to be a genuine NSGA-III search-dynamics effect rather than a bug via an independent fixed-design-point sanity check; open item flagged for a full-resolution rerun; 216/216 tests passing)** done — see `ROADMAP.md`
 
 ## What's implemented
 
 | Module | Purpose |
 |---|---|
 | `core/mce_material.py` | Mean-field (Brillouin/Weiss) model for continuous-transition materials (Gd, La0.7Ca0.3MnO3); Gd validated, Gd5Si2Ge2 flagged as invalid for this framework |
-| `core/first_order_mce.py` | Extended (6th-order) Landau model for first-order/giant-MCE materials: Gd5Si2Ge2, La(Fe,Si)13Hy, and (Mn,Fe)2(P,Si) |
+| `core/first_order_mce.py` | Extended (6th-order) Landau model for first-order/giant-MCE materials: Gd5Si2Ge2, La(Fe,Si)13Hy, and (Mn,Fe)2(P,Si) — **Phase 16: added `hysteresis_loss_J_per_kg` field (literature-analog placeholder values, heavily honesty-flagged per family; 0.0 default preserves old behavior)** |
 | `core/giant_mce_analysis.py` | Formal Gd vs. giant-MCE comparison → `results/giant_mce_analysis.txt` |
 | `core/material_family_comparison.py` | Four-way material family ranking (Gd, Gd5Si2Ge2-fixed, and the three composition-tunable families) at the same ASHRAE point → `results/material_family_comparison.csv`/`.txt`, fig26 (Phase 14) |
 | `core/emissions.py` | Refrigerant-free GWP/emissions comparison |
-| `core/amr_cycle.py` | 0-D AMR cycle model: cooling capacity, ideal/electrical COP, optional NTU-derived effectiveness, optional blow-fraction asymmetry (Phase 10) — **Phase 15: optional `particle_diameter`/`bed_cross_section_area`/`hypereg_n_parallel` params wire regenerator geometry into both the NTU effectiveness calculation and a geometry-explicit pumping-power term that replaces (not adds to) the generic loss-model `k_pump` term; `None` by default, fully backward-compatible** |
+| `core/amr_cycle.py` | 0-D AMR cycle model: cooling capacity, ideal/electrical COP, optional NTU-derived effectiveness, optional blow-fraction asymmetry (Phase 10) — **Phase 15: optional `particle_diameter`/`bed_cross_section_area`/`hypereg_n_parallel` params wire regenerator geometry into both the NTU effectiveness calculation and a geometry-explicit pumping-power term that replaces (not adds to) the generic loss-model `k_pump` term; `None` by default, fully backward-compatible. Phase 16: `_hysteresis_power_W()` adds `hysteresis_loss_J_per_kg * mass_regenerator * frequency` to `W_parasitic` unconditionally (both the loss_model and constant-parasitic_fraction paths); 0.0 for GADOLINIUM** |
+| `core/hysteresis_sensitivity.py` | **Phase 16 addition**: A/B comparison of `core.optimize.run_optimization()`'s merged Pareto front with material hysteresis loss on vs. forced off, to check whether Phase 15's "100% La(Fe,Si)13Hy" finding is robust to it → `results/hysteresis_sensitivity.txt` |
 | `core/thermal.py` | NTU packed-bed regenerator effectiveness model, packed-bed/parallel-plate pumping power (Tušek et al. 2013) — **Phase 15: added `pumping_power_packed_bed_hypereg()`, a parallel-sub-regenerator pressure-drop-reduction variant motivated by Klinar et al. (2024)** |
 | `core/hypereg_analysis.py` | **Phase 15 addition**: demonstrates the Hypereg parallel-hydraulic pumping-power benefit at this repo's representative operating point → `results/hypereg_analysis.txt`, `results/hypereg_findings.md` |
 | `core/loss_model.py` | State-dependent eddy/pumping/base loss model — **Phase 6: added a 4th benchmark device and found the extended fit is unstable (negative coefficients, leave-one-out errors up to +1639%); production default stays on the stable 3-point CORE fit, instability documented via `run_extended_diagnostic()`. Phase 15: `parasitic_power()` gained a `pumping_power_override` parameter (default `None` = unchanged behavior) so `amr_cycle.py` can substitute a geometry-explicit pumping term without double-counting against the generic `k_pump` term; confirmed the rotary-vs-reciprocating loss-topology question was already closed by the existing `RotaryDriveLossModel`/`analyze_parasitic_fraction_scaling`, documented rather than duplicated** |
@@ -44,6 +45,7 @@ python -m core.sensitivity                  # Sobol, Phase 2 vs. Phase 3 modes
 python -m core.rsm                           # RSM surrogate for cooling capacity
 python -m core.optimize                       # NSGA-III Pareto front — Phase 15: material + geometry co-optimized, grounded BOM cost model
 python -m core.cascade                         # multi-stage cascade, Gd vs. Gd5Si2Ge2
+python -m core.hysteresis_sensitivity          # Phase 16: hysteresis-on-vs-off A/B check of the Phase 15 material finding
 python main.py                                   # full pipeline: validation, economics/BOM, cascade, sensitivity, optimization, 26 figures
 ```
 
@@ -121,6 +123,51 @@ already answered by existing infrastructure
 (`core.loss_model.RotaryDriveLossModel`,
 `analyze_parasitic_fraction_scaling()`) — documented explicitly rather
 than duplicated; see `core/loss_model.py`'s module docstring.
+
+## Phase 16 findings
+
+Full writeup and honesty flags in `ROADMAP.md`'s Phase 16 section;
+summary here.
+
+**Hysteresis loss, quantified for the first time** (`core/first_order_mce.py`,
+`core/amr_cycle.py`): thermal-hysteresis loss — real, irreversible energy
+dissipated each cycle by first-order materials, which Gd genuinely does
+not pay — was previously a documented but entirely unquantified honesty
+flag (prose caveats only). It is now a real number
+(`hysteresis_loss_J_per_kg`, literature-analog values for all three
+first-order families, each heavily flagged as approximate — see
+`core/first_order_mce.py`) that adds `hysteresis_loss_J_per_kg * mass *
+frequency` to `W_parasitic` in `AMRSystem.run()`, lowering
+`COP_electrical` for every first-order material while leaving Gd
+untouched. A direct fixed-design sanity check confirms the mechanism
+itself is correct and correctly-signed (COP_electrical dropped from
+9.877→9.212 at one representative design point, exactly matching the
+expected 218.2W hysteresis penalty).
+
+**Does Phase 15's "100% La(Fe,Si)13Hy" result survive?**
+(`core/hysteresis_sensitivity.py`, `results/hysteresis_sensitivity.txt`):
+run at reduced NSGA-III settings (`pop_size=32, n_gen=15` — smaller than
+`run_optimization()`'s own 40/25 production default, purely for
+wall-clock reasons), the merged front's La(Fe,Si)13Hy share went from
+88% (hysteresis off) to **100%** (hysteresis on) — the opposite of the
+naively expected direction. This is a genuine NSGA-III search-dynamics
+effect (the loss term reshapes each material's own per-family Pareto
+front rather than uniformly shifting every point downward, since it
+scales with `mass * frequency` rather than being a flat penalty), not a
+bug — but it was only checked at reduced search resolution. **Open item**:
+rerun `core.hysteresis_sensitivity.run_hysteresis_sensitivity()` at full
+production settings (and multiple seeds) to check whether this reversal
+is stable or is itself search noise at the reduced setting.
+
+**What this phase deliberately left open**: none of the three
+`hysteresis_loss_J_per_kg` values are read directly off the actual
+calibrated compositions' own measured hysteresis loops (all three are
+literature analogs for related-but-different compositions, weakest for
+the Mn-Fe-P-Si family); hysteresis is treated as a fixed per-family
+constant rather than varying with tuned Tc within a family; and it is
+accounted for as an additive parasitic-power term rather than folded
+into the ideal-cycle thermodynamics or exergy efficiency. See
+`ROADMAP.md`'s Phase 16 section for the full discussion.
 
 ## Phase 12 findings (paper-mining pass, part 3)
 

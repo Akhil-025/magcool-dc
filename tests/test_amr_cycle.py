@@ -103,3 +103,90 @@ def test_amr_run_is_reasonably_fast():
         sys_.run(291.0, 10.0)
     elapsed = time.time() - t0
     assert elapsed < 2.0, f"AMR evaluations took {elapsed:.2f}s for 100 calls (expected <2s)"
+
+
+# --- Phase 16: hysteresis loss wiring ----------------------------------
+
+def test_hysteresis_power_is_zero_for_gadolinium():
+    """GADOLINIUM (core.mce_material.MagnetocaloricMaterial) has no
+    hysteresis_loss_J_per_kg attribute at all -- getattr's default must
+    make _hysteresis_power_W() return exactly 0.0, so every pre-Phase-16
+    Gd-based result in this test file (make_system()'s own default
+    material) is completely unaffected by the Phase 16 addition."""
+    sys_ = make_system(mass_regenerator=8.0, frequency=2.0)
+    assert sys_._hysteresis_power_W() == 0.0
+
+
+def test_hysteresis_power_matches_formula_for_first_order_material():
+    """W_hys = hysteresis_loss_J_per_kg * mass_regenerator * frequency,
+    exactly -- direct formula check, independent of the rest of the AMR
+    cycle solve."""
+    from core.first_order_mce import lafesih_composition_tuned_material
+    mat = lafesih_composition_tuned_material(285.0)
+    sys_ = make_system(material=mat, mass_regenerator=6.0, frequency=3.0)
+    expected = mat.hysteresis_loss_J_per_kg * 6.0 * 3.0
+    assert sys_._hysteresis_power_W() == pytest.approx(expected)
+
+
+def test_hysteresis_power_scales_linearly_with_mass_and_frequency():
+    from core.first_order_mce import lafesih_composition_tuned_material
+    mat = lafesih_composition_tuned_material(285.0)
+    base = make_system(material=mat, mass_regenerator=5.0, frequency=1.0)
+    double_mass = make_system(material=mat, mass_regenerator=10.0, frequency=1.0)
+    double_freq = make_system(material=mat, mass_regenerator=5.0, frequency=2.0)
+    assert double_mass._hysteresis_power_W() == pytest.approx(2 * base._hysteresis_power_W())
+    assert double_freq._hysteresis_power_W() == pytest.approx(2 * base._hysteresis_power_W())
+
+
+def test_hysteresis_increases_w_parasitic_and_reduces_cop_electrical():
+    """End-to-end wiring check via run(): switching a first-order
+    material's hysteresis_loss_J_per_kg from its literature-placeholder
+    value to 0.0, with every other parameter held fixed, must (a) leave
+    Qc and W (magnetic work) unchanged, since hysteresis is accounted for
+    purely as an ADDITIONAL parasitic electrical load, not folded into
+    the ideal-cycle thermodynamics, and (b) strictly increase
+    W_parasitic and strictly decrease COP_electrical when hysteresis is
+    turned on."""
+    from core.first_order_mce import lafesih_composition_tuned_material
+    mat = lafesih_composition_tuned_material(285.3)
+    lm = StateDependentLossModel()
+    sys_ = AMRSystem(material=mat, mu0H_max=1.105, mass_regenerator=14.82,
+                      frequency=1.197, fluid_mdot=0.4131,
+                      regenerator_effectiveness=0.9, loss_model=lm,
+                      blow_fraction=0.41, particle_diameter=1.6991e-3,
+                      bed_cross_section_area=0.002)
+
+    original_hyst = mat.hysteresis_loss_J_per_kg
+    assert original_hyst > 0.0, "test fixture assumes a nonzero placeholder"
+    try:
+        r_on = sys_.run(291.0, 10.0)
+        mat.hysteresis_loss_J_per_kg = 0.0
+        r_off = sys_.run(291.0, 10.0)
+    finally:
+        mat.hysteresis_loss_J_per_kg = original_hyst
+
+    assert r_on.Qc == pytest.approx(r_off.Qc)
+    assert r_on.W_mag == pytest.approx(r_off.W_mag)
+    assert r_on.W_parasitic > r_off.W_parasitic
+    assert r_on.COP_electrical < r_off.COP_electrical
+    expected_delta = original_hyst * 14.82 * 1.197
+    assert (r_on.W_parasitic - r_off.W_parasitic) == pytest.approx(expected_delta, rel=1e-6)
+
+
+def test_hysteresis_power_included_in_no_loss_model_path_too():
+    """core.cascade.py's _single_stage() baseline helper builds an
+    AMRSystem WITHOUT a loss_model (using the constant parasitic_fraction
+    fallback). Phase 16 deliberately adds hysteresis power in run()
+    UNCONDITIONALLY (outside the `if self.loss_model is not None` branch)
+    so this path is not silently missed -- regression guard for that
+    specific wiring choice."""
+    from core.first_order_mce import lafesih_composition_tuned_material
+    mat = lafesih_composition_tuned_material(285.0)
+    sys_ = AMRSystem(material=mat, mu0H_max=1.5, mass_regenerator=6.0,
+                      frequency=2.0, fluid_mdot=0.3,
+                      regenerator_effectiveness=0.85, loss_model=None,
+                      parasitic_fraction=0.1)
+    result = sys_.run(291.0, 10.0)
+    expected_hyst = mat.hysteresis_loss_J_per_kg * 6.0 * 2.0
+    expected_base = sys_.parasitic_fraction * result.Qc
+    assert result.W_parasitic == pytest.approx(expected_base + expected_hyst)

@@ -116,7 +116,10 @@ class AMRCycleResult:
     Qc: float          # W, cooling capacity
     Qh: float           # W, heat rejected
     W_mag: float         # W, net magnetic (thermodynamic-cycle) work input
-    W_parasitic: float    # W, pump + motor-drive overhead (see note below)
+    W_parasitic: float    # W, pump + motor-drive overhead (see note below) --
+                            # Phase 16: also includes material thermal-
+                            # hysteresis loss (_hysteresis_power_W()), 0.0
+                            # for GADOLINIUM/pre-Phase-16 materials
     COP: float            # ideal magnetic-cycle-only COP (Qc / W_mag)
     COP_electrical: float  # device-level electrical COP (Qc / (W_mag + W_parasitic))
                              # -- this is the number comparable to published
@@ -265,6 +268,42 @@ class AMRSystem:
         self.hypereg_n_parallel = hypereg_n_parallel
         self._last_ntu_info = None
 
+    def _hysteresis_power_W(self):
+        """Phase 16 addition. Returns the parasitic electrical power (W)
+        attributable to irreversible thermal-hysteresis loss in the
+        regenerator material itself, computed as:
+
+            W_hys = material.hysteresis_loss_J_per_kg * mass_regenerator * frequency
+
+        i.e. the per-kg energy dissipated over one FULL field-up/field-down
+        hysteresis loop (see core.first_order_mce.FirstOrderMCEMaterial's
+        hysteresis_loss_J_per_kg field docstring for where these numbers
+        come from and their honesty flags) times the kg of material in the
+        bed times the number of loops per second. getattr(..., 0.0) means
+        this returns exactly 0.0 for GADOLINIUM (mce_material.py's
+        MagnetocaloricMaterial has no such field at all -- a genuinely,
+        not just approximately, hysteresis-free second-order transition)
+        and for any FirstOrderMCEMaterial instance that predates Phase 16,
+        so every pre-Phase-16 caller and test gets IDENTICAL numbers to
+        before this addition.
+
+        Modeling simplification, stated plainly: this treats hysteresis
+        loss as scaling with frequency the same way eddy-current loss
+        does (once per cycle, material-intrinsic, independent of Qc/span)
+        rather than folding it into magnetic_work()'s Carnot-referenced
+        ideal-work calculation or eta_2nd_law -- i.e. it is accounted for
+        as an ADDITIONAL parasitic electrical load, the same accounting
+        choice already used for eddy/pump/base losses in
+        core.loss_model.StateDependentLossModel. This is a reasonable
+        first-order treatment, not a claim that hysteresis loss is
+        electrically identical in character to eddy-current or pumping
+        loss -- see ROADMAP.md's Phase 16 entry for the full discussion
+        of why this accounting choice was made over folding it into
+        eta_2nd_law instead.
+        """
+        hysteresis_loss_J_per_kg = getattr(self.mat, "hysteresis_loss_J_per_kg", 0.0)
+        return hysteresis_loss_J_per_kg * self.m_reg * self.f
+
     def _blow_fraction_qc_multiplier(self):
         ref = BLOW_FRACTION_MASCHE
         return _blow_fraction_multiplier(
@@ -384,6 +423,15 @@ class AMRSystem:
                 pumping_power_override=pump_override)
         else:
             W_parasitic = self.parasitic_fraction * Qc
+        # Phase 16: hysteresis loss is added HERE, unconditionally, rather
+        # than threaded through loss_model.parasitic_power() -- this
+        # deliberately catches BOTH the loss_model and the constant-
+        # parasitic_fraction branches above with one code path (e.g.
+        # cascade.py's _single_stage() baseline helper does not pass a
+        # loss_model at all; it would otherwise silently miss this term).
+        # Returns 0.0 for GADOLINIUM and for any pre-Phase-16
+        # FirstOrderMCEMaterial -- see _hysteresis_power_W()'s docstring.
+        W_parasitic += self._hysteresis_power_W()
         Qh = Qc + W
         COP = Qc / W if W > 0 else 0.0
         COP_electrical = Qc / (W + W_parasitic) if (W + W_parasitic) > 0 else 0.0

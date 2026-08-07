@@ -27,6 +27,8 @@ in the repository in one pass, in dependency order, so a single
     10. RSM surrogate fit              (core/rsm.py)
     11. NSGA-III design optimization   (core/optimize.py, Phase 15: material +
         geometry co-optimization, per-material-family fronts merged post-hoc)
+    11b. Hysteresis sensitivity (ON/OFF Pareto-front A/B check, Phase 16)
+        (core/hysteresis_sensitivity.py)
     12. Figure generation (26 figures) (plots.py -> results/figures/*.png, *.pdf)
     13. Design-recommendations synthesis (core/design_recommendations.py) --
         consolidates steps 3c/7b/8d/9b/11's already-computed results into
@@ -104,6 +106,21 @@ snapshot -- it is present here (step 13 above already exists and
 integrates it), so that concern does not apply to this version of the
 file; if tests for it are still wanted, they can be added directly against
 this module's actual summarize_*_lever()/build_report() signatures.
+
+Phase 16 (see ROADMAP.md) added a quantified thermal-hysteresis loss term
+(core/first_order_mce.py's new hysteresis_loss_J_per_kg field,
+core/amr_cycle.py's AMRSystem._hysteresis_power_W()) for first-order MCE
+materials, which Phase 15's NSGA-III material selection had no visibility
+into at all. New step 11b (core/hysteresis_sensitivity.py) reruns
+optimize.run_optimization() twice at identical pop_size/n_gen/seed --
+once with each first-order candidate's hysteresis loss at its Phase-16
+literature-placeholder value, once forced to 0.0 (exactly reproducing
+pre-Phase-16 behavior) -- and reports how the merged Pareto front's
+material composition shifts as a result (results/hysteresis_sensitivity.txt).
+This is deliberately run at a smaller pop_size/n_gen than step 11's own
+production settings to keep pipeline runtime reasonable; see that
+module's docstring honesty flag #1 before treating its output as a
+settled, publication-quality answer rather than a directional check.
 """
 
 import logging
@@ -135,6 +152,7 @@ from core.first_order_mce import GD5SI2GE2_FIRST_ORDER
 from core import giguere_validation
 from core import geometry_analysis
 from core import hypereg_analysis
+from core import hysteresis_sensitivity
 from core import plots
 from core import design_recommendations
 from core import sensitivity as sensitivity_module
@@ -608,6 +626,9 @@ def main():
          lambda: rsm.fit_rsm()),
         ("11. NSGA-III multi-objective design optimization (material + geometry co-optimization, Phase 15 item 2)",
          None),  # handled specially below, result (pareto_rows) captured for step 13
+        ("11b. Hysteresis sensitivity: does Phase 16's thermal-hysteresis loss change the "
+         "Phase 15 material-selection result? (core/hysteresis_sensitivity.py, Phase 16)",
+         None),  # handled specially below, result (hysteresis_result) captured for the executive summary
         ("12. Figure generation: 26 figures covering validation, AMR curves, "
          "cascade/graded staging, sensitivity, RSM, NSGA-III, economics, emissions (plots.py)",
          None),  # handled specially below, reuses steps 7/7b/9/9b/11's results
@@ -627,6 +648,7 @@ def main():
     sobol_state_dependent_Si = None
     pb_best_cop_row = None
     pp_best_cop_row = None
+    hysteresis_result = None
 
     for name, fn in stages:
         _banner(name)
@@ -678,6 +700,8 @@ def main():
                     sobol_state_dependent_Si = fn()
                 elif name.startswith("9."):
                     sobol_const_Si = fn()
+                elif name.startswith("11b."):
+                    hysteresis_result = hysteresis_sensitivity.run_hysteresis_sensitivity()
                 elif name.startswith("11."):
                     pareto_rows = optimize_module.run_optimization()
                 elif name.startswith("12."):
@@ -731,17 +755,19 @@ def main():
                      "rsm_coefficients.txt, pareto_front.csv, "
                      "pareto_front_by_material/*.csv (Phase 15), "
                      "hypereg_analysis.txt (Phase 15), "
+                     "hysteresis_sensitivity.txt (Phase 16), "
                      "geometry_optimization_analysis.txt, graded_cascade_comparison.csv, "
                      "design_recommendations.txt, figures/*.png+*.pdf (26 figures)")
     logger.info(f"Full run log: {LOG_FILE}")
 
     _print_executive_summary(representative_row, cascade_rows_gd, graded_rows,
                               material_rows, pareto_rows, pb_best_cop_row,
-                              pp_best_cop_row, failures)
+                              pp_best_cop_row, hysteresis_result, failures)
 
 
 def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, material_rows,
-                              pareto_rows, pb_best_cop_row, pp_best_cop_row, failures):
+                              pareto_rows, pb_best_cop_row, pp_best_cop_row,
+                              hysteresis_result, failures):
     """Final, well-structured overview of every implemented analysis and
     its headline metric, printed once at the very end of the run so a
     reader does not have to scroll back through 13 stages of log output
@@ -831,6 +857,25 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
                     f"{best_cop['COP_electrical']} at f={best_cop['frequency_Hz']}Hz, "
                     f"material={best_cop.get('material', 'Gd')} "
                     f"(results/pareto_front.csv, results/pareto_front_by_material/*.csv)")
+    else:
+        logger.info("  - unavailable (stage failed or was skipped)")
+
+    logger.info("Hysteresis sensitivity: does Phase 16's thermal-hysteresis loss change the "
+                "Phase 15 material-selection result? (step 11b, Phase 16)")
+    if hysteresis_result and _ok("11b."):
+        counts_on = hysteresis_result["counts_on"]
+        counts_off = hysteresis_result["counts_off"]
+        rows_on = hysteresis_result["rows_on"]
+        rows_off = hysteresis_result["rows_off"]
+        lafesih_on = sum(n for label, n in counts_on.items() if "La(Fe,Si)13Hy" in label)
+        lafesih_off = sum(n for label, n in counts_off.items() if "La(Fe,Si)13Hy" in label)
+        frac_on = lafesih_on / len(rows_on) if rows_on else 0.0
+        frac_off = lafesih_off / len(rows_off) if rows_off else 0.0
+        logger.info(f"  - La(Fe,Si)13Hy share of merged front: {frac_off:.0%} (hysteresis OFF, "
+                    f"pre-Phase-16) -> {frac_on:.0%} (hysteresis ON, Phase 16) -- see "
+                    "results/hysteresis_sensitivity.txt and that module's docstring honesty "
+                    "flags 1-2 before treating this as a settled, publication-quality answer "
+                    "rather than a directional sensitivity check")
     else:
         logger.info("  - unavailable (stage failed or was skipped)")
 

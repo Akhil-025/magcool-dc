@@ -1332,19 +1332,47 @@ total after) passes.
 updated) and into `README.md`'s architecture/usage sections — see those
 files for the user-facing writeup.
 
-### Phase 16 candidates (not started)
-- A real bottom-up AMR-specific BOM (HX, pump, motor, controls
-  parts-and-labor), replacing item 5's order-of-magnitude vapor-
-  compression-AC-benchmark multiplier with an AMR-native estimate.
-- Revisit whether `regenerator_effectiveness` should be removed as a
-  design variable now that it's documented as inert under
-  `USE_NTU_THERMAL_MODEL=True` (see item 2's limitation note above), with
-  a CSV/plots.py schema migration plan.
-- A native mixed-variable (pymoo option (a)) material+geometry
-  co-optimization, if a design is ever found where the "compare finished
-  per-material fronts" approximation (option (b)'s documented limitation)
-  is suspected to matter.
-- Should Hypereg's benefit turn out non-negligible at a different
-  (e.g. higher-frequency, higher-mdot) operating point than the one
-  checked in `core/hypereg_analysis.py`, extend that sweep — nothing here
-  claims the modest benefit found at THIS operating point generalizes.
+Phase 16 candidates (not started)
+A real bottom-up AMR-specific BOM (HX, pump, motor, controls parts-and-labor), replacing item 5's order-of-magnitude vapor- compression-AC-benchmark multiplier with an AMR-native estimate.
+Revisit whether regenerator_effectiveness should be removed as a design variable now that it's documented as inert under USE_NTU_THERMAL_MODEL=True (see item 2's limitation note above), with a CSV/plots.py schema migration plan.
+A native mixed-variable (pymoo option (a)) material+geometry co-optimization, if a design is ever found where the "compare finished per-material fronts" approximation (option (b)'s documented limitation) is suspected to matter.
+Should Hypereg's benefit turn out non-negligible at a different (e.g. higher-frequency, higher-mdot) operating point than the one checked in core/hypereg_analysis.py, extend that sweep — nothing here claims the modest benefit found at THIS operating point generalizes.
+Phase 16: hysteresis loss quantification (completed)
+
+Motivation. Phase 15's merged, globally non-dominated Pareto front (results/pareto_front.csv) came out 100% La(Fe,Si)13Hy, a first-order material. Thermal hysteresis loss — real, irreversible energy dissipated each cycle by first-order materials, which Gd genuinely does not pay — was, until this phase, a documented but entirely UNQUANTIFIED honesty flag (prose-only caveats in core/cascade.py and core/giguere_validation.py). It was invisible to every objective the NSGA-III optimizer actually sees. This phase made it a real number.
+
+What changed
+
+core/first_order_mce.py: new hysteresis_loss_J_per_kg: float = 0.0 field on FirstOrderMCEMaterial (dataclass default — fully backward compatible with any pre-Phase-16 instance). Populated for all three calibrated first-order constants with literature-analog values, each heavily honesty-flagged in the same style as the existing A/B/C/ theta_D placeholders — see each constant's own block comment for full citation and caveats:
+GD5SI2GE2_FIRST_ORDER → 8.0 J/kg (order-of-magnitude placeholder; Provenzano, Shapiro & Shull, Nature 429, 853 (2004) and Biswas et al., J. Appl. Phys. 126, 243902 (2019), neither's exact J/kg figure extracted).
+LAFESIH_FIRST_ORDER → 12.3 J/kg (Prusty et al. 2025, Sci. Technol. Adv. Mater., La-Ce-Fe-Si-H — closest available proxy, not the exact calibrated composition).
+MNFEPSI_FIRST_ORDER → 25.0 J/kg (weakest-grounded of the three — Zhang et al. arXiv:2312.09341 Mn-Fe-P-Si microwire proxy, a DIFFERENT composition axis than the Hanggai et al. 2026 calibration this repo uses).
+GADOLINIUM (core/mce_material.py) untouched — a second-order, mean-field transition is genuinely (not approximately) hysteresis- free; carries an implicit 0.0 via getattr's default.
+Fixed a real bug found during implementation: all three *_composition_tuned_material() functions were constructing new FirstOrderMCEMaterial instances WITHOUT passing hysteresis_loss_J_per_kg through, which would have silently zeroed it out for every material optimize.py/cascade.py actually use (they always go through the tuned-material path, never the bare *_FIRST_ORDER constants directly). Now fixed to inherit the base family's value unchanged across the whole tuned Tc range (flagged as a real, composition-dependence-ignoring approximation in each function's own comment).
+core/amr_cycle.py: new AMRSystem._hysteresis_power_W() = hysteresis_loss_J_per_kg * mass_regenerator * frequency (returns 0.0 for GADOLINIUM). Wired UNCONDITIONALLY into run()'s W_parasitic — i.e. added on top of BOTH the loss_model path and the constant-parasitic_fraction fallback path, specifically because core/cascade.py's _single_stage() baseline helper builds an AMRSystem without a loss_model and would otherwise have missed this term entirely. Qc and W_mag are unaffected — hysteresis is accounted for purely as an additional parasitic electrical load, the same accounting choice already used for eddy/pump/base losses in core.loss_model.StateDependentLossModel, not folded into the ideal-cycle Carnot-referenced work or eta_2nd_law.
+New core/hysteresis_sensitivity.py: the actual validation deliverable. Runs core.optimize.run_optimization() twice at identical pop_size/n_gen/seed — hysteresis ON (current placeholder values) vs. forced OFF (0.0, i.e. exactly reproducing pre-Phase-16 behavior) — by temporarily mutating the three module-level *_FIRST_ORDER constants in place and restoring them in a finally block, then diffs the merged front's material composition. Writes results/hysteresis_sensitivity.txt.
+
+Result (pop_size=32, n_gen=15, seed=1 — reduced from run_optimization()'s own 40/25 production default; see the module's own honesty flag on why this should be rerun at full resolution before being treated as settled):
+
+Material	OFF (pre-Ph16)	ON (Ph16)
+Gd	1 (4%)	0 (0%)
+Gd5(SixGe1-x)4(-Ga) (tuned)	2 (8%)	0 (0%)
+La(Fe,Si)13Hy (tuned)	21 (88%)	20 (100%)
+
+This is the OPPOSITE of the naively expected direction — switching on a loss term that specifically penalizes first-order materials made the front more La(Fe,Si)13Hy-dominated, not less. Before accepting this at face value: a direct, non-optimizer, single-fixed-design-point sanity check confirms the underlying mechanism itself is correct and correctly-signed —
+
+Same design point (mu0H=1.105T, mass=14.82kg, f=1.197Hz, La(Fe,Si)13Hy):
+  hysteresis ON:  COP_electrical=9.212, W_parasitic=1723.82W
+  hysteresis OFF: COP_electrical=9.877, W_parasitic=1505.62W
+  delta W_parasitic = 218.20 W = 12.3 J/kg * 14.82 kg * 1.197 Hz  (exact match)
+
+i.e. at a FIXED design, hysteresis unambiguously hurts COP as expected. The front-level reversal is therefore a genuine NSGA-III search-dynamics effect, not a bug: W_hys scales with mass * frequency, not just a flat penalty, so switching it on reshapes each material's own per-material Pareto front (favoring different mass/frequency trade-off points), not merely shifts every point downward by a constant amount — at pop_size=32, n_gen=15 this reshaping evidently let a few La(Fe,Si)13Hy designs end up dominating the handful of Gd/Gd5Si2Ge2 points that survived the OFF run, rather than the reverse. Open item for whoever picks this up next: rerun core.hysteresis_sensitivity. run_hysteresis_sensitivity() at pop_size=40, n_gen=25 (or higher, with multiple seeds) to check whether this reversal is stable or is itself just search noise at the reduced setting — this was not done here purely for wall-clock-time reasons during this pass.
+
+Tests added: tests/test_first_order_mce.py (6 new — default-zero behavior, all three families carry positive values, all three *_tuned_material() functions correctly inherit the value, mutability guard), tests/test_amr_cycle.py (5 new — zero for Gd, formula match, linear scaling, full run() wiring incl. Qc/W_mag invariance, the no-loss_model-path regression guard), tests/test_hysteresis_sensitivity.py (5 new — state-restoration incl. under exception, output file contents, helper functions). Full suite: 216/216 passing (200 pre-Phase-16 + 16 new), zero regressions.
+
+What this phase deliberately did NOT do (real open items, not oversights):
+
+Did not replace ANY of the three hysteresis_loss_J_per_kg values with a number read directly off the ACTUAL calibrated composition's own measured hysteresis loop — all three are literature analogs for different (if related) compositions. This is explicitly flagged as the weakest link in the whole addition, worst for MNFEPSI (different composition axis entirely).
+Did not model composition-dependence of hysteresis loss within a tuned-material family (e.g. MNFEPSI's own proxy source shows a non-monotonic ~3x swing in hysteresis loss across a comparable composition range) — every tuned instance in a family inherits one fixed value regardless of its own tuned Tc.
+Did not fold hysteresis into magnetic_work()'s ideal-cycle thermodynamics or eta_2nd_law as an alternative accounting choice to the additive-W_parasitic treatment used here — see item 2 above.
+Did not re-run the sensitivity comparison at full pop_size=40, n_gen=25 resolution or with multiple seeds — see the open item called out in the Result section above.
