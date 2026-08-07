@@ -7,6 +7,7 @@ in the repository in one pass, in dependency order, so a single
 
     1.  Material-level validation      (core/validation.py)
     2.  System-level validation        (core/validation_system.py)
+    2b. Cycle-type validation sensitivity (core/validation_system.py, Phase 17)
     3.  Loss-model calibration report  (core/loss_model.py)
     3b. Regenerator thermal demo       (core/thermal.py)
     3c. Geometry-dependent pumping power (core/geometry_analysis.py, ROADMAP.md Phase 7 item)
@@ -121,6 +122,21 @@ This is deliberately run at a smaller pop_size/n_gen than step 11's own
 production settings to keep pipeline runtime reasonable; see that
 module's docstring honesty flag #1 before treating its output as a
 settled, publication-quality answer rather than a directional check.
+
+Phase 17 (see ROADMAP.md) added an AMR cycle-topology switch to
+core/amr_cycle.py's AMRSystem (`cycle_type`: "brayton" [default,
+pre-Phase-17 behavior], "ericsson", "carnot" -- see that module's
+CYCLE_TYPE_FACTORS for the honesty flag on these being illustrative,
+qualitatively-ordered multipliers, not a digitization of Kitanovski et
+al.'s own closed-form Sect. 4.1.1-4.1.4 relations, which this project's
+copy of that book does not include). New step 2b
+(validation_system.run_cycle_type_validation()) reruns the existing
+system-level COP validation with each rotary-drive benchmark device's
+cycle_type inferred as "ericsson" instead of the flat "brayton" default,
+and reports whether the per-device COP prediction error shrinks. A full
+NSGA-III categorical cycle_type search (mirroring how Phase 15 handled
+material family) was deliberately NOT added in this pass -- see
+ROADMAP.md's Phase 17 entry for why.
 """
 
 import logging
@@ -585,6 +601,9 @@ def main():
                   validation.run_curie_shift_check())),
         ("2. System-level validation vs. published AMR prototypes",
          None),  # handled specially below, result (system_validation_results) captured
+        ("2b. Cycle-type (Ericsson-like vs. Brayton-like) validation sensitivity "
+         "(core/validation_system.py, Phase 17)",
+         lambda: validation_system.run_cycle_type_validation()),
         ("3. Loss-model calibration (auto-loaded by AMRSystem's default loss model)",
          lambda: (loss_model.calibrate_loss_coefficients(), loss_model.run_extended_diagnostic())),
         ("3b. Regenerator thermal-effectiveness demo (core/thermal.py, reached transitively otherwise)",
@@ -756,6 +775,7 @@ def main():
                      "pareto_front_by_material/*.csv (Phase 15), "
                      "hypereg_analysis.txt (Phase 15), "
                      "hysteresis_sensitivity.txt (Phase 16), "
+                     "cycle_type_validation.txt (Phase 17), "
                      "geometry_optimization_analysis.txt, graded_cascade_comparison.csv, "
                      "design_recommendations.txt, figures/*.png+*.pdf (26 figures)")
     logger.info(f"Full run log: {LOG_FILE}")

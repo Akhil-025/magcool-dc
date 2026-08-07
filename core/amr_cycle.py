@@ -34,11 +34,70 @@ This is a first-order performance model (matches the level of the AMR
 for system-level COP comparison against vapor-compression / liquid cooling,
 NOT a replacement for a full 2-D/3-D COMSOL regenerator-bed solve (see
 COMSOL_setup.md in the roadmap for that follow-on step).
+
+Phase 17 (ROADMAP.md) added an AMR cycle-topology switch (`cycle_type`,
+default "brayton" = pre-Phase-17 behavior unchanged): "ericsson" and
+"carnot" variants apply small, documented multipliers to specific cooling
+power and the second-law efficiency ceiling, intended to reproduce the
+QUALITATIVE ranking Carnot-like >= Ericsson-like >= Brayton-like described
+in the AMR-cycle-comparison literature -- see CYCLE_TYPE_FACTORS below for
+the honesty flag on why these are illustrative multipliers rather than a
+digitization of Kitanovski et al.'s own closed-form relations.
 """
 
 import numpy as np
 from dataclasses import dataclass
 from core.mce_material import MagnetocaloricMaterial
+
+
+# --- AMR cycle topology (Phase 17, ROADMAP.md) ---
+#
+# Source intent: Kitanovski et al. (2015) Sect. 4.1.1-4.1.4 ("Characteristics
+# of an Ericsson-like AMR Cycle" / "...Hybrid Brayton-Ericsson-like AMR
+# Cycle" / "...Carnot-like AMR Cycle" / "Maximum Specific Cooling Power in
+# the AMR Cycle", book pp. 104-109) derive closed-form relations for how
+# each cycle topology's magnetization/demagnetization-vs-flow phasing
+# changes the achievable specific cooling power and second-law efficiency.
+#
+# HONESTY FLAG (read before trusting the numbers below): this project's own
+# copy of that book (see Kitanovski_et_al...pdf in this repo's source
+# corpus) is a 30-page front-matter/Chapter-1/table-of-contents excerpt --
+# it does NOT include pp. 104-109, so Sect. 4.1.1-4.1.4's actual closed-form
+# equations were never available to digitize into this module, unlike
+# (e.g.) Ch. 1's thermodynamic relations, which this project's copy does
+# contain. The three multipliers below are therefore NOT a reproduction of
+# Kitanovski's own formulas. They encode only the QUALITATIVE, well-
+# established ranking of the three cycle types (Brayton-like: adiabatic
+# magnetization/demagnetization with the fluid static, isofield blows only,
+# already this model's pre-Phase-17 behavior; Ericsson-like: field change
+# happens under continuous fluid contact, so the magnetization/
+# demagnetization legs also exchange heat rather than being "wasted"
+# adiabatic excursions, which the general AMR-cycle-comparison literature
+# -- and this project's own Phase 17 planning note -- describes as
+# improving both specific cooling power and second-law efficiency relative
+# to Brayton; Carnot-like: the idealized reversible reference bound, a
+# theoretical upper limit rather than a claim that a real regenerator bed
+# can achieve it) as small, monotonic, illustrative multipliers on this
+# model's existing Qc and eta_2nd_law formulas -- NOT a benchmark-fitted or
+# book-digitized result. Treat any downstream conclusion that depends on
+# the exact SIZE of the Ericsson/Carnot uplift (as opposed to their
+# ORDERING relative to Brayton) as provisional until pp. 104-109 are
+# actually available to check against.
+CYCLE_TYPES = ("brayton", "ericsson", "carnot")
+
+CYCLE_TYPE_FACTORS = {
+    # qc_multiplier   : relative change in specific cooling power (applied
+    #                   in cooling_capacity()) vs. this model's Brayton-like
+    #                   baseline, at fixed span/eps/field/frequency.
+    # eta_uplift       : relative change in the eta_2nd_law ceiling used by
+    #                   magnetic_work() (0.35 + 0.20*eps at brayton) --
+    #                   still passes through the existing np.clip(...,
+    #                   0.02, 0.95), so "carnot" approaches but does not
+    #                   exceed that ceiling.
+    "brayton":  {"qc_multiplier": 1.00, "eta_uplift": 1.00},
+    "ericsson": {"qc_multiplier": 1.12, "eta_uplift": 1.15},
+    "carnot":   {"qc_multiplier": 1.30, "eta_uplift": 1.35},
+}
 
 
 # --- Flow-waveform asymmetry (blow fraction), Paper-Mining Pass
@@ -139,7 +198,8 @@ class AMRSystem:
                  blow_fraction: float = 0.5,
                  particle_diameter: float = None,
                  bed_cross_section_area: float = 0.002,
-                 hypereg_n_parallel: int = None):
+                 hypereg_n_parallel: int = None,
+                 cycle_type: str = "brayton"):
         """
         material               : MagnetocaloricMaterial instance
         mu0H_max                : peak applied field, Tesla
@@ -251,7 +311,17 @@ class AMRSystem:
                                      None reproduces the conventional
                                      (non-Hypereg) geometry-explicit
                                      pumping term.
+        cycle_type                  : Phase 17 addition. One of "brayton"
+                                     (default), "ericsson", or "carnot" --
+                                     see CYCLE_TYPE_FACTORS above and its
+                                     honesty flag. Default "brayton"
+                                     preserves ALL pre-Phase-17 behavior
+                                     exactly (qc_multiplier=eta_uplift=1.0).
+                                     Raises ValueError for any other value.
         """
+        if cycle_type not in CYCLE_TYPE_FACTORS:
+            raise ValueError(
+                f"cycle_type must be one of {CYCLE_TYPES}, got {cycle_type!r}")
         self.mat = material
         self.mu0H_max = mu0H_max
         self.m_reg = mass_regenerator
@@ -266,7 +336,15 @@ class AMRSystem:
         self.particle_diameter = particle_diameter
         self.bed_cross_section_area = bed_cross_section_area
         self.hypereg_n_parallel = hypereg_n_parallel
+        self.cycle_type = cycle_type
         self._last_ntu_info = None
+
+    def _cycle_type_factor(self):
+        """Phase 17 addition. Returns this system's {"qc_multiplier",
+        "eta_uplift"} dict from CYCLE_TYPE_FACTORS -- see that constant's
+        docstring for the honesty flags on where these numbers do (and do
+        not) come from."""
+        return CYCLE_TYPE_FACTORS[self.cycle_type]
 
     def _hysteresis_power_W(self):
         """Phase 16 addition. Returns the parasitic electrical power (W)
@@ -393,6 +471,7 @@ class AMRSystem:
         eps = self._effective_eps()
         Qc = eps * self.mdot_f * self.cp_f * dTad_noload * span_fraction
         Qc *= self._blow_fraction_qc_multiplier()
+        Qc *= self._cycle_type_factor()["qc_multiplier"]
         return max(Qc, 0.0), dTad_noload
 
     def magnetic_work(self, T_cold, T_span, Qc):
@@ -408,6 +487,7 @@ class AMRSystem:
         T_hot = T_cold + T_span
         carnot_work = Qc * (T_hot / T_cold - 1.0) if T_cold > 0 else np.inf
         eta_2nd_law = 0.35 + 0.20 * self._effective_eps()  # 0.35 at eps=0 .. 0.52 at eps=0.85
+        eta_2nd_law *= self._cycle_type_factor()["eta_uplift"]
         eta_2nd_law *= self._blow_fraction_eta_multiplier()
         eta_2nd_law = float(np.clip(eta_2nd_law, 0.02, 0.95))
         W = carnot_work / max(eta_2nd_law, 1e-3)

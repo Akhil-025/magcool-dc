@@ -1,7 +1,8 @@
 import pytest
 
 from core.mce_material import GADOLINIUM
-from core.amr_cycle import AMRSystem, BLOW_FRACTION_MASCHE, _blow_fraction_multiplier
+from core.amr_cycle import (AMRSystem, BLOW_FRACTION_MASCHE,
+                             _blow_fraction_multiplier, CYCLE_TYPE_FACTORS)
 from core.loss_model import StateDependentLossModel
 
 
@@ -190,3 +191,68 @@ def test_hysteresis_power_included_in_no_loss_model_path_too():
     expected_hyst = mat.hysteresis_loss_J_per_kg * 6.0 * 2.0
     expected_base = sys_.parasitic_fraction * result.Qc
     assert result.W_parasitic == pytest.approx(expected_base + expected_hyst)
+
+# --- Phase 17: AMR cycle topology (cycle_type) ---
+
+def test_cycle_type_defaults_to_brayton_and_is_backward_compatible():
+    """Omitting cycle_type must give byte-for-byte the same result as
+    explicitly passing cycle_type='brayton' -- the required backward-
+    compatibility guarantee for this Phase 17 addition (same pattern as
+    particle_diameter=None in Phase 15 and blow_fraction=0.5 earlier)."""
+    default_sys = make_system()
+    assert default_sys.cycle_type == "brayton"
+    explicit_sys = make_system(cycle_type="brayton")
+    r_default = default_sys.run(T_cold=291.0, T_span=10.0)
+    r_explicit = explicit_sys.run(T_cold=291.0, T_span=10.0)
+    assert r_default == r_explicit
+
+
+def test_invalid_cycle_type_raises_value_error():
+    with pytest.raises(ValueError):
+        make_system(cycle_type="stirling")
+
+
+def test_cycle_type_factors_brayton_is_identity():
+    assert CYCLE_TYPE_FACTORS["brayton"] == {"qc_multiplier": 1.0, "eta_uplift": 1.0}
+
+
+def test_cycle_type_ordering_carnot_ge_ericsson_ge_brayton():
+    """Per the qualitative ranking this Phase 17 addition targets (see
+    CYCLE_TYPE_FACTORS's docstring): at fixed span/eps/field/frequency,
+    Carnot-like should show the highest cooling capacity AND second-law
+    (exergy) efficiency, Brayton-like (this model's pre-Phase-17 default)
+    the lowest, Ericsson-like in between."""
+    results = {}
+    for ct in ("brayton", "ericsson", "carnot"):
+        sys_ = make_system(cycle_type=ct)
+        results[ct] = sys_.run(T_cold=291.0, T_span=10.0)
+
+    assert results["carnot"].Qc >= results["ericsson"].Qc >= results["brayton"].Qc
+    assert (results["carnot"].exergy_eff >= results["ericsson"].exergy_eff
+            >= results["brayton"].exergy_eff)
+    # A strict inequality somewhere confirms the multipliers are actually
+    # doing something, not just a no-op ordering by coincidence.
+    assert results["carnot"].Qc > results["brayton"].Qc
+
+
+def test_cycle_type_carnot_exergy_eff_still_bounded():
+    """The uplifted eta_2nd_law must still respect the model's existing
+    np.clip(..., 0.02, 0.95) ceiling -- Carnot-like is an idealized
+    reference, not a claim of exceeding the model's own efficiency bound."""
+    sys_ = make_system(cycle_type="carnot", regenerator_effectiveness=0.99)
+    result = sys_.run(T_cold=291.0, T_span=5.0)
+    assert 0.0 <= result.exergy_eff <= 1.0 + 1e-9
+
+
+def test_cycle_type_qc_multiplier_applied_directly():
+    """cooling_capacity() should scale linearly with qc_multiplier at a
+    fixed operating point, independent of run()'s downstream loss
+    accounting -- a direct regression guard on the wiring, not just the
+    ordering above."""
+    brayton_sys = make_system(cycle_type="brayton")
+    ericsson_sys = make_system(cycle_type="ericsson")
+    Qc_brayton, _ = brayton_sys.cooling_capacity(291.0, 10.0)
+    Qc_ericsson, _ = ericsson_sys.cooling_capacity(291.0, 10.0)
+    expected_ratio = (CYCLE_TYPE_FACTORS["ericsson"]["qc_multiplier"]
+                       / CYCLE_TYPE_FACTORS["brayton"]["qc_multiplier"])
+    assert Qc_ericsson == pytest.approx(Qc_brayton * expected_ratio, rel=1e-9)

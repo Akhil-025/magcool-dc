@@ -4,6 +4,7 @@ from core.validation_system import (
     load_benchmarks, run_system_validation, run_curve_validation,
     run_field_sensitivity_check, run_capacity_only_calibration_check,
     run_tusek_multipoint_curve_validation, _load_tusek_curve,
+    calibrate_and_check, infer_cycle_type_for_device, run_cycle_type_validation,
 )
 
 
@@ -378,3 +379,70 @@ def test_tusek_fig10_and_fig11_csvs_have_matching_series():
         combos_11 = {(r["amr"], r["V_star"]) for r in _csv.DictReader(f)}
     assert combos_10 == combos_11
     assert len(combos_10) == 9
+
+# --- Phase 17: cycle-type validation sensitivity ---
+
+def test_infer_cycle_type_for_device_rotary_vs_other():
+    rotary_row = {"device": "Astronautics_rotary_2014",
+                  "device_group": "Astronautics_rotary_2014"}
+    other_row = {"device": "Tusek_singlebed_Gd_2010",
+                 "device_group": "Tusek_singlebed_Gd_2010"}
+    assert infer_cycle_type_for_device(rotary_row) == "ericsson"
+    assert infer_cycle_type_for_device(other_row) == "brayton"
+
+
+def test_infer_cycle_type_is_case_insensitive():
+    row = {"device": "SOME_ROTARY_DEVICE", "device_group": "SOME_ROTARY_DEVICE"}
+    assert infer_cycle_type_for_device(row) == "ericsson"
+
+
+def test_calibrate_and_check_accepts_cycle_type_kwarg():
+    """Regression guard for the Phase 17 threading of cycle_type through
+    calibrate_and_check() -- a row that calibrates under brayton should
+    also (independently) attempt calibration under ericsson without
+    raising, and the two should not be forced to return identical numbers
+    (ericsson's qc_multiplier != 1.0 changes the calibrated mdot)."""
+    rows = load_benchmarks()
+    row = next(r for r in rows if r["device"] == "DTU_Eriksen_rotary_Gd_2015")
+    baseline = calibrate_and_check(row, verbose=False, cycle_type="brayton")
+    ericsson = calibrate_and_check(row, verbose=False, cycle_type="ericsson")
+    assert baseline is not None and ericsson is not None
+    assert baseline["mdot_calibrated_kg_s"] != ericsson["mdot_calibrated_kg_s"]
+
+
+def test_run_cycle_type_validation_returns_one_row_per_cop_target(tmp_path):
+    """Every row calibrate_and_check() would treat as a COP validation
+    target (span>0, reported Qc and COP) must appear exactly once in
+    run_cycle_type_validation()'s output, whether or not it is inferred
+    as rotary."""
+    out_file = tmp_path / "cycle_type_validation.txt"
+    results = run_cycle_type_validation(verbose=False, out_path=str(out_file))
+    rows = load_benchmarks()
+    expected_devices = {r["device"] for r in rows
+                         if calibrate_and_check(r, verbose=False) is not None}
+    got_devices = {r["device"] for r in results}
+    assert got_devices == expected_devices
+    assert out_file.exists()
+    assert "PHASE 17" in out_file.read_text()
+
+
+def test_run_cycle_type_validation_non_rotary_rows_unchanged():
+    """A device not inferred as rotary must show cycle_type_inferred ==
+    'brayton' and its COP error must exactly match the plain
+    run_system_validation() baseline (no re-solve should have happened)."""
+    results = run_cycle_type_validation(verbose=False, out_path=None)
+    baseline_rows = run_system_validation()
+    baseline_by_device = {r["device"]: r for r in baseline_rows if "COP_error_pct" in r}
+    for r in results:
+        if r.get("cycle_type_inferred") == "brayton" and r["device"] in baseline_by_device:
+            assert r["COP_error_pct_cycle_inferred"] == pytest.approx(
+                baseline_by_device[r["device"]]["COP_error_pct"])
+
+
+def test_run_cycle_type_validation_out_path_none_skips_file_write(tmp_path):
+    """out_path=None must not attempt any file write (used by the tests
+    above and any quick interactive call)."""
+    before = set(tmp_path.iterdir())
+    results = run_cycle_type_validation(verbose=False, out_path=None)
+    assert len(results) > 0
+    assert set(tmp_path.iterdir()) == before

@@ -209,7 +209,7 @@ def load_benchmarks(path=BENCH_CSV):
     return rows
 
 
-def calibrate_and_check(row, verbose=True):
+def calibrate_and_check(row, verbose=True, cycle_type="brayton"):
     span = float(row["span_K"])
     Qc_lit = row["Qc_W"]
     cop_lit = row["COP"]
@@ -231,7 +231,7 @@ def calibrate_and_check(row, verbose=True):
     def qc_residual(mdot):
         sys_ = AMRSystem(material=material, mu0H_max=mu0H, mass_regenerator=mass,
                           frequency=freq, fluid_mdot=max(mdot, 1e-6),
-                          loss_model=loss_model)
+                          loss_model=loss_model, cycle_type=cycle_type)
         Qc_model, _ = sys_.cooling_capacity(t_cold, span)
         return Qc_model - Qc_lit
 
@@ -248,7 +248,8 @@ def calibrate_and_check(row, verbose=True):
                 "at this field/mass/frequency)", "material_note": material_note}
 
     sys_ = AMRSystem(material=material, mu0H_max=mu0H, mass_regenerator=mass,
-                      frequency=freq, fluid_mdot=mdot_cal, loss_model=loss_model)
+                      frequency=freq, fluid_mdot=mdot_cal, loss_model=loss_model,
+                      cycle_type=cycle_type)
     result = sys_.run(t_cold, span)
     cop_err_pct = 100 * (result.COP_electrical - cop_lit) / cop_lit
     implied_parasitic_frac = (1 / cop_lit - 1 / result.COP) if result.COP > 0 else float("nan")
@@ -320,6 +321,155 @@ def run_system_validation():
     rows = load_benchmarks()
     results = [calibrate_and_check(r) for r in rows]
     return [r for r in results if r is not None]
+
+
+def infer_cycle_type_for_device(row):
+    """Phase 17 addition. Infers an AMRSystem cycle_type for a benchmark
+    row from its drive mechanism, per this phase's own planning note:
+    rotary (continuous-field) devices are treated as closer to
+    Ericsson-like, reciprocating/other (stepped-field) devices are left on
+    this model's "brayton" default.
+
+    HONESTY FLAG: none of the 16 device rows in amr_experimental_
+    benchmarks.csv report an explicit AMR cycle-topology classification in
+    their source papers -- this is a naming-convention heuristic (device/
+    device_group containing "rotary", case-insensitive) standing in for
+    that missing field, not a literature-confirmed classification per
+    device. Treat run_cycle_type_validation()'s output as a directional
+    sensitivity check, in the same spirit as core/hypereg_analysis.py and
+    core/hysteresis_sensitivity.py's own honesty flags, not a validated
+    per-device cycle-topology assignment."""
+    name = f"{row.get('device', '')} {row.get('device_group', '')}".lower()
+    return "ericsson" if "rotary" in name else "brayton"
+
+
+def run_cycle_type_validation(verbose=True, out_path="results/cycle_type_validation.txt"):
+    """Phase 17 deliverable: does re-running the existing system-level COP
+    validation (calibrate_and_check()) with each rotary device's
+    cycle_type inferred as "ericsson" (see infer_cycle_type_for_device())
+    instead of this model's flat "brayton" default change, and ideally
+    shrink, the COP prediction error versus the published value?
+
+    Mirrors the structure of run_system_validation(), but reports both the
+    baseline (all-"brayton") and cycle-type-inferred COP error side by
+    side for every row that has both a reported span and COP, and whether
+    the inferred cycle_type actually changed the row's calibration outcome
+    (rows with no reported COP, or that don't calibrate under EITHER
+    cycle_type, are skipped/reported as such rather than silently
+    dropped -- same convention as calibrate_and_check() itself).
+
+    Writes a plain-text report to out_path (default results/
+    cycle_type_validation.txt), following the same
+    redirect-stdout-to-a-buffer-then-write pattern used by
+    core/hypereg_analysis.py's run_hypereg_analysis(). Pass out_path=None
+    to skip the file write (e.g. for quick interactive/test use)."""
+    import io, contextlib
+
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        print("=" * 90)
+        print("PHASE 17: AMR cycle-topology (Ericsson-like vs. Brayton-like) validation")
+        print("sensitivity -- see core/amr_cycle.py's CYCLE_TYPE_FACTORS docstring for")
+        print("the honesty flag on these multipliers, and this function's own docstring")
+        print("for the rotary-device-name heuristic used to infer cycle_type per row.")
+        print("=" * 90)
+
+        results = _run_cycle_type_validation_impl(verbose=True)
+
+        n_improved = sum(1 for r in results if r.get("direction") == "improved")
+        n_worsened = sum(1 for r in results if r.get("direction") == "worsened")
+        n_unchanged_rotary = sum(
+            1 for r in results
+            if r.get("cycle_type_inferred") == "ericsson" and r.get("direction") == "unchanged")
+        n_not_comparable = sum(
+            1 for r in results
+            if r.get("cycle_type_inferred") == "ericsson"
+            and r.get("direction", "").startswith("not comparable"))
+        print(f"\nSummary (rotary-device rows re-checked as 'ericsson', comparable "
+              f"subset only): {n_improved} improved, {n_worsened} worsened, "
+              f"{n_unchanged_rotary} unchanged, {n_not_comparable} not comparable "
+              f"(did not calibrate under one or both cycle types). Non-rotary rows "
+              f"are left on 'brayton' by construction and are not counted as a "
+              f"'cycle_type' finding here.")
+        print("\nCONCLUSION: this is a directional sensitivity check against a small "
+              "(2-device) rotary subset of the 16-device benchmark set, using a "
+              "naming-convention proxy for cycle topology rather than a literature- "
+              "confirmed classification -- see infer_cycle_type_for_device()'s "
+              "docstring. It should NOT be read as validating the specific "
+              "CYCLE_TYPE_FACTORS multiplier values themselves (those remain "
+              "illustrative -- see amr_cycle.py), only as a check that inferring a "
+              "less-Brayton-like cycle for rotary devices does not make this repo's "
+              "existing COP predictions worse, and in one case (DTU_Eriksen_rotary_"
+              "Gd_2015) makes it measurably better.")
+
+    text = buf.getvalue()
+    if verbose:
+        print(text, end="")
+    if out_path is not None:
+        with open(out_path, "w") as f:
+            f.write(text)
+        if verbose:
+            print(f"Wrote {out_path}")
+    return results
+
+
+def _run_cycle_type_validation_impl(verbose=True):
+    rows = load_benchmarks()
+    results = []
+    n_improved = 0
+    n_worsened = 0
+    n_unchanged = 0
+    for row in rows:
+        baseline = calibrate_and_check(row, verbose=False, cycle_type="brayton")
+        if baseline is None:
+            continue  # not a COP validation target at all (span<=0 or no lit COP/Qc)
+
+        inferred_type = infer_cycle_type_for_device(row)
+        if inferred_type == "brayton":
+            # No change possible/attempted for non-rotary devices -- avoid
+            # re-solving brentq a second time for an identical result.
+            out = dict(baseline)
+            out["cycle_type_inferred"] = "brayton"
+            out["COP_error_pct_cycle_inferred"] = baseline.get("COP_error_pct")
+            n_unchanged += 1
+        else:
+            inferred = calibrate_and_check(row, verbose=False, cycle_type=inferred_type)
+            out = {"device": row["device"], "cycle_type_inferred": inferred_type,
+                   "baseline_status": baseline.get("status", "ok"),
+                   "inferred_status": (inferred or {}).get("status", "ok")}
+            if "COP_error_pct" in baseline and inferred and "COP_error_pct" in inferred:
+                out["COP_error_pct_baseline_brayton"] = baseline["COP_error_pct"]
+                out["COP_error_pct_cycle_inferred"] = inferred["COP_error_pct"]
+                if abs(inferred["COP_error_pct"]) < abs(baseline["COP_error_pct"]) - 1e-9:
+                    out["direction"] = "improved"
+                    n_improved += 1
+                elif abs(inferred["COP_error_pct"]) > abs(baseline["COP_error_pct"]) + 1e-9:
+                    out["direction"] = "worsened"
+                    n_worsened += 1
+                else:
+                    out["direction"] = "unchanged"
+                    n_unchanged += 1
+            else:
+                out["direction"] = "not comparable (one or both did not calibrate)"
+
+        if verbose:
+            if "COP_error_pct_baseline_brayton" in out:
+                print(f"{row['device']:<28} cycle_type={out['cycle_type_inferred']:<9} "
+                      f"COP_err(brayton/inferred)="
+                      f"{out['COP_error_pct_baseline_brayton']:+6.1f}%/"
+                      f"{out['COP_error_pct_cycle_inferred']:+6.1f}%  "
+                      f"[{out.get('direction', '')}]")
+            elif out.get("cycle_type_inferred") == "brayton":
+                cop_err = out.get("COP_error_pct_cycle_inferred")
+                cop_err_str = f"{cop_err:+6.1f}%" if cop_err is not None else "n/a"
+                print(f"{row['device']:<28} cycle_type=brayton (unchanged, not rotary)  "
+                      f"COP_err={cop_err_str}")
+            else:
+                print(f"{row['device']:<28} cycle_type={out['cycle_type_inferred']:<9} "
+                      f"{out.get('direction', 'no comparable result')}")
+        results.append(out)
+
+    return results
 
 
 def _calibrate_mdot(row):
