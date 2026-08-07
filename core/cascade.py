@@ -40,6 +40,9 @@ actual comparison against Jacobs et al. (2014)'s reported numbers.
 
 import numpy as np
 import csv
+import os
+import contextlib
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from typing import Callable
 from scipy.optimize import brentq
@@ -104,6 +107,119 @@ MNFEPSI_FAMILY = GradedFamily(
     tc_min=MNFEPSI_TC_MIN_K, tc_max=MNFEPSI_TC_MAX_K,
     reference_material=MNFEPSI_FIRST_ORDER, fallback_material=GADOLINIUM,
 )
+
+
+# --------------------------------------------------------------------------
+# Phase 16: process-pool parallelization helpers.
+#
+# GradedFamily objects themselves are never sent across a process boundary
+# (GD_FAMILY's tuned_fn is a lambda, and validate_astronautics_graded_bed()'s
+# apply_correction branch builds an even-less-picklable closure -- neither
+# survives pickle). Instead, only a short family NAME crosses the boundary;
+# each worker process re-imports core.cascade normally (as
+# ProcessPoolExecutor's own bootstrapping already requires) and so already
+# has its own GD_FAMILY/LAFESIH_FAMILY/MNFEPSI_FAMILY globals to resolve the
+# name against. _family_name() returns None for any family this module
+# doesn't recognize by identity (e.g. a custom closure-based family) --
+# every parallel entry point below checks for that and falls back to the
+# original sequential behavior in that case, so nothing that used to work
+# stops working; it just doesn't get the parallel speedup.
+# --------------------------------------------------------------------------
+
+def _pool_worker_init():
+    """ProcessPoolExecutor `initializer`, run once per worker process
+    BEFORE that process handles any task. This is a defensive second layer
+    only -- see _single_threaded_blas_env() below for the fix that
+    actually matters and why setting these vars here alone is too late
+    (merely unpickling a reference to THIS function already re-imports
+    core.cascade, and therefore numpy, in the child first)."""
+    for var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS",
+                "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
+        os.environ[var] = "1"
+
+
+@contextlib.contextmanager
+def _single_threaded_blas_env():
+    """Temporarily sets OPENBLAS_NUM_THREADS / OMP_NUM_THREADS / etc. to
+    '1' in THIS (parent) process's environment, for exactly as long as a
+    ProcessPoolExecutor's child processes are being spawned/used below.
+
+    This is the actual fix for 'OpenBLAS error: Memory allocation still
+    failed after 10 retries, giving up.' Without it, every worker process
+    independently spins up its own OpenBLAS thread pool sized to the
+    machine's full logical core count; with max_workers itself already
+    close to that core count, you get (workers) x (cores) live BLAS
+    threads all contending for the same physical cores and OpenBLAS's
+    internal thread-local memory arenas -- CPU/memory oversubscription,
+    not a bug in the cascade math itself.
+
+    Why the PARENT's environment, and not something set from inside a
+    function this module defines: with the 'spawn' start method (the
+    default, and the only option on Windows -- where this was actually
+    observed), a new worker process's OS-level environment block is a copy
+    of the PARENT's os.environ taken at the moment the child process is
+    created, before that child's own Python interpreter -- let alone this
+    module's `import numpy as np` -- ever runs. Setting these vars here,
+    before ProcessPoolExecutor(...) spawns any child, is what actually
+    reaches OpenBLAS's library-load-time thread-pool sizing in each child.
+    Restored on exit so later pipeline stages (RSM, NSGA-III, ...) keep
+    this process's normal BLAS threading."""
+    _vars = ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS",
+             "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS")
+    _prev = {v: os.environ.get(v) for v in _vars}
+    for v in _vars:
+        os.environ[v] = "1"
+    try:
+        yield
+    finally:
+        for v, val in _prev.items():
+            if val is None:
+                os.environ.pop(v, None)
+            else:
+                os.environ[v] = val
+
+
+def _family_name(family):
+    if family is None or family is GD_FAMILY:
+        return "GD"
+    if family is LAFESIH_FAMILY:
+        return "LAFESIH"
+    if family is MNFEPSI_FAMILY:
+        return "MNFEPSI"
+    return None
+
+
+def _resolve_family(family_name):
+    if family_name == "GD":
+        return GD_FAMILY
+    if family_name == "LAFESIH":
+        return LAFESIH_FAMILY
+    if family_name == "MNFEPSI":
+        return MNFEPSI_FAMILY
+    return None
+
+
+def _stage_target_worker(args):
+    """Top-level (picklable) worker for a single stage's Curie-target
+    root-search. Used only when run_graded_cascade() is given a live
+    `executor` -- see that function's docstring. Each stage's target
+    depends only on its own T_mid, so running these in parallel changes
+    nothing about the result, only how long it takes to get it."""
+    T_mid_stage, mu0H_max, family_name = args
+    family = _resolve_family(family_name) or GD_FAMILY
+    return _target_composition_for_peak(T_mid_stage, mu0H_max, family)
+
+
+def _compare_graded_cascade_cell(args):
+    """Top-level (picklable) worker for compare_graded_cascade()'s
+    per-(span, n_stages) sweep cells. Must stay at module level so
+    ProcessPoolExecutor can pickle a reference to it (a nested/closure
+    function cannot be pickled this way)."""
+    T_cold_K, span, n, mass_per_stage, family_name = args
+    family = _resolve_family(family_name)
+    res = run_graded_cascade(T_cold_K, span, n, mass_per_stage=mass_per_stage,
+                              family=family)
+    return span, n, res
 
 
 def run_cascade(T_cold_K, total_span_K, n_stages, material=None, mu0H_max=2.0,
@@ -350,7 +466,8 @@ def _target_composition_for_peak(T_target_K, mu0H_max, family, max_iter=6, tol_K
 def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
                         mass_per_stage=2.0, frequency=1.0, fluid_mdot=0.08,
                         regenerator_effectiveness=0.85,
-                        apply_giguere_correction=True, family=None):
+                        apply_giguere_correction=True, family=None,
+                        executor=None):
     """Curie-graded cascade (ROADMAP.md Phase 7 open item; generalized in
     Phase 9): rather than identical stages of one material (run_cascade
     above), each stage is assigned a hypothetical composition-tuned material
@@ -374,7 +491,19 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
     default) for that stage and records the fallback, so the returned
     result honestly reflects what is and is not supported by the
     composition-tunability literature at the requested operating point.
-    """
+
+    Phase 16: `executor`, if given a live concurrent.futures.ProcessPoolExecutor,
+    fans the n_stages independent Curie-target root-searches below out
+    across that pool instead of running them one at a time in this process
+    -- each stage's target composition depends only on ITS OWN local T_mid,
+    not on any other stage, so parallelizing this loop changes nothing
+    about the result, only how long it takes to compute (this is the
+    dominant cost inside this function; see _target_composition_for_peak's
+    docstring). Falls back to the original sequential loop whenever
+    executor is None (the default -- no behavior change for existing
+    callers) or when `family` isn't one of this module's own named
+    families (a custom/closure-based family can't be resolved inside a
+    separate worker process; see _family_name() above)."""
     if family is None:
         family = GD_FAMILY if apply_giguere_correction else GradedFamily(
             name=GD_FAMILY.name,
@@ -384,12 +513,27 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
             fallback_material=GD_FAMILY.fallback_material)
 
     span_per_stage = total_span_K / n_stages
+
+    # Compute each stage's own T_mid the same way (incremental addition, so
+    # this is bit-for-bit identical to the pre-Phase-16 code) whether or not
+    # the target-composition search below ends up running in parallel.
+    mid_temps = []
     T_local = T_cold_K
+    for i in range(n_stages):
+        mid_temps.append(T_local + span_per_stage / 2.0)
+        T_local += span_per_stage
+
+    family_name = _family_name(family)
+    if executor is not None and family_name is not None and n_stages > 1:
+        Tc_targets = list(executor.map(
+            _stage_target_worker,
+            [(t, mu0H_max, family_name) for t in mid_temps]))
+    else:
+        Tc_targets = [_target_composition_for_peak(t, mu0H_max, family) for t in mid_temps]
+
     stage_materials = []
     stage_info = []
-    for i in range(n_stages):
-        T_mid_stage = T_local + span_per_stage / 2.0
-        Tc_target = _target_composition_for_peak(T_mid_stage, mu0H_max, family)
+    for i, (T_mid_stage, Tc_target) in enumerate(zip(mid_temps, Tc_targets)):
         if family.tc_min <= Tc_target <= family.tc_max:
             mat = family.tuned_fn(Tc_target)
             stage_info.append({"stage": i + 1, "T_mid_K": round(T_mid_stage, 1),
@@ -404,7 +548,6 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
                                             f"documented {family.name} range)",
                                 "in_range": False})
         stage_materials.append(mat)
-        T_local += span_per_stage
 
     n_fallback = sum(1 for s in stage_info if not s["in_range"])
 
@@ -446,7 +589,8 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
 
 def compare_graded_cascade(T_cold_C=18.0, spans=range(5, 21), stage_counts=(1, 2, 3, 4),
                             mass_per_stage=2.0, family=None,
-                            out_csv="results/graded_cascade_comparison.csv"):
+                            out_csv="results/graded_cascade_comparison.csv",
+                            parallel=True, max_workers=None):
     """Same sweep as compare_staging(), but using run_graded_cascade()
     instead of identical-stage run_cascade(). family is passed straight
     through to run_graded_cascade() (default: GD_FAMILY, i.e. the original
@@ -457,15 +601,53 @@ def compare_graded_cascade(T_cold_C=18.0, spans=range(5, 21), stage_counts=(1, 2
     documented range and the cascade is fully buildable; for larger spans
     and/or more stages the hottest stage(s) push above 290K and fall back
     to plain Gd for that stage only. See the __main__ block below for the
-    actual breakdown across the sweep (computed, not assumed)."""
+    actual breakdown across the sweep (computed, not assumed).
+
+    Phase 16: this span x stage_count sweep is embarrassingly parallel --
+    every cell is an independent run_graded_cascade() call with no shared
+    mutable state -- so by default (parallel=True) it now fans out across a
+    ProcessPoolExecutor (max_workers defaults to min(#cells, cpu_count())).
+    This is what previously made this function (and the 6-layer
+    Astronautics reproduction that reuses it transitively) the single
+    slowest stage in the full pipeline. Falls back automatically to the
+    original sequential loop if: `family` is a custom object this module
+    doesn't recognize by identity (can't be safely rebuilt inside a worker
+    process -- see _family_name()); there's only one cell to compute; or
+    process-pool creation itself fails (e.g. a sandboxed environment
+    without subprocess spawn rights) -- in every case the returned rows and
+    CSV are bit-for-bit identical to the sequential path, since each cell
+    is computed by the exact same run_graded_cascade() call either way.
+    Pass parallel=False to force the old sequential behavior explicitly."""
     T_cold_K = T_cold_C + 273.15
+    cells = [(span, n) for span in spans for n in stage_counts]
+    family_name = _family_name(family)
+
+    cell_results = None
+    if parallel and family_name is not None and len(cells) > 1:
+        workers = max_workers or min(len(cells), os.cpu_count() or 1)
+        args = [(T_cold_K, span, n, mass_per_stage, family_name) for span, n in cells]
+        try:
+            cell_results = {}
+            with _single_threaded_blas_env():
+                with ProcessPoolExecutor(max_workers=workers,
+                                          initializer=_pool_worker_init) as pool:
+                    for span, n, res in pool.map(_compare_graded_cascade_cell, args):
+                        cell_results[(span, n)] = res
+        except Exception:
+            cell_results = None  # any pool failure -> fall back below
+
+    if cell_results is None:
+        cell_results = {}
+        for span, n in cells:
+            cell_results[(span, n)] = run_graded_cascade(
+                T_cold_K, span, n, mass_per_stage=mass_per_stage, family=family)
+
     rows = []
     all_stage_info = []
     for span in spans:
         row = {"span_K": span}
         for n in stage_counts:
-            res = run_graded_cascade(T_cold_K, span, n, mass_per_stage=mass_per_stage,
-                                      family=family)
+            res = cell_results[(span, n)]
             row[f"Graded_{n}stage_COP"] = res["COP_cascade"] if res["feasible"] else None
             row[f"Graded_{n}stage_Qc_W"] = res["Qc_W"] if res["feasible"] else None
             row[f"Graded_{n}stage_n_fallback_to_Gd"] = res["n_stages_out_of_range"]
@@ -532,6 +714,18 @@ def validate_astronautics_graded_bed(apply_correction=None):
     Giguere-style correction is available for this family) unless
     explicitly overridden.
 
+    Phase 16: brentq calls run_graded_cascade() repeatedly to calibrate
+    mdot, and each of those calls does 6 independent per-stage Curie-target
+    searches (run_graded_cascade's dominant cost -- see that function's own
+    Phase 16 note) -- so this function opens ONE ProcessPoolExecutor up
+    front and reuses it across every brentq iteration plus the final
+    result call, rather than paying process-startup cost repeatedly. This
+    only activates for the default (apply_correction=None) LAFESIH_FAMILY
+    case: the apply_correction override below builds a closure-based family
+    that can't be sent to a worker process, so that path automatically
+    falls back to run_graded_cascade's own sequential loop instead (see
+    _family_name()) -- same numeric result either way, just slower.
+
     Returns a dict with the calibrated mdot, predicted Qc (should equal
     Qc_lit_W by construction), predicted vs. literature COP and its error,
     and the per-stage breakdown -- or a "no calibration found" status dict
@@ -560,22 +754,43 @@ def validate_astronautics_graded_bed(apply_correction=None):
                                tc_max=base.tc_max, reference_material=base.reference_material,
                                fallback_material=base.fallback_material)
 
-    def qc_residual(mdot):
-        r = run_graded_cascade(T_cold_K, span_K, n_stages, mu0H_max=mu0H,
-                                mass_per_stage=mass_total / n_stages, frequency=freq,
-                                fluid_mdot=max(mdot, 1e-6), family=family)
-        return (r["Qc_W"] if r["feasible"] else 0.0) - Qc_lit
+    pool = None
+    _blas_env_cm = None
+    if _family_name(family) is not None:
+        try:
+            _blas_env_cm = _single_threaded_blas_env()
+            _blas_env_cm.__enter__()
+            pool = ProcessPoolExecutor(max_workers=min(n_stages, os.cpu_count() or 1),
+                                        initializer=_pool_worker_init)
+        except Exception:
+            pool = None
+            if _blas_env_cm is not None:
+                _blas_env_cm.__exit__(None, None, None)
+                _blas_env_cm = None
 
     try:
-        mdot_cal = brentq(qc_residual, 1e-6, 1.0, xtol=1e-6)
-    except ValueError:
-        return {"feasible": False, "status": "no calibration found "
-                "(reported Qc unreachable within mdot in [1e-6, 1.0] kg/s "
-                "for the 6-layer graded La(Fe,Si)13Hy bed)"}
+        def qc_residual(mdot):
+            r = run_graded_cascade(T_cold_K, span_K, n_stages, mu0H_max=mu0H,
+                                    mass_per_stage=mass_total / n_stages, frequency=freq,
+                                    fluid_mdot=max(mdot, 1e-6), family=family, executor=pool)
+            return (r["Qc_W"] if r["feasible"] else 0.0) - Qc_lit
 
-    result = run_graded_cascade(T_cold_K, span_K, n_stages, mu0H_max=mu0H,
-                                 mass_per_stage=mass_total / n_stages, frequency=freq,
-                                 fluid_mdot=mdot_cal, family=family)
+        try:
+            mdot_cal = brentq(qc_residual, 1e-6, 1.0, xtol=1e-6)
+        except ValueError:
+            return {"feasible": False, "status": "no calibration found "
+                    "(reported Qc unreachable within mdot in [1e-6, 1.0] kg/s "
+                    "for the 6-layer graded La(Fe,Si)13Hy bed)"}
+
+        result = run_graded_cascade(T_cold_K, span_K, n_stages, mu0H_max=mu0H,
+                                     mass_per_stage=mass_total / n_stages, frequency=freq,
+                                     fluid_mdot=mdot_cal, family=family, executor=pool)
+    finally:
+        if pool is not None:
+            pool.shutdown(wait=True)
+        if _blas_env_cm is not None:
+            _blas_env_cm.__exit__(None, None, None)
+
     result["mdot_calibrated_kg_s"] = round(mdot_cal, 5)
     result["Qc_lit_W"] = Qc_lit
     result["COP_lit"] = cop_lit

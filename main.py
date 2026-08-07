@@ -506,14 +506,14 @@ def run_plot_generation(precomputed=None):
     validation, cascade and Curie-graded staging, Sobol sensitivity, RSM
     surrogate fitting, NSGA-III optimization, economics, and emissions.
     Most figures still compute their own data directly from core/, but the
-    seven figures that duplicate an earlier stage's expensive computation
-    exactly (fig16 Sobol, fig18 Pareto, fig19/20 cascade, fig21 graded
-    cascade, fig25 Astronautics validation, fig26 material family
-    comparison) now reuse the results already produced by steps
-    7/7b/7c/8d/9/9b/11 via `precomputed`, instead of re-running them from
-    scratch. This still runs last so the CSV-writing figures (cascade,
-    graded cascade, Pareto front) leave results/ in a consistent,
-    freshly-regenerated state."""
+    nine figures that duplicate an earlier stage's computation exactly
+    (fig08 baseline sweep, fig14 system validation, fig16 Sobol, fig18
+    Pareto, fig19/20 cascade, fig21 graded cascade, fig25 Astronautics
+    validation, fig26 material family comparison) now reuse the results
+    already produced by steps 2/4/7/7b/7c/8d/9/9b/11 via `precomputed`,
+    instead of re-running them from scratch. This still runs last so the
+    CSV-writing figures (cascade, graded cascade, Pareto front) leave
+    results/ in a consistent, freshly-regenerated state."""
     plots.run_all(precomputed=precomputed)
     n_figs = len(list(plots.FIG_DIR.glob("*.png"))) if plots.FIG_DIR.exists() else 0
     if n_figs:
@@ -566,9 +566,7 @@ def main():
                   validation.run_giguere_gd_extension(),
                   validation.run_curie_shift_check())),
         ("2. System-level validation vs. published AMR prototypes",
-         lambda: (validation_system.run_system_validation(),
-                  validation_system.run_field_sensitivity_check(),
-                  validation_system.run_capacity_only_calibration_check())),
+         None),  # handled specially below, result (system_validation_results) captured
         ("3. Loss-model calibration (auto-loaded by AMRSystem's default loss model)",
          lambda: (loss_model.calibrate_loss_coefficients(), loss_model.run_extended_diagnostic())),
         ("3b. Regenerator thermal-effectiveness demo (core/thermal.py, reached transitively otherwise)",
@@ -618,6 +616,7 @@ def main():
     ]
 
     representative_row = None
+    system_validation_results = None
     cascade_rows_gd = None
     cascade_rows_giant = None
     graded_rows = None
@@ -634,7 +633,11 @@ def main():
         t0 = time.time()
         try:
             with contextlib.redirect_stdout(_StreamToLogger(logger)):
-                if name.startswith("4."):
+                if name.startswith("2."):
+                    system_validation_results = validation_system.run_system_validation()
+                    validation_system.run_field_sensitivity_check()
+                    validation_system.run_capacity_only_calibration_check()
+                elif name.startswith("4."):
                     rows = run_baseline_sweep()
                     representative_row = next(
                         r for r in rows if abs(r["span_K"] - REPRESENTATIVE_SPAN_K) < 1e-9
@@ -669,6 +672,8 @@ def main():
                     pareto_rows = optimize_module.run_optimization()
                 elif name.startswith("12."):
                     run_plot_generation(precomputed={
+                        "system_validation_results": system_validation_results,
+                        "baseline_rows": rows,
                         "sobol_const_Si": sobol_const_Si,
                         "sobol_state_Si": sobol_state_dependent_Si,
                         "pareto_rows": pareto_rows,

@@ -423,7 +423,7 @@ def plot_amr_energy_balance():
 # FIG 08 — AMR electrical COP vs. vapor-compression / liquid cooling / Carnot
 # ══════════════════════════════════════════════════════════════════════════
 
-def plot_amr_vs_baselines():
+def plot_amr_vs_baselines(precomputed=None):
     """Unlike fig06/fig07 (explicitly "Single-Stage" curves, left as pure
     single-stage on purpose to show that limitation directly), this figure
     claims to be the overall AMR-vs-baselines comparison, so it uses
@@ -431,22 +431,39 @@ def plot_amr_vs_baselines():
     run_baseline_sweep() -- instead of a bare single-stage sweep. Without
     it, spans past ~16K plotted as a hard 0 here (invisible on a log
     y-axis, but still wrong: a real system would just add stages, not
-    stop cooling)."""
+    stop cooling).
+
+    precomputed, if given, may supply 'baseline_rows' -- the exact row
+    list step 4 (run_baseline_sweep()) already computed with these same
+    T_cold/span/material/field/mass/frequency/mdot/effectiveness values --
+    so this figure reuses it instead of re-running all 16 staged_baseline_result()
+    + vapor_compression_cop()/liquid_cooling_cop() calls from scratch a
+    second time in the same pipeline invocation."""
+    precomputed = precomputed or {}
+    baseline_rows = precomputed.get('baseline_rows')
+
     T_cold_K = 291.15
-    spans = np.arange(5, 21, 1)
-    results = [cascade.staged_baseline_result(
-        T_cold_K, float(s), material=GADOLINIUM, mu0H_max=2.0,
-        mass_regenerator=5.0, frequency=2.0, fluid_mdot=0.08,
-        regenerator_effectiveness=0.85) for s in spans]
-    cop_e = [r.COP_electrical for r in results]
-    vcc_l, liq_l, carnot_l = [], [], []
-    for span in spans:
-        Th = T_cold_K + span
-        v = vapor_compression_cop(T_cold_K, Th)
-        l = liquid_cooling_cop(T_cold_K, Th)
-        vcc_l.append(v.COP)
-        liq_l.append(l.COP)
-        carnot_l.append(v.COP_carnot)
+    if baseline_rows is not None:
+        spans = [r['span_K'] for r in baseline_rows]
+        cop_e = [r['AMR_COP_electrical'] for r in baseline_rows]
+        vcc_l = [r['VaporCompression_COP'] for r in baseline_rows]
+        liq_l = [r['LiquidCooling_COP'] for r in baseline_rows]
+        carnot_l = [r['Carnot_COP'] for r in baseline_rows]
+    else:
+        spans = np.arange(5, 21, 1)
+        results = [cascade.staged_baseline_result(
+            T_cold_K, float(s), material=GADOLINIUM, mu0H_max=2.0,
+            mass_regenerator=5.0, frequency=2.0, fluid_mdot=0.08,
+            regenerator_effectiveness=0.85) for s in spans]
+        cop_e = [r.COP_electrical for r in results]
+        vcc_l, liq_l, carnot_l = [], [], []
+        for span in spans:
+            Th = T_cold_K + span
+            v = vapor_compression_cop(T_cold_K, Th)
+            l = liquid_cooling_cop(T_cold_K, Th)
+            vcc_l.append(v.COP)
+            liq_l.append(l.COP)
+            carnot_l.append(v.COP_carnot)
 
     fig, ax = plt.subplots(figsize=(8, 5.5))
     ax.plot(spans, cop_e, color=COLOR_POWER, marker='o', label='Magnetic (AMR) — electrical COP')
@@ -611,8 +628,17 @@ def plot_parasitic_fraction_scaling():
 # FIG 14 — System-level validation vs. published AMR prototypes
 # ══════════════════════════════════════════════════════════════════════════
 
-def plot_system_validation():
-    results = validation_system.run_system_validation()
+def plot_system_validation(precomputed=None):
+    """precomputed, if given, may supply 'system_validation_results' --
+    the exact return value of validation_system.run_system_validation()
+    already computed by step 2 in main.py -- so this figure reuses it
+    instead of re-running that deterministic calibration search (16
+    brentq calibrations against data/amr_experimental_benchmarks.csv)
+    a second time in the same pipeline invocation."""
+    precomputed = precomputed or {}
+    results = precomputed.get('system_validation_results')
+    if results is None:
+        results = validation_system.run_system_validation()
     ok = [r for r in results if 'COP_error_pct' in r]
     names = [r['device'].replace('_', ' ') for r in ok]
     cop_lit = [r['COP_lit'] for r in ok]
@@ -1207,15 +1233,17 @@ def run_all(precomputed=None):
     """Generates all 26 figures.
 
     precomputed, if given, is a dict that may carry results already
-    computed earlier in the SAME pipeline run (main.py steps 7/7b/7c/8d/9/9b/11):
+    computed earlier in the SAME pipeline run (main.py steps 2/4/7/7b/7c/8d/9/9b/11):
+      - 'system_validation_results'         (step 2)
+      - 'baseline_rows'                     (step 4)
       - 'sobol_const_Si', 'sobol_state_Si'  (step 9 / step 9b)
       - 'pareto_rows'                       (step 11)
       - 'cascade_rows_gd', 'cascade_rows_giant'  (step 7)
       - 'graded_rows'                       (step 7b)
       - 'astro_result'                      (step 7c)
       - 'material_rows'                     (step 8d)
-    Figures 16, 18, 19, 20, 21, 25, and 26 reuse whichever of these are
-    supplied instead of recomputing them, which otherwise adds several
+    Figures 8, 14, 16, 18, 19, 20, 21, 25, and 26 reuse whichever of these
+    are supplied instead of recomputing them, which otherwise adds several
     minutes of redundant work (mostly fig21's graded-cascade sweep and
     fig25's Astronautics validation) on top of the identical computation
     already performed earlier in the same run. When called standalone
@@ -1233,13 +1261,15 @@ def run_all(precomputed=None):
         ("05 Material comparison (Gd / Gd5Si2Ge2 / La(Fe,Si)13Hy)", plot_material_comparison),
         ("06 AMR characteristic curve", plot_amr_characteristic_curve),
         ("07 AMR energy balance vs. span", plot_amr_energy_balance),
-        ("08 AMR vs. baselines COP comparison", plot_amr_vs_baselines),
+        ("08 AMR vs. baselines COP comparison",
+         lambda: plot_amr_vs_baselines(precomputed)),
         ("09 NTU regenerator effectiveness", plot_regenerator_effectiveness),
         ("10 Geometry trade-off — packed bed", plot_geometry_packed_bed),
         ("11 Geometry trade-off — parallel plate", plot_geometry_parallel_plate),
         ("12 Loss-model calibration + leave-one-out CV", plot_loss_model_calibration),
         ("13 Parasitic-fraction scaling with device size", plot_parasitic_fraction_scaling),
-        ("14 System-level validation vs. published prototypes", plot_system_validation),
+        ("14 System-level validation vs. published prototypes",
+         lambda: plot_system_validation(precomputed)),
         ("15 Curve-level (2-point) Qc(span) validation", plot_curve_validation),
         ("16 Sobol global sensitivity analysis",
          lambda: plot_sobol_sensitivity(precomputed)),
