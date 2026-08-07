@@ -133,7 +133,10 @@ class AMRSystem:
                  regenerator_effectiveness: float = 0.85,
                  parasitic_fraction: float = 0.15,
                  loss_model=None, use_ntu_thermal_model: bool = False,
-                 blow_fraction: float = 0.5):
+                 blow_fraction: float = 0.5,
+                 particle_diameter: float = None,
+                 bed_cross_section_area: float = 0.002,
+                 hypereg_n_parallel: int = None):
         """
         material               : MagnetocaloricMaterial instance
         mu0H_max                : peak applied field, Tesla
@@ -186,6 +189,65 @@ class AMRSystem:
                                      for the honesty flags on this
                                      calibration (two points, one operating
                                      condition, extrapolated shape).
+        particle_diameter          : Phase 15 addition. Packed-sphere-bed
+                                     particle diameter, m. Default None
+                                     preserves ALL pre-Phase-15 behavior
+                                     exactly (regenerator_effectiveness is
+                                     used as before if
+                                     use_ntu_thermal_model=False, or the
+                                     NTU model's own default particle
+                                     diameter is used if True). When set
+                                     AND use_ntu_thermal_model=True, this
+                                     (a) feeds core.thermal.
+                                     regenerator_effectiveness()'s
+                                     particle_diameter, coupling
+                                     regenerator geometry to thermal
+                                     effectiveness the way
+                                     geometry_analysis.py already
+                                     demonstrates, and (b) computes a
+                                     geometry-explicit hydraulic pumping
+                                     power (core.thermal.
+                                     pumping_power_packed_bed(), Tusek et
+                                     al. 2013) that REPLACES loss_model's
+                                     generic k_pump*mdot**2 term (via
+                                     StateDependentLossModel.
+                                     parasitic_power's
+                                     pumping_power_override) rather than
+                                     adding to it -- see that function's
+                                     docstring for why: k_pump is
+                                     CORE-calibrated against real devices'
+                                     TOTAL parasitic power at their own
+                                     (unknown-to-this-model) geometries, so
+                                     adding a geometry-explicit hydraulic
+                                     term on top would double-count the
+                                     pumping-loss channel. If particle_
+                                     diameter is set but no loss_model is
+                                     provided, the geometry-explicit
+                                     pumping term is NOT applied (the
+                                     constant parasitic_fraction*Qc model
+                                     has no separate pumping component to
+                                     substitute) -- a documented, not
+                                     silent, limitation.
+        bed_cross_section_area      : m^2, passed through to the NTU/
+                                     pumping-power geometry calculations
+                                     when particle_diameter is set. Default
+                                     0.002 m^2 matches thermal.py's and
+                                     geometry_analysis.py's own default
+                                     (a representative ~5x4cm bed face).
+        hypereg_n_parallel          : Phase 15 addition. If set (and
+                                     particle_diameter and loss_model are
+                                     also set), uses core.thermal.
+                                     pumping_power_packed_bed_hypereg()
+                                     instead of the conventional-series
+                                     pumping_power_packed_bed() -- i.e.
+                                     models a Hypereg-style parallel-
+                                     hydraulic regenerator split into this
+                                     many sub-regenerators (Klinar et al.
+                                     2024; see results/hypereg_findings.md
+                                     and core/hypereg_analysis.py). Default
+                                     None reproduces the conventional
+                                     (non-Hypereg) geometry-explicit
+                                     pumping term.
         """
         self.mat = material
         self.mu0H_max = mu0H_max
@@ -198,6 +260,9 @@ class AMRSystem:
         self.loss_model = loss_model
         self.use_ntu_thermal_model = use_ntu_thermal_model
         self.blow_fraction = blow_fraction
+        self.particle_diameter = particle_diameter
+        self.bed_cross_section_area = bed_cross_section_area
+        self.hypereg_n_parallel = hypereg_n_parallel
         self._last_ntu_info = None
 
     def _blow_fraction_qc_multiplier(self):
@@ -216,13 +281,44 @@ class AMRSystem:
         """If use_ntu_thermal_model is enabled, compute regenerator
         effectiveness from the NTU model (core/thermal.py) instead of using
         the prescribed constant value. This allows regenerator mass to
-        influence cooling capacity."""
+        influence cooling capacity. Phase 15: when particle_diameter is
+        also set, it is passed through so geometry (not just mass/
+        frequency/mdot) affects the NTU calculation too -- see __init__'s
+        docstring."""
         if not self.use_ntu_thermal_model:
             return self.eps
         from core.thermal import regenerator_effectiveness as ntu_eps
-        info = ntu_eps(self.m_reg, self.f, self.mdot_f)
+        kwargs = dict(bed_cross_section_area=self.bed_cross_section_area)
+        if self.particle_diameter is not None:
+            kwargs["particle_diameter"] = self.particle_diameter
+        info = ntu_eps(self.m_reg, self.f, self.mdot_f, **kwargs)
         self._last_ntu_info = info
         return info["eps"]
+
+    def _geometry_pumping_power_W(self):
+        """Phase 15 addition. Returns the geometry-explicit hydraulic
+        pumping power (W) if particle_diameter is set, else None (meaning
+        "no override -- use loss_model's generic k_pump*mdot**2 term
+        unchanged", the pre-Phase-15 behavior). Uses the Hypereg parallel-
+        hydraulic variant (core.thermal.pumping_power_packed_bed_hypereg)
+        instead of the conventional series-flow one if hypereg_n_parallel
+        is also set -- see results/hypereg_findings.md and
+        core/hypereg_analysis.py."""
+        if self.particle_diameter is None:
+            return None
+        from core.thermal import pumping_power_packed_bed, pumping_power_packed_bed_hypereg
+        if self.hypereg_n_parallel is not None:
+            info = pumping_power_packed_bed_hypereg(
+                self.mdot_f, particle_diameter=self.particle_diameter,
+                bed_cross_section_area=self.bed_cross_section_area,
+                mass_regenerator=self.m_reg,
+                n_parallel_subregenerators=self.hypereg_n_parallel)
+        else:
+            info = pumping_power_packed_bed(
+                self.mdot_f, particle_diameter=self.particle_diameter,
+                bed_cross_section_area=self.bed_cross_section_area,
+                mass_regenerator=self.m_reg)
+        return info["P_pump_W"]
 
     def cooling_capacity(self, T_cold, T_span):
         """Cooling capacity Qc (W) at a given no-load DeltaT_ad and imposed
@@ -282,8 +378,10 @@ class AMRSystem:
         Qc, dTad = self.cooling_capacity(T_cold, T_span)
         W, eta2 = self.magnetic_work(T_cold, T_span, Qc)
         if self.loss_model is not None:
+            pump_override = self._geometry_pumping_power_W()
             W_parasitic = self.loss_model.parasitic_power(
-                self.f, self.mu0H_max, self.mdot_f, Qc)
+                self.f, self.mu0H_max, self.mdot_f, Qc,
+                pumping_power_override=pump_override)
         else:
             W_parasitic = self.parasitic_fraction * Qc
         Qh = Qc + W

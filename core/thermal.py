@@ -292,6 +292,91 @@ def pumping_power_parallel_plate(mdot, plate_thickness=0.0005, plate_spacing=0.0
             "u_s_m_s": u_s, "d_h_m": d_h, "L_m": L, "porosity": porosity}
 
 
+# =============================================================================
+# Phase 15 addition: Hypereg parallel-hydraulic pressure-drop reduction
+# =============================================================================
+#
+# Source: Klinar, K. et al., "Perspectives and Energy Applications of
+# Magnetocaloric, Pyromagnetic, Electrocaloric and Pyroelectric Materials",
+# Adv. Energy Mater. 14, 2401739 (2024), Section "Future Heat Transfer and
+# Regenerator Principles" (Figs. 18-20). Read directly from the PDF for
+# this pass (Papers/Reviews/... Klinar ... .pdf) rather than relying on
+# search-snippet-level knowledge, per the Phase 15 plan for this item.
+#
+# What the paper actually claims (paraphrased, not quoted -- see
+# results/hypereg_findings.md for the full findings note): "Hypereg" is a
+# newly-patented (Klinar et al., patent [275] in the review), NOT-YET-
+# published-elsewhere regenerator concept whose entire mechanism is
+# HYDRAULIC, not electromagnetic: instead of fluid flowing in SERIES
+# through one long regenerator bed (pressure-drop length L_dp), it flows
+# in PARALLEL through several shorter sub-regenerator beds fed by a
+# shared propulsion system, so the pressure-drop-relevant length drops to
+# L_dp/n for n parallel sub-beds (the paper's own illustrative Figure 19
+# example uses n=4, i.e. L2_dp = (1/4) L1_dp). This is explicitly a
+# PRESSURE-DROP / PUMPING-POWER effect (this module's domain: Darcy-flow
+# pressure drop, pumping_power_packed_bed()), NOT an eddy-current effect
+# (core.loss_model.StateDependentLossModel.k_eddy's domain) -- answering
+# the Phase 15 plan's research question directly: it is a thermal.py-style
+# hydraulic-geometry change, not a loss_model.py electromagnetic-
+# calibration change.
+#
+# HONESTY FLAGS (read before trusting any number from this function):
+#   1. The review states this is the AUTHORS' OWN newly-unveiled, patented
+#      concept, described as "our initial assessment" -- there is no
+#      published experimental or simulated pressure-drop reduction factor
+#      in the paper, and no operating AMR prototype using it exists yet.
+#      The n=4 sub-regenerator count is ONLY an illustrative example in
+#      Figure 19, not a validated or recommended design value.
+#   2. This function does not change the regenerator's heat-transfer
+#      effectiveness (regenerator_effectiveness()) at all -- splitting one
+#      bed into n parallel, individually-shorter sub-beds at the SAME
+#      total mass and total cross-sectional flow area leaves NTU
+#      (proportional to heat-transfer area / mdot*cp) structurally
+#      unchanged in this 0-D model; the benefit modeled here is PURELY
+#      the reduced pumping power (and, downstream, the higher frequency
+#      that reduced pumping power can afford), matching the paper's own
+#      framing that Hypereg targets pressure drop specifically, not heat
+#      transfer.
+#   3. No literature source in this corpus gives the "cost" of achieving
+#      n-way parallelization (e.g. n separate flow headers, n sets of
+#      fluidic diodes/valves -- Figure 20's own b1-b3/c1-c3/d1-d3
+#      alternatives) in either $ or additional dead volume/parasitic
+#      leakage -- this function is a PUMPING-POWER-ONLY estimate, not a
+#      full engineering trade study of the n sub-regenerator designs the
+#      paper sketches.
+def pumping_power_packed_bed_hypereg(mdot, particle_diameter=0.0005, porosity=0.365,
+                                       bed_cross_section_area=0.002, mass_regenerator=2.0,
+                                       T_K=300.0, n_parallel_subregenerators=4):
+    """Hypereg-style parallel-hydraulic pumping power (W): identical to
+    `pumping_power_packed_bed()` except the pressure-drop length L is
+    divided by `n_parallel_subregenerators` (Klinar et al. 2024 Fig. 19;
+    default n=4 matches the paper's own illustrative example -- see the
+    honesty flags in the section docstring above, especially flag #1).
+    Total regenerator mass, cross-section area, and particle diameter are
+    unchanged from the conventional-series case; only the flow path is
+    reconfigured, so `regenerator_effectiveness()` (heat-transfer side) is
+    unaffected -- callers should pair this with the SAME eps as the
+    conventional case, not a re-derived one (see honesty flag #2)."""
+    if n_parallel_subregenerators < 1:
+        raise ValueError("n_parallel_subregenerators must be >= 1")
+    fluid = water_properties(T_K)
+    info = pressure_drop_packed_bed(mdot, particle_diameter, porosity,
+                                     bed_cross_section_area, mass_regenerator, T_K)
+    L_hypereg = info["L_m"] / n_parallel_subregenerators
+    dP_hypereg = info["f"] * (L_hypereg / info["d_h_m"]) * (fluid["rho"] * info["u_s_m_s"] ** 2 / 2)
+    Q_vol = mdot / fluid["rho"]
+    P_pump_hypereg = dP_hypereg * Q_vol
+    return {
+        "dP_Pa": dP_hypereg, "P_pump_W": P_pump_hypereg,
+        "Re": info["Re"], "f": info["f"], "u_s_m_s": info["u_s_m_s"],
+        "d_h_m": info["d_h_m"], "L_m": L_hypereg,
+        "n_parallel_subregenerators": n_parallel_subregenerators,
+        "P_pump_W_conventional_series": pumping_power_packed_bed(
+            mdot, particle_diameter, porosity, bed_cross_section_area,
+            mass_regenerator, T_K)["P_pump_W"],
+    }
+
+
 if __name__ == "__main__":
     print("Regenerator effectiveness sweep vs. mass_regenerator (f=1Hz, mdot=0.08kg/s)")
     for m in [0.5, 1, 2, 5, 10, 15]:

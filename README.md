@@ -4,7 +4,7 @@ Physics-based simulation suite evaluating **magnetocaloric (magnetic) cooling
 for data centers**, benchmarked against vapor-compression CRAC/CRAH and
 direct liquid cooling.
 
-## Status: Phase 13 (paper-mining pass part 6: traced/corrected the `DTU_rotary_Gd_2016` citation, promoted `DTU_Eriksen_rotary_Gd_2015` into the CORE calibration slot) done, Phase 14 (bug fixes: corrected a mean-field-vs-first-order GD5SI2GE2 material mixup in the cascade comparison/fig20/cascade.py demo; added `core/material_family_comparison.py`, a four-way Gd/Gd5Si2Ge2/GD-family/LAFESIH-family/MNFEPSI-family ranking at the same ASHRAE point, wired into `main.py` step 8d and `plots.py` fig26; documented the `span_fraction` linear-clamp approximation rather than inventing an unsourced smoothing function; confirmed the full-system BOM cost gap, reference-book OCR, and two flagged CSV rows are already correctly left open/flagged, no change needed; Tušek et al. (2013) Figs. 10-11 digitization still open, being done manually in WebPlotDigitizer; 170/170 tests passing) done, Phase 15 (design-recommendations synthesis: added `core/design_recommendations.py`, which consolidates the frequency/material/Curie-grading/geometry/field-flow COP-maximization levers already computed by earlier stages into one ranked, actionable report, wired into `main.py` as new step 13; added a final "EXECUTIVE SUMMARY" banner to `main.py`'s console/log output so every implemented analysis and its headline metric is visible in one place at the end of a run; no existing functionality changed, 171/171 tests passing) done — see `ROADMAP.md`
+## Status: Phase 13 (paper-mining pass part 6: traced/corrected the `DTU_rotary_Gd_2016` citation, promoted `DTU_Eriksen_rotary_Gd_2015` into the CORE calibration slot) done, Phase 14 (bug fixes: corrected a mean-field-vs-first-order GD5SI2GE2 material mixup in the cascade comparison/fig20/cascade.py demo; added `core/material_family_comparison.py`, a four-way Gd/Gd5Si2Ge2/GD-family/LAFESIH-family/MNFEPSI-family ranking at the same ASHRAE point, wired into `main.py` step 8d and `plots.py` fig26; documented the `span_fraction` linear-clamp approximation rather than inventing an unsourced smoothing function; confirmed the full-system BOM cost gap, reference-book OCR, and two flagged CSV rows are already correctly left open/flagged, no change needed; Tušek et al. (2013) Figs. 10-11 digitization still open, being done manually in WebPlotDigitizer; 170/170 tests passing) done, **Phase 15 (a full-system BOM cost model in `core/economics.py` — soft-magnetic-yoke cost, an order-of-magnitude full-system-cost estimate, and a CRF-based levelized cost of cooling; confirmed the multi-bed-rotary-vs-reciprocating loss question was already answered by existing `RotaryDriveLossModel`/`analyze_parasitic_fraction_scaling` infrastructure, no new term needed; a Hypereg-style parallel-hydraulic pumping-power analysis (`core/hypereg_analysis.py`), grounded in a direct reading of Klinar et al. (2024); and material+geometry co-optimization inside NSGA-III (`core/optimize.py`) — particle diameter as a 7th design variable wired through `core/amr_cycle.py`'s new geometry-aware pumping-power accounting, and material family as a per-family NSGA-III search merged post-hoc into one Pareto front; 153/153 tests passing. **Note**: `core/design_recommendations.py`, referenced in the original Phase 15 plan, does not exist in this project snapshot — see `ROADMAP.md` Phase 15 item 1 for the flagged discrepancy)** done — see `ROADMAP.md`
 
 ## What's implemented
 
@@ -15,18 +15,17 @@ direct liquid cooling.
 | `core/giant_mce_analysis.py` | Formal Gd vs. giant-MCE comparison → `results/giant_mce_analysis.txt` |
 | `core/material_family_comparison.py` | Four-way material family ranking (Gd, Gd5Si2Ge2-fixed, and the three composition-tunable families) at the same ASHRAE point → `results/material_family_comparison.csv`/`.txt`, fig26 (Phase 14) |
 | `core/emissions.py` | Refrigerant-free GWP/emissions comparison |
-| `core/amr_cycle.py` | 0-D AMR cycle model: cooling capacity, ideal/electrical COP, optional NTU-derived effectiveness, optional blow-fraction asymmetry (Phase 10) |
-| `core/thermal.py` | NTU packed-bed regenerator effectiveness model |
-| `core/loss_model.py` | State-dependent eddy/pumping/base loss model — **Phase 6: added a 4th benchmark device and found the extended fit is unstable (negative coefficients, leave-one-out errors up to +1639%); production default stays on the stable 3-point CORE fit, instability documented via `run_extended_diagnostic()`** |
-| `core/optimize.py` | NSGA-III multi-objective optimization over 6 design variables (field, frequency, flow, mass, effectiveness, blow fraction) — **Phase 6: cost objective now uses `economics.material_cost()`, grounded in Bjørk et al. (2011)'s $40/kg magnet + $20/kg MCM figures** |
+| `core/amr_cycle.py` | 0-D AMR cycle model: cooling capacity, ideal/electrical COP, optional NTU-derived effectiveness, optional blow-fraction asymmetry (Phase 10) — **Phase 15: optional `particle_diameter`/`bed_cross_section_area`/`hypereg_n_parallel` params wire regenerator geometry into both the NTU effectiveness calculation and a geometry-explicit pumping-power term that replaces (not adds to) the generic loss-model `k_pump` term; `None` by default, fully backward-compatible** |
+| `core/thermal.py` | NTU packed-bed regenerator effectiveness model, packed-bed/parallel-plate pumping power (Tušek et al. 2013) — **Phase 15: added `pumping_power_packed_bed_hypereg()`, a parallel-sub-regenerator pressure-drop-reduction variant motivated by Klinar et al. (2024)** |
+| `core/hypereg_analysis.py` | **Phase 15 addition**: demonstrates the Hypereg parallel-hydraulic pumping-power benefit at this repo's representative operating point → `results/hypereg_analysis.txt`, `results/hypereg_findings.md` |
+| `core/loss_model.py` | State-dependent eddy/pumping/base loss model — **Phase 6: added a 4th benchmark device and found the extended fit is unstable (negative coefficients, leave-one-out errors up to +1639%); production default stays on the stable 3-point CORE fit, instability documented via `run_extended_diagnostic()`. Phase 15: `parasitic_power()` gained a `pumping_power_override` parameter (default `None` = unchanged behavior) so `amr_cycle.py` can substitute a geometry-explicit pumping term without double-counting against the generic `k_pump` term; confirmed the rotary-vs-reciprocating loss-topology question was already closed by the existing `RotaryDriveLossModel`/`analyze_parasitic_fraction_scaling`, documented rather than duplicated** |
+| `core/optimize.py` | NSGA-III multi-objective optimization — **Phase 15: 7 design variables (field, frequency, flow, mass, effectiveness, blow fraction, + new particle diameter), material now co-optimized as a design choice (Gd + 3 composition-tunable giant-MCE families, each run separately through NSGA-III and merged post-hoc into one globally non-dominated Pareto front — see `ROADMAP.md` Phase 15 for why "merge post-hoc" was chosen over a native mixed-variable formulation); cost objective upgraded to `economics.bom_cost()` (family-specific MCM pricing + SMM yoke term)** |
 | `core/cascade.py` | Multi-stage cascade AMR design; Curie-graded beds pluggable across Gd5Si2Ge2, La(Fe,Si)13Hy, and (Mn,Fe)2(P,Si) families |
 | `core/baseline_cooling.py` | Vapor-compression and liquid-cooling COP correlations |
-| `core/economics.py` | CAPEX/OPEX comparison, materials-cost floor grounded in Bjørk et al. (2011) |
+| `core/economics.py` | CAPEX/OPEX comparison, materials-cost floor grounded in Bjørk et al. (2011) — **Phase 15: added `bom_cost()` (+ soft-magnetic-material yoke cost, Silva et al. 2017), `full_system_cost_estimate()` (order-of-magnitude full-system multiplier from Russek & Zimm 2006's vapor-compression-AC manufactured-cost benchmark), `levelized_cost_of_cooling()` (CRF-based $/kWh, a second independent cost methodology), and `MCM_COST_PER_KG_BY_FAMILY` (per-material-family MCM pricing, e.g. La(Fe,Si)13Hy at $8/kg)** |
 | `core/validation.py`, `validation_system.py`, `giguere_validation.py` | Material- and system-level validation against literature/prototypes; `validation.py` also cross-checks Gd at 7T (Giguere et al.) and a Dan'kov et al. Curie-shift held-out prediction (not reproduced by the model, documented); `validation_system.py` also field-sensitivity-checks the Chubu Electric/Toshiba pair and reachability-checks capacity-only rows (Cooltech's 42K stress test); `giguere_validation.py` also cross-checks the Gd5Si2Ge2 dTad correction against Pecharsky & Gschneidner (1997)'s independent peak-ratio figure |
 | `core/sensitivity.py`, `rsm.py` | Sobol sensitivity, RSM surrogate |
-| `core/geometry_analysis.py` | Packed-bed sphere-diameter and parallel-plate channel-spacing COP optimization (Tušek, Kitanovski & Poredoš 2013) → `results/geometry_optimization_analysis.txt` |
-| `core/design_recommendations.py` | **(Phase 15, new)** Consolidates the frequency/material/Curie-grading/geometry/field-flow levers already computed by the stages above into one ranked, actionable COP-maximization report and a recommended starting design point → `results/design_recommendations.txt` |
-| `main.py` | Full comparison across the ASHRAE TC9.9 thermal envelope, plus a final executive-summary banner covering every stage's headline metric |
+| `main.py` | Full comparison across the ASHRAE TC9.9 thermal envelope |
 
 ## Quick start
 
@@ -40,85 +39,88 @@ python -m core.material_family_comparison # four-way material family ranking at 
 python -m core.emissions                 # refrigerant-free GWP/emissions case
 python -m core.loss_model                 # CORE calibration + Phase 6 EXTENDED diagnostic
 python -m core.thermal                     # NTU regenerator effectiveness sweeps
+python -m core.hypereg_analysis             # Phase 15: Hypereg parallel-hydraulic pumping-power sweep
 python -m core.sensitivity                  # Sobol, Phase 2 vs. Phase 3 modes
 python -m core.rsm                           # RSM surrogate for cooling capacity
-python -m core.optimize                       # NSGA-III Pareto front, grounded cost model
+python -m core.optimize                       # NSGA-III Pareto front — Phase 15: material + geometry co-optimized, grounded BOM cost model
 python -m core.cascade                         # multi-stage cascade, Gd vs. Gd5Si2Ge2
-python -m core.geometry_analysis                 # packed-bed / parallel-plate geometry COP optimum
-python -m core.design_recommendations             # standalone smoke test of the Phase 15 synthesis report
-python main.py                                       # full pipeline: every analysis above, in order,
-                                                       # ending in results/design_recommendations.txt
-                                                       # and an EXECUTIVE SUMMARY banner in the console/log
+python main.py                                   # full pipeline: validation, economics/BOM, cascade, sensitivity, optimization, 26 figures
 ```
 
-Running `python main.py` end-to-end reproduces every file under `results/`
-from scratch, including the new `results/design_recommendations.txt`
-(Phase 15) and a final `EXECUTIVE SUMMARY` section printed to the console
-and written to `results/pipeline.log` that lists every implemented
-analysis alongside its headline metric for that run — see "Phase 15
-findings" below for what that report actually says on a representative
-run, and `main.py`'s own module docstring for the full 13-step pipeline
-order.
+### Phase 15 module usage notes
 
-## Phase 15 findings (design-recommendations synthesis)
+```python
+# Geometry-aware AMR system (backward-compatible: omit particle_diameter for old behavior)
+from core.amr_cycle import AMRSystem
+from core.mce_material import GADOLINIUM
+from core.loss_model import StateDependentLossModel
 
-Every other phase in this project answered one question at a time (what's
-the best material? what's the best geometry? what does the optimizer
-find?). Nothing pulled those answers into a single "how do I actually
-raise AMR electrical COP" report — `core/design_recommendations.py` now
-does that, reusing the result objects the pipeline's own stages already
-compute (no new physics, no recomputation). Representative numbers from a
-full pipeline run (`results/pipeline.log`; exact values vary run-to-run
-with the optimizer's stochastic search and are not meant to be treated as
-fixed constants):
+sys_ = AMRSystem(GADOLINIUM, mu0H_max=1.5, mass_regenerator=5.0, frequency=1.0,
+                  fluid_mdot=0.08, regenerator_effectiveness=0.85,
+                  loss_model=StateDependentLossModel(), use_ntu_thermal_model=True,
+                  particle_diameter=0.0005,      # 0.5mm -- feeds NTU eps AND replaces
+                                                   # the generic k_pump term with a
+                                                   # geometry-explicit pumping power
+                  hypereg_n_parallel=4)            # optional: Hypereg-style parallel split
+result = sys_.run(T_cold=291.0, T_span=10.0)
 
-1. **Frequency — the dominant lever.** State-dependent-loss Sobol
-   analysis (`sensitivity.py` step 9b) puts total-order sensitivity of
-   electrical COP to frequency at **ST ≈ 0.85–0.87**, an order of
-   magnitude above field, flow, or regenerator effectiveness. NSGA-III's
-   own Pareto front shows the trade-off directly: the best-electrical-COP
-   design sits at **f=0.32 Hz → COP_elec=9.49**, while the
-   best-cooling-capacity design sits at **f=4.23 Hz → COP_elec=2.89** (same
-   optimizer run, `results/pareto_front.csv`) — lower frequency raises COP
-   because eddy-current loss scales with f², while cooling capacity only
-   grows sub-quadratically with it.
-2. **Material choice.** At the representative 10 K/18 °C ASHRAE point,
-   composition-tuned **La(Fe,Si)13Hy ranks first** (COP_elec=7.33,
-   Qc=4989 W), ahead of plain Gd (COP_elec=5.09, Qc=1443 W) and the tuned
-   Gd5(SixGe1−x)4(-Ga) family (COP_elec=4.95, Qc=1352 W) —
-   `results/material_family_comparison.csv` (Phase 14).
-3. **Curie-temperature grading.** At the same point, a 3-stage
-   Curie-graded cascade reaches **COP=2.78, Qc=2388 W**, vs. **COP=2.42,
-   Qc=1258 W** for a uniform-Gd 3-stage cascade — grading nearly doubles
-   capacity while also raising COP, at the cost of the composition-tuning
-   complexity documented in `cascade.py` (Phase 7/9).
-4. **Regenerator geometry.** Coupling NTU thermal effectiveness to
-   Tušek, Kitanovski & Poredoš (2013)'s hydraulic pumping-power terms
-   produces a genuine interior COP optimum: **≈0.5 mm packed-bed sphere
-   diameter** and **≈0.1 mm parallel-plate channel spacing**
-   (`results/geometry_optimization_analysis.txt`, Phase 7c). Shrinking
-   geometry further raises thermal effectiveness only marginally while
-   pumping power keeps growing.
-5. **Field / flow balance.** NSGA-III's knee-point (balanced) design sits
-   at **H≈3.0 T, f≈0.32 Hz, ṁ≈0.50 kg/s → COP_elec≈9.4, Qc≈13.7 kW**,
-   avoiding either objective's own extreme.
+# Full-system BOM cost model
+from core import economics
+bom = economics.bom_cost(mu0H_max=1.5, mass_regenerator=5.0, family_name="Gd")
+full_system = economics.full_system_cost_estimate(1.5, 5.0, family_name="Gd")
+lcoc = economics.levelized_cost_of_cooling(1.5, 5.0, Qc_avg_W=1000, COP_electrical=5.0)
+```
 
-**Known limitation, stated rather than hidden**: `optimize.py`'s NSGA-III
-search currently only spans field/frequency/flow/mass/effectiveness/
-blow-fraction (6 design variables) — it does **not** yet co-optimize over
-material family or regenerator geometry, so levers 2–4 above are reported
-as separate, not-yet-unified analyses rather than folded into one combined
-optimum. See ROADMAP.md's Future Work for the open item this creates.
+Running `python -m core.optimize` (or `main.py`'s step 11) now writes
+`results/pareto_front.csv` (merged, globally non-dominated across all
+material candidates) AND `results/pareto_front_by_material/<material>.csv`
+(each material's own front, before merging, for transparency).
 
-**Recent literature context** (cited for the reader, not used
-quantitatively in the model): Klinar, Kitanovski, Law, Franco & Moya,
-"Perspectives and Energy Applications of Magnetocaloric, Pyromagnetic,
-Electrocaloric, and Pyroelectric Materials," *Adv. Energy Mater.* **14**,
-2401739 (2024) — a 2024 roadmap-style review of caloric cooling
-technologies to 2040 that, among other things, profiles a novel
-high-frequency active caloric regenerator concept ("Hypereg") aimed
-directly at the frequency/loss trade-off this project's own Sobol analysis
-independently identifies as the dominant COP lever.
+## Phase 15 findings
+
+Full writeup and honesty flags in `ROADMAP.md`'s Phase 15 section and
+`results/hypereg_findings.md`; summary here.
+
+**Material + geometry co-optimization** (`core/optimize.py`): at this
+repo's fixed representative operating point (T_cold=291K, 10K span),
+running NSGA-III separately per material candidate and merging the
+resulting fronts (option (b) from the plan — see `ROADMAP.md` for why
+this was chosen over a native mixed-variable formulation) found the
+merged, globally non-dominated Pareto front was **100% La(Fe,Si)13Hy**
+(23/23 designs) at production settings — Gd and the composition-tunable
+Gd-Si-Ge family were all cross-material-dominated at this particular
+point. This is a result of the search, not an assumption baked in;
+`results/pareto_front_by_material/*.csv` keeps each material's own
+front so the conclusion is checkable rather than asserted.
+`particle_diameter` (the new geometry design variable) spans roughly
+0.3-1.9mm across the merged front — a real, active search dimension.
+
+**Hypereg** (`core/hypereg_analysis.py`, `results/hypereg_findings.md`):
+Klinar et al. (2024)'s Hypereg concept is a **hydraulic** idea (parallel
+vs. series sub-regenerator flow reducing pressure-drop length), not an
+eddy-current one — implemented as a pumping-power-only variant of the
+existing packed-bed correlation. At this repo's lab-scale representative
+point, splitting into 4 parallel sub-beds (the paper's own illustrative
+example) raised COP_electrical by about 0.2% (5.264→5.275), saturating
+around n=16 at 5.278 — real but modest in this model, since pumping power
+is only one of three loss channels here and not the dominant one at this
+scale.
+
+**Full-system BOM** (`core/economics.py`): at the 2T/5kg Gd design point
+used throughout the pipeline, the materials BOM (magnet + MCM + new
+soft-magnetic-yoke term) comes to $1,375; an order-of-magnitude
+full-system estimate (using a vapor-compression-AC manufactured-cost
+benchmark as a sanity-check multiplier, NOT an AMR-specific quote) is
+about $13,750; and a CRF-based levelized cost of cooling comes to about
+$0.034/kWh_cooling. A genuine bottom-up AMR-specific BOM (HX, pump,
+motor, controls) remains open — see `ROADMAP.md`'s Phase 16 candidates.
+
+**Rotary AMR topology**: re-examining the plan's "does loss behavior
+differ for rotary AMR / multi-bed topologies" question found it was
+already answered by existing infrastructure
+(`core.loss_model.RotaryDriveLossModel`,
+`analyze_parasitic_fraction_scaling()`) — documented explicitly rather
+than duplicated; see `core/loss_model.py`'s module docstring.
 
 ## Phase 12 findings (paper-mining pass, part 3)
 
@@ -491,12 +493,10 @@ neglects short-range spin correlations / critical fluctuations (de Oliveira
 ## Repo layout
 
 ```
-core/            physics, validation, sensitivity, surrogate, economics, and
-                 design-recommendations-synthesis modules
+core/            physics, validation, sensitivity, surrogate, and economics modules
 data/            literature-sourced parameter tables + digitized prototype benchmarks
-results/         generated comparison tables, Sobol results, RSM coefficients,
-                 geometry/design-recommendations reports, figures/
-main.py          top-level comparison driver (13-step pipeline, executive summary)
+results/         generated comparison tables, Sobol results, RSM coefficients
+main.py          top-level comparison driver
 ROADMAP.md       phased plan to reach -suite parity
 LITERATURE_REVIEW.md
 NOMENCLATURE.md

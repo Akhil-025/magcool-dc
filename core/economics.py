@@ -36,6 +36,11 @@ Sources:
       (see `lifetime_cost()` docstring).
     - Bahl, Engelbrecht et al., Int. J. Refrig. 37 (2014) 78-83 — AMR
       system cost breakdown context
+    - Gauss, Homm & Gutfleisch, "The Resource Basis of Magnetic
+      Refrigeration", J. Ind. Ecol. 21(5) (2016) 1291-1300 -- phase 15
+      addition: raw-material supply-criticality assessment for Gd-,
+      La-, and Mn-based magnetocaloric alloys plus the Nd2Fe14B magnet
+      material; see `resource_criticality_note()` below
     - Lawrence Berkeley National Laboratory, "Data Center Cooling System
       Cost Benchmarks" — representative chilled-water OPEX
 """
@@ -148,3 +153,280 @@ def simple_tco(tco: TCOResult, capacity_kW: float, annual_hours: float,
     annual_opex = tco.opex_per_kwh_cooling * annual_cooling_kWh
     return {"technology": tco.technology, "capex_$": capex,
             "annual_opex_$": annual_opex, "notes": tco.notes}
+
+
+# =============================================================================
+# Phase 15 addition: full-system BOM cost model
+# =============================================================================
+#
+# `material_cost()`/`lifetime_cost()` above are explicitly documented as a
+# MATERIALS-ONLY floor (magnet + MCM), not a full-system cost -- Phase 14's
+# item B6 re-confirmed this gap was already correctly stated, not closed.
+# This section closes it partially, using three newly-added papers in
+# Papers/Economics/ that were not available for the earlier passes:
+#
+#   1. Russek & Zimm, "Potential for cost effective magnetocaloric air
+#      conditioning systems", Int. J. Refrig. 29 (2006) 1366-1373 -- Table 1
+#      reports the DOE-evaluated MANUFACTURED cost of 3-ton (10.55 kW_c)
+#      residential air conditioners: $42.6-102.1/kW_c across SEER 10-18.
+#      The paper's own worked examples put aggregate magnet+MCM material
+#      cost at $2.3-11.7/kW_c -- i.e. "less than 10% of the manufactured
+#      cost for an SEER 13 system" (the paper's own words, paraphrased).
+#      That ratio is used below as an ORDER-OF-MAGNITUDE full-system
+#      multiplier: if materials are a MINORITY share (<=10%) of a
+#      manufactured, mass-produced HVAC unit's cost, a materials-only
+#      number can be scaled up by roughly 1/0.10 = 10x as a rough
+#      full-system-cost ESTIMATE, not a bottom-up BOM. This is explicitly
+#      an analogy to a *different, more mature, mass-produced* technology
+#      (vapor-compression AC), not a magnetic-refrigerator-specific
+#      HX/pump/motor/controls quote -- flagged, not hidden.
+#   2. Silva, Bahl et al. (the "Permanent magnet design for magnetic heat
+#      pumps using total cost minimization" paper, J. Magn. Magn. Mater.
+#      442 (2017) 87-96) gives a thermoeconomic "cost of exergetic
+#      cooling" formulation (their Eq. 6, following Rowe's 2011
+#      thermoeconomic approach) that annualizes CAPITAL cost via a Capital
+#      Recovery Factor (CRF) and adds it to electricity OPEX on a
+#      consistent $/kWh basis, and explicitly adds a THIRD material
+#      category -- soft magnetic material (SMM, e.g. 1018 steel flux
+#      return yoke) at ~$5/kg -- alongside permanent-magnet and MCM costs.
+#      `bom_cost()` below adds that SMM term to `material_cost()`'s two
+#      existing terms (magnet, MCM) as a genuinely additive, literature-
+#      sourced BOM line-item, not a replacement.
+#   3. Russek & Zimm also report a literature unit cost for La(Fe,Si)13Hy
+#      of ~$8/kg (vs. Gd's $20/kg already used above) -- used in
+#      `MCM_COST_PER_KG_BY_FAMILY` below so `bom_cost()`/`cost_index()`
+#      can price a design that uses a different composition-tunable
+#      giant-MCE family (see core/cascade.py's GD_FAMILY/LAFESIH_FAMILY/
+#      MNFEPSI_FAMILY and core/optimize.py's Phase 15 material-family
+#      co-optimization) rather than assuming Gd for every candidate.
+#
+# Honesty note: none of this closes the ROADMAP's full bottom-up BOM gap
+# (a real HX/pump/motor/controls parts-and-labor cost breakdown SPECIFIC
+# to an AMR device). It adds (a) one genuinely new, literature-sourced
+# material-cost line item (SMM/yoke), (b) an explicit, clearly-labeled
+# ORDER-OF-MAGNITUDE full-system estimate derived from a different
+# (vapor-compression) technology's manufactured-cost benchmark, used only
+# as a sanity-check multiplier, and (c) a second, independent capital+
+# operating cost methodology (CRF-based levelized cost of cooling) that
+# can be cross-checked against `lifetime_cost()`'s simpler
+# materials-floor-plus-electricity approach. A specific, AMR-native BOM
+# remains future work (see ROADMAP.md Phase 15).
+
+COST_SMM_PER_KG = 5.0   # $/kg, 1018 soft-magnetic (flux-return) steel,
+                          # Silva et al., J. Magn. Magn. Mater. 442 (2017) 87-96
+
+# Non-materials cost fraction implied by Russek & Zimm (2006) Table 1 +
+# their own worked examples (aggregate magnet+MCM cost "less than 10% of
+# the manufactured cost for an SEER 13 system"). Used as a single
+# representative multiplier; the paper's own range (Gd: $11.7/kW_c,
+# La(Fe,Si)13Hy: $2.3/kW_c, against $42.6-102.1/kW_c manufactured cost)
+# spans roughly 8x-40x, so 10x is a conservative (low) point within that
+# range, not an upper bound.
+NON_MATERIALS_COST_MULTIPLIER = 10.0
+
+# MCM unit costs by material family, $/kg. Gd from Bjork et al. (2011,
+# see module docstring); La(Fe,Si)13Hy from Russek & Zimm (2006) -- see
+# section docstring above. Gd5(SixGe1-x)4(-Ga) (GD_FAMILY in cascade.py)
+# has no independently-sourced $/kg in this corpus; it is a Gd-based
+# alloy, so Gd's price is used as an explicitly-flagged proxy rather than
+# inventing a number. (Mn,Fe)2(P,Si) (MNFEPSI_FAMILY) is repeatedly
+# described in this corpus only QUALITATIVELY as low-cost / abundant,
+# non-rare-earth (e.g. "Materials challenges for high performance
+# magnetocaloric refrigeration devices" -- comparatively low materials
+# cost, no digit given; "Impact of F and S Doping on (Mn,Fe)2(P,Si) Giant
+# Magnetocaloric Materials" -- low raw material costs, absence of rare
+# earths, again no digit) -- no $/kg figure was found anywhere in this
+# project's corpus, so it is ALSO left at the Gd price as a conservative
+# (i.e. not artificially cheap) placeholder rather than guessing a number
+# the qualitative literature only implies should be lower.
+MCM_COST_PER_KG_BY_FAMILY = {
+    "Gd": COST_MCM_PER_KG,                      # $20/kg, Bjork et al. 2011
+    "Gd5(SixGe1-x)4(-Ga)": COST_MCM_PER_KG,      # proxy: Gd-based alloy, no
+                                                   # independent source found
+    "La(Fe,Si)13Hy": 8.0,                        # $/kg, Russek & Zimm 2006
+    "(Mn,Fe)2(P,Si)": COST_MCM_PER_KG,           # proxy: no $/kg source found
+                                                   # (qualitatively "low cost"
+                                                   # in the literature only)
+}
+
+
+def material_cost_by_family(mu0H_max, mass_regenerator, family_name="Gd"):
+    """Same magnet-mass scaling as `material_cost()`, but looks the MCM
+    unit cost up by family name (see MCM_COST_PER_KG_BY_FAMILY) instead of
+    always assuming Gd's $20/kg. `family_name` should match a
+    core.cascade.GradedFamily.name (or "Gd" for plain gadolinium) -- an
+    unrecognized name falls back to Gd's cost with a printed warning
+    rather than raising, so callers sweeping many candidate designs don't
+    crash on an unexpected label."""
+    mcm_cost_per_kg = MCM_COST_PER_KG_BY_FAMILY.get(family_name)
+    if mcm_cost_per_kg is None:
+        print(f"material_cost_by_family: unrecognized family_name={family_name!r}, "
+              f"falling back to Gd's ${COST_MCM_PER_KG}/kg")
+        mcm_cost_per_kg = COST_MCM_PER_KG
+    magnet_mass = MAGNET_TO_MCM_MASS_RATIO_PER_TESLA * mu0H_max * mass_regenerator
+    return COST_MAGNET_PER_KG * magnet_mass + mcm_cost_per_kg * mass_regenerator
+
+
+def bom_cost(mu0H_max, mass_regenerator, family_name="Gd",
+             smm_mass_fraction=0.5):
+    """Bottom-up magnet + MCM + soft-magnetic-material (SMM, flux-return
+    yoke) cost, $ -- extends `material_cost()`/`material_cost_by_family()`
+    with the SMM line item from Silva et al. (2017) (see section
+    docstring). `smm_mass_fraction` is the assumed SMM mass as a fraction
+    of the magnet mass (soft-iron flux-return yokes are typically a
+    comparable order of magnitude to the permanent-magnet mass in
+    Halbach-style and C-core magnet circuits, but no single ratio is
+    reported across all the papers in this corpus for a general AMR
+    design -- 0.5 is a rough, explicitly-flagged mid-of-plausible-range
+    placeholder, not a fitted value). Still a materials-only cost -- see
+    section docstring for what remains excluded."""
+    mcm_cost_per_kg = MCM_COST_PER_KG_BY_FAMILY.get(family_name, COST_MCM_PER_KG)
+    magnet_mass = MAGNET_TO_MCM_MASS_RATIO_PER_TESLA * mu0H_max * mass_regenerator
+    smm_mass = smm_mass_fraction * magnet_mass
+    magnet_cost = COST_MAGNET_PER_KG * magnet_mass
+    mcm_cost = mcm_cost_per_kg * mass_regenerator
+    smm_cost = COST_SMM_PER_KG * smm_mass
+    return {
+        "magnet_mass_kg": round(magnet_mass, 4),
+        "smm_mass_kg": round(smm_mass, 4),
+        "magnet_cost_$": round(magnet_cost, 2),
+        "mcm_cost_$": round(mcm_cost, 2),
+        "smm_cost_$": round(smm_cost, 2),
+        "materials_bom_total_$": round(magnet_cost + mcm_cost + smm_cost, 2),
+    }
+
+
+def full_system_cost_estimate(mu0H_max, mass_regenerator, family_name="Gd",
+                                smm_mass_fraction=0.5,
+                                non_materials_multiplier=NON_MATERIALS_COST_MULTIPLIER):
+    """ORDER-OF-MAGNITUDE full-system cost estimate: applies
+    `NON_MATERIALS_COST_MULTIPLIER` (see section docstring -- derived from
+    Russek & Zimm's 2006 vapor-compression-AC manufactured-cost benchmark,
+    NOT an AMR-specific quote) to `bom_cost()`'s materials-only BOM total.
+    This is explicitly a SANITY-CHECK ESTIMATE for "is this design's
+    materials cost small enough that a full system could plausibly be
+    cost-competitive", not a substitute for a real bottom-up AMR BOM.
+    Returns the BOM breakdown alongside the scaled estimate so the
+    materials-only number stays visible, not buried inside a single
+    opaque total."""
+    bom = bom_cost(mu0H_max, mass_regenerator, family_name, smm_mass_fraction)
+    full_system = bom["materials_bom_total_$"] * non_materials_multiplier
+    return {
+        **bom,
+        "non_materials_multiplier": non_materials_multiplier,
+        "full_system_cost_estimate_$": round(full_system, 2),
+        "note": "full_system_cost_estimate_$ is an ORDER-OF-MAGNITUDE estimate "
+                "(materials BOM x a multiplier implied by vapor-compression AC "
+                "manufactured-cost benchmarks, Russek & Zimm 2006), NOT a "
+                "bottom-up AMR-specific HX/pump/motor/controls quote.",
+    }
+
+
+def levelized_cost_of_cooling(mu0H_max, mass_regenerator, Qc_avg_W, COP_electrical,
+                                family_name="Gd", smm_mass_fraction=0.5,
+                                device_lifetime_years=15.0, discount_rate=0.06,
+                                capacity_factor=1.0,
+                                electricity_price_per_kwh=ELECTRICITY_PRICE_PER_KWH):
+    """Second, independent capital+operating cost methodology, following
+    the Capital Recovery Factor (CRF) thermoeconomic approach of Silva et
+    al. (2017) (their Eq. 6, itself following Rowe (2011)'s
+    thermoeconomic cost-of-cooling method) -- complements, and can be
+    cross-checked against, `lifetime_cost()`'s simpler
+    "materials-floor-plus-total-lifetime-electricity" approach above.
+
+    Unlike `lifetime_cost()` (which sums a materials floor and TOTAL
+    lifetime electricity cost), this ANNUALIZES the capital cost via
+        CRF = discount_rate * (1+discount_rate)^N / ((1+discount_rate)^N - 1)
+    and reports a single $/kWh_cooling levelized figure combining
+    annualized capital and per-kWh electricity cost -- the standard
+    levelized-cost-of-X form used for comparing technologies with very
+    different capital/operating cost splits (e.g. against
+    `economics.simple_tco`'s $/kW CAPEX + $/kWh OPEX baselines for VCC
+    and liquid cooling).
+
+    `capacity_factor` (0-1) is the operating duty cycle, same convention
+    as `lifetime_cost()`'s parameter of the same name and Silva et al.'s
+    own `cf`."""
+    if COP_electrical <= 0:
+        raise ValueError("COP_electrical must be positive")
+    if not (0.0 < discount_rate < 1.0):
+        raise ValueError("discount_rate must be in (0, 1)")
+    bom = bom_cost(mu0H_max, mass_regenerator, family_name, smm_mass_fraction)
+    capital_cost = bom["materials_bom_total_$"]
+    N = device_lifetime_years
+    r = discount_rate
+    CRF = r * (1 + r) ** N / ((1 + r) ** N - 1)
+    annual_cooling_kWh = (Qc_avg_W / 1000.0) * 24 * 365 * capacity_factor
+    if annual_cooling_kWh <= 0:
+        raise ValueError("Qc_avg_W and capacity_factor must give positive annual cooling energy")
+    annualized_capital_per_kwh = (CRF * capital_cost) / annual_cooling_kWh
+    electricity_per_kwh_cooling = electricity_price_per_kwh / COP_electrical
+    levelized_cost_per_kwh = annualized_capital_per_kwh + electricity_per_kwh_cooling
+    return {
+        "materials_bom_$": capital_cost,
+        "CRF": round(CRF, 5),
+        "annualized_capital_$_per_kwh_cooling": round(annualized_capital_per_kwh, 5),
+        "electricity_$_per_kwh_cooling": round(electricity_per_kwh_cooling, 5),
+        "levelized_cost_of_cooling_$_per_kwh": round(levelized_cost_per_kwh, 5),
+        "device_lifetime_years": N,
+        "discount_rate": r,
+        "note": "Materials-only capital basis (see bom_cost()); comparable in "
+                "form, not necessarily in scope, to simple_tco()'s "
+                "capex_per_kw_cooling/opex_per_kwh_cooling baselines for VCC "
+                "and liquid cooling.",
+    }
+
+
+# =============================================================================
+# phase 15 addition: raw-material resource criticality (new Economics-folder
+# paper, not previously in this repo's corpus)
+# =============================================================================
+# Gauss, Homm & Gutfleisch, "The Resource Basis of Magnetic Refrigeration",
+# J. Ind. Ecol. 21(5) (2016) 1291-1300, assess supply-criticality for the
+# raw materials behind the same three magnetocaloric families this repo
+# already models (Gd5(SiGe)4, La(Fe,Si)13, (Mn,Fe)2P) plus the Nd2Fe14B
+# permanent-magnet material `material_cost()` already prices. Their
+# headline finding, reproduced qualitatively here (this repo does not
+# reproduce their criticality-index calculation itself, only the
+# ranking/rationale, since the index depends on external, time-varying
+# supply/demand data this repo does not maintain):
+#   - Gd-based alloys (this repo's plain "Gd" and cascade.py's GD_FAMILY,
+#     itself Gd-based) are flagged as DISQUALIFIED as a mass-market
+#     refrigerant on resource-criticality grounds -- heavy rare-earth Gd
+#     supply is small and concentrated.
+#   - La- and Mn-based alloys (this repo's LAFESIH_FAMILY, MNFEPSI_FAMILY)
+#     are found MUCH LESS problematic (La is a light rare earth with much
+#     larger supply; Mn/P/Fe/Si are all abundant, non-rare-earth elements).
+#   - The Nd2Fe14B permanent magnet (this repo's `COST_MAGNET_PER_KG`
+#     material) would only face a significant supply bottleneck at a LATER
+#     innovation stage, once magnetic cooling has captured a large share of
+#     the domestic refrigerator/AC market -- not at this repo's current
+#     lab/early-product scale.
+# This is a qualitative, NON-cost input: it does not change
+# `MCM_COST_PER_KG_BY_FAMILY` (today's market price does not yet reflect
+# this longer-run supply risk), but is directly relevant to
+# optimize.py's phase 15 material-choice search, since a Pareto-optimal
+# design that happens to prefer Gd on today's COP/Qc/cost objectives alone
+# may be a poor long-run choice on a criticality-aware objective this
+# repo does not currently model (see ROADMAP.md Future Work).
+RESOURCE_CRITICALITY_BY_FAMILY = {
+    "Gd": "high risk -- Gauss, Homm & Gutfleisch (2016) disqualify Gd-based "
+          "alloys as a mass-market refrigerant on resource-criticality "
+          "grounds (small, concentrated heavy-rare-earth supply)",
+    "Gd5(SixGe1-x)4(-Ga)": "high risk -- Gd-based alloy, same heavy-rare-earth "
+                            "supply constraint as plain Gd",
+    "La(Fe,Si)13Hy": "much lower risk -- La is a light rare earth with "
+                      "substantially larger, less concentrated supply",
+    "(Mn,Fe)2(P,Si)": "much lower risk -- no rare-earth content (Mn/P/Fe/Si "
+                       "are all abundant elements)",
+}
+
+
+def resource_criticality_note(family_name="Gd"):
+    """phase 15: returns the qualitative resource-criticality rationale
+    for `family_name` from Gauss, Homm & Gutfleisch (2016) (see module
+    section docstring above). Falls back to a "not assessed" string for
+    an unrecognized family_name rather than raising, matching
+    `material_cost_by_family()`'s own fallback convention."""
+    return RESOURCE_CRITICALITY_BY_FAMILY.get(
+        family_name, f"not assessed in this repo's corpus for {family_name!r}")

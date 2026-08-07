@@ -5,8 +5,8 @@ Every figure below was computed by an earlier pipeline stage in this same run; t
 
 1. OPERATING FREQUENCY -- the dominant lever
    Sobol total-order sensitivity (state-dependent loss model): ST(frequency) = 0.877
-   NSGA-III best-electrical-COP design:  f=0.322 Hz  -> COP_elec=9.49, Qc=14186 W
-   NSGA-III best-cooling-capacity design: f=4.231 Hz  -> COP_elec=2.89, Qc=19649 W
+   NSGA-III best-electrical-COP design:  f=0.980 Hz  -> COP_elec=9.92, Qc=35209 W
+   NSGA-III best-cooling-capacity design: f=3.720 Hz  -> COP_elec=9.03, Qc=38495 W
    Action: reduce cycle frequency toward the low-speed end of the design space when electrical COP is the priority; raise it toward the high end only when cooling capacity is the priority and higher parasitic loss is acceptable. This is a genuine Pareto trade-off in this repo's model, not a free win in either direction.
 
 2. MCE MATERIAL / COMPOSITION CHOICE
@@ -23,13 +23,13 @@ Every figure below was computed by an earlier pipeline stage in this same run; t
    Parallel-plate channel spacing maximizing COP (interior optimum): 0.1 mm  (Qc=819 W, COP_aug=15.27)
    Action: target these interior optima rather than minimizing particle/channel size without bound -- shrinking geometry indefinitely raises thermal effectiveness only marginally further while hydraulic pumping power keeps growing, which is what produces the interior optimum in the first place (Tusek, Kitanovski & Poredos 2013).
 
-5. FIELD STRENGTH / FLOW RATE BALANCE
-   Knee-point (balanced) Pareto design: H=2.994 T, f=0.321 Hz, mdot=0.4984 kg/s, mass=1.63 kg, eps=0.73  -> COP_elec=9.449, Qc=13750.19 W, cost=$619.4
-   Action: operate near this balanced point rather than at either objective's own extreme (max-COP alone drives frequency and Qc very low; max-Qc alone raises parasitic loss and cuts COP roughly 3x in this repo's Pareto front) -- see results/pareto_front.csv for the full 41-design front and the other extreme points.
+5. FIELD STRENGTH / FLOW RATE BALANCE (now co-optimized with material and geometry)
+   Knee-point (balanced) Pareto design: H=1.005 T, f=2.476 Hz, mdot=0.4957 kg/s, mass=4.21 kg, eps=0.797, d_p=0.7238 mm, material=La(Fe,Si)13Hy (tuned, Tc=285.3K)  -> COP_elec=9.404, Qc=33704.44 W, cost=$573.4
+   Action: operate near this balanced point rather than at either objective's own extreme (max-COP alone drives frequency and Qc very low; max-Qc alone raises parasitic loss and cuts COP roughly 3x in this repo's Pareto front) -- see results/pareto_front.csv for the full 23-design front and the other extreme points. As of phase 15 this knee point already reflects the best-performing material and regenerator geometry found jointly with field/frequency/flow, not just the best fixed-Gd, fixed-geometry point -- levers 2 and 4 above remain useful as focused single-lever sweeps for understanding WHY a given material/geometry wins, but are no longer this repo's only way to explore those two choices.
 
 ----------------------------------------------------------------------------------------------------
 RECOMMENDED STARTING DESIGN POINT (NSGA-III knee point, this run):
-  mu0H_max = 2.994 T,  frequency = 0.321 Hz,  fluid_mdot = 0.4984 kg/s,  mass_regenerator = 1.63 kg,  regen_effectiveness = 0.73
-  -> Predicted COP_electrical = 9.449, Qc = 13750.19 W, cost_index = $619.4
-This is a starting point, not a final specification: the geometry (lever 4) and material (lever 2) choices above are NOT yet co-optimized with the NSGA-III field/frequency/flow search in this repo's current optimize.py -- see ROADMAP.md's Future Work for that open item.
+  mu0H_max = 1.005 T,  frequency = 2.476 Hz,  fluid_mdot = 0.4957 kg/s,  mass_regenerator = 4.21 kg,  regen_effectiveness = 0.797
+  -> Predicted COP_electrical = 9.404, Qc = 33704.44 W, cost_index = $573.4, particle_diameter = 0.7238 mm, material = La(Fe,Si)13Hy (tuned, Tc=285.3K)
+This is a starting point, not a final specification, but as of phase 15 the geometry (lever 4) and material (lever 2) choices above ARE co-optimized with the NSGA-III field/frequency/flow search (see core/optimize.py's module docstring for how material is handled -- per-family NSGA-III passes merged into one global Pareto front, since material family is categorical). geometry_analysis.py and material_family_comparison.py remain independently useful as focused single-lever sweeps for understanding WHY a given choice wins, but optimize.py's own Pareto front is now this repo's most complete answer to the joint design question.
 ----------------------------------------------------------------------------------------------------

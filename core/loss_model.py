@@ -92,6 +92,39 @@ A fifth candidate dataset (Risø/DTU 2011, 30 K span) could not be
 calibrated because the corresponding operating point does not yield
 positive cooling capacity under the present AMR model.
 
+Phase 15 note -- "does a rotary-specific loss term belong here?" (this
+question was re-raised going into Phase 15; re-checking the existing
+analysis below shows it was already answered, no new code needed): YES,
+in the specific, data-supported sense already implemented as
+`RotaryDriveLossModel` below, and NO in the broader "flag every rotary
+device" sense the question could also be read as. `analyze_parasitic_
+fraction_scaling()` already tested the more general hypothesis (device
+SIZE, not topology) and found no size term supported by the data (see
+above). Separately, and specifically, `fit_rotary_drive_term()` /
+`RotaryDriveLossModel` already found and calibrated a genuine additional
+loss channel (mechanical drivetrain power to move a rotary permanent-
+magnet assembly + rotary valve) directly from Lozano et al. (2016)'s own
+measured WM data -- but its own docstring is explicit that this is NOT a
+general "rotary AMR" flag: Astronautics and DTU are ALSO rotary devices
+and are already well-represented by the CORE calibration without any
+drivetrain term, because what distinguishes Lozano is that device's own
+drivetrain overhead relative to its own small Qc (an early-generation,
+unoptimized prototype the source paper itself calls "modest ... in
+comparison with established cooling technologies"), not rotary operation
+per se. So: the CORE 3-point set (which already includes two rotary
+devices, Astronautics and DTU/MAGGIE) remains the production default;
+`RotaryDriveLossModel` remains an available, data-justified PER-DEVICE
+option for devices in Lozano's drivetrain-dominated class, selected
+explicitly by the caller (as `validation_system.py` already does for the
+Lozano rows) rather than auto-detected from a "rotary" flag. No new
+multi-bed-topology term is added this pass: the CORE/EXTENDED/
+FURTHER_EXTENDED benchmark set does not contain a same-topology,
+different-bed-count pair that would let a bed-count term be distinguished
+from ordinary device-to-device scatter, so inventing one would not be
+supported by data in hand -- consistent with this module's existing
+practice of stating an honest null result (see the size-term discussion
+above) rather than adding unsupported structure.
+
 Paper-Mining Pass Part 6 correction: the CORE point previously labeled
 "DTU_rotary_Gd_2016" (818 W, 10.1 K span, COP=4.2, cited only as
 "Bahl/Eriksen/Engelbrecht, rotary AMR - ScienceDirect (2016)") was never
@@ -468,9 +501,27 @@ class StateDependentLossModel:
         self.k_pump = k_pump
         self.base_frac = base_frac
 
-    def parasitic_power(self, frequency, mu0H, mdot, Qc):
+    def parasitic_power(self, frequency, mu0H, mdot, Qc, pumping_power_override=None):
+        """W_eddy + W_pump + W_base, as documented in the module docstring.
+
+        Phase 15 addition: `pumping_power_override`, default None, changes
+        NOTHING about existing behaviour when omitted (every existing
+        caller -- amr_cycle.py without a particle_diameter, sensitivity.py,
+        rsm.py, the pre-Phase-15 optimize.py -- keeps getting the
+        CORE-calibrated generic W_pump = k_pump*mdot**2 term exactly as
+        before). When provided, it REPLACES that generic Darcy-flow term
+        with a caller-supplied geometry-explicit hydraulic pumping-power
+        value (W) -- used by amr_cycle.AMRSystem when a particle_diameter
+        is given, so the geometry-explicit pumping power from
+        thermal.pumping_power_packed_bed() (Tusek et al. 2013 friction-
+        factor correlation) is not DOUBLE-COUNTED against this module's
+        own generic, independently-CORE-calibrated k_pump term -- see
+        core/amr_cycle.py's AMRSystem docstring and core/optimize.py's
+        Phase 15 section for the full reasoning. k_eddy and base_frac are
+        unaffected either way, since geometry does not change eddy-current
+        or baseline-electronics losses."""
         W_eddy = self.k_eddy * frequency ** 2 * mu0H ** 2
-        W_pump = self.k_pump * mdot ** 2
+        W_pump = self.k_pump * mdot ** 2 if pumping_power_override is None else pumping_power_override
         W_base = self.base_frac * Qc
         return W_eddy + W_pump + W_base
 
@@ -503,8 +554,9 @@ class RotaryDriveLossModel(StateDependentLossModel):
         self.k_drive0 = k_drive0
         self.k_drive1 = k_drive1
 
-    def parasitic_power(self, frequency, mu0H, mdot, Qc):
-        base = super().parasitic_power(frequency, mu0H, mdot, Qc)
+    def parasitic_power(self, frequency, mu0H, mdot, Qc, pumping_power_override=None):
+        base = super().parasitic_power(frequency, mu0H, mdot, Qc,
+                                        pumping_power_override=pumping_power_override)
         W_drive = self.k_drive0 + self.k_drive1 * frequency
         return base + W_drive
 

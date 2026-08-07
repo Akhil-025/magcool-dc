@@ -676,14 +676,26 @@ def plot_curve_validation():
 # FIG 16 — Sobol sensitivity: constant-loss vs. state-dependent loss model
 # ══════════════════════════════════════════════════════════════════════════
 
-def plot_sobol_sensitivity():
+def plot_sobol_sensitivity(precomputed=None):
+    """precomputed, if given, may supply 'sobol_const_Si' and/or
+    'sobol_state_Si' (the Si dicts already returned by steps 9/9b in
+    main.py) so this figure reuses them instead of re-running the ~3s
+    SALib Sobol analysis a second time in the same pipeline invocation."""
     names_display = {
         'mu0H_max_T': 'Field\n(mu0H_max)', 'frequency_Hz': 'Frequency',
         'fluid_mdot_kgs': 'Flow rate\n(mdot)', 'regen_effectiveness': 'Regen.\neffectiveness',
         'parasitic_fraction': 'Parasitic\nfraction',
     }
 
-    if HAVE_SALIB:
+    precomputed = precomputed or {}
+    Si_const = precomputed.get('sobol_const_Si')
+    Si_state = precomputed.get('sobol_state_Si')
+
+    if Si_const is not None and Si_state is not None:
+        names = sensitivity_mod.PROBLEM['names']
+        st_const = dict(zip(names, Si_const['ST']))
+        st_state = dict(zip(names, Si_state['ST']))
+    elif HAVE_SALIB:
         Si_const = sensitivity_mod.run_sobol(
             out_path=str(RESULTS_DIR / 'sobol_results_phase2_constant.txt'),
             use_state_dependent_losses=False)
@@ -765,26 +777,53 @@ def plot_rsm_surrogate():
 # FIG 18 — NSGA-III multi-objective Pareto front
 # ══════════════════════════════════════════════════════════════════════════
 
-def plot_nsga3_pareto():
-    if HAVE_PYMOO:
-        rows = optimize_mod.run_optimization(out_csv=str(RESULTS_DIR / 'pareto_front.csv'))
-    else:
-        print("  [pymoo unavailable — falling back to pre-computed results/pareto_front.csv]")
-        rows = _read_csv_rows(RESULTS_DIR / 'pareto_front.csv')
+def plot_nsga3_pareto(precomputed=None):
+    """precomputed, if given, may supply 'pareto_rows' (already produced by
+    step 11 in main.py) so this figure reuses that front instead of
+    re-running the ~7s NSGA-III optimization a second time in the same
+    pipeline invocation."""
+    precomputed = precomputed or {}
+    rows = precomputed.get('pareto_rows')
+    if rows is None:
+        if HAVE_PYMOO:
+            rows = optimize_mod.run_optimization(out_csv=str(RESULTS_DIR / 'pareto_front.csv'))
+        else:
+            print("  [pymoo unavailable — falling back to pre-computed results/pareto_front.csv]")
+            rows = _read_csv_rows(RESULTS_DIR / 'pareto_front.csv')
 
     cop = [r['COP_electrical'] for r in rows]
     qc = [r['Qc_W'] for r in rows]
     cost = [r['cost_index_USD'] for r in rows]
 
     fig, ax = plt.subplots(figsize=(8.5, 6.5))
-    sc = ax.scatter(qc, cop, c=cost, cmap='viridis', s=45, alpha=0.85,
-                     edgecolor='white', linewidth=0.3)
+    materials = [r.get('material', 'Gd') for r in rows]
+    unique_materials = sorted(set(materials))
+    # phase 15: material is now a co-optimized design variable, not fixed
+    # at Gd -- if more than one material actually appears on the merged
+    # global front, distinguish them by marker shape (color still encodes
+    # cost, as before this pass) so a reader can see at a glance which
+    # material wins in which region of the COP/Qc trade-off.
+    if len(unique_materials) > 1:
+        marker_cycle = ['o', '^', 's', 'D', 'P', 'X']
+        sc = None
+        for i, mat in enumerate(unique_materials):
+            idx = [j for j, m in enumerate(materials) if m == mat]
+            sc = ax.scatter([qc[j] for j in idx], [cop[j] for j in idx],
+                             c=[cost[j] for j in idx], cmap='viridis',
+                             vmin=min(cost), vmax=max(cost),
+                             s=55, alpha=0.85, edgecolor='white', linewidth=0.4,
+                             marker=marker_cycle[i % len(marker_cycle)], label=mat)
+        ax.legend(title='Material (phase 15)', fontsize=8, loc='best')
+    else:
+        sc = ax.scatter(qc, cop, c=cost, cmap='viridis', s=45, alpha=0.85,
+                         edgecolor='white', linewidth=0.3)
     cbar = fig.colorbar(sc, ax=ax)
     cbar.set_label('Materials cost index [$]')
     ax.set_xlabel('Cooling capacity Qc [W]')
     ax.set_ylabel('Electrical COP')
     ax.set_title('NSGA-III Pareto-Optimal AMR Designs\n'
-                 '(T_cold=291K, span=10K; state-dependent loss + NTU thermal model)')
+                 '(T_cold=291K, span=10K; state-dependent loss + NTU thermal model;\n'
+                 'material + regenerator geometry co-optimized, phase 15)')
     fig.tight_layout()
     save(fig, 'fig18_nsga3_pareto_front')
 
@@ -793,9 +832,16 @@ def plot_nsga3_pareto():
 # FIG 19 — Multi-stage cascade AMR staging vs. baselines (Gd)
 # ══════════════════════════════════════════════════════════════════════════
 
-def plot_cascade_staging_gd():
-    rows = cascade.compare_staging(material=GADOLINIUM, mass_per_stage=5.0,
-                                    out_csv=str(RESULTS_DIR / 'cascade_comparison.csv'))
+def plot_cascade_staging_gd(precomputed=None):
+    """precomputed, if given, may supply 'cascade_rows_gd' (already
+    computed and written to results/cascade_comparison.csv by step 7 in
+    main.py) so this figure reuses it instead of re-running the Gd cascade
+    sweep a second time in the same pipeline invocation."""
+    precomputed = precomputed or {}
+    rows = precomputed.get('cascade_rows_gd')
+    if rows is None:
+        rows = cascade.compare_staging(material=GADOLINIUM, mass_per_stage=5.0,
+                                        out_csv=str(RESULTS_DIR / 'cascade_comparison.csv'))
     spans = [r['span_K'] for r in rows]
 
     fig, ax = plt.subplots(figsize=(8.5, 6))
@@ -816,7 +862,7 @@ def plot_cascade_staging_gd():
 # FIG 20 — Cascade: Gd vs. Gd5Si2Ge2 (fixed composition)
 # ══════════════════════════════════════════════════════════════════════════
 
-def plot_cascade_giant_vs_gd():
+def plot_cascade_giant_vs_gd(precomputed=None):
     """Fixed-composition Gd5Si2Ge2 (Tc=276K, fixed) vs. Gd, PLUS a third
     series: the same Gd5(SixGe1-x)4(-Ga) family re-tuned per span so its
     own peak lands at that span's T_mid (core.cascade.GD_FAMILY /
@@ -827,11 +873,21 @@ def plot_cascade_giant_vs_gd():
     the tuned curve alongside it shows that the collapse is a
     fixed-composition artifact, not a ceiling on the giant-MCE effect
     itself: composition-tuning the same family recovers real performance
-    at every span its documented Tc window covers."""
-    rows_gd = cascade.compare_staging(material=GADOLINIUM, mass_per_stage=5.0,
-                                       out_csv=str(RESULTS_DIR / 'cascade_comparison.csv'))
-    rows_giant = cascade.compare_staging(material=GD5SI2GE2_FIRST_ORDER, mass_per_stage=5.0,
-                                          out_csv=str(RESULTS_DIR / 'cascade_comparison_giant_mce.csv'))
+    at every span its documented Tc window covers.
+
+    precomputed, if given, may supply 'cascade_rows_gd' and
+    'cascade_rows_giant' (both already computed by step 7 in main.py, which
+    runs both materials) so this figure reuses them instead of re-running
+    both cascade sweeps a second time in the same pipeline invocation."""
+    precomputed = precomputed or {}
+    rows_gd = precomputed.get('cascade_rows_gd')
+    rows_giant = precomputed.get('cascade_rows_giant')
+    if rows_gd is None:
+        rows_gd = cascade.compare_staging(material=GADOLINIUM, mass_per_stage=5.0,
+                                           out_csv=str(RESULTS_DIR / 'cascade_comparison.csv'))
+    if rows_giant is None:
+        rows_giant = cascade.compare_staging(material=GD5SI2GE2_FIRST_ORDER, mass_per_stage=5.0,
+                                              out_csv=str(RESULTS_DIR / 'cascade_comparison_giant_mce.csv'))
     spans = [r['span_K'] for r in rows_gd]
     y_gd = [r['AMR_1stage_COP'] or 0.0 for r in rows_gd]
     y_giant = [r['AMR_1stage_COP'] or 0.0 for r in rows_giant]
@@ -873,10 +929,17 @@ def plot_cascade_giant_vs_gd():
 # FIG 21 — Curie-graded cascade performance
 # ══════════════════════════════════════════════════════════════════════════
 
-def plot_graded_cascade():
-    rows_graded, stage_info_all = cascade.compare_graded_cascade(
-        T_cold_C=18.0, spans=range(5, 21), mass_per_stage=5.0,
-        out_csv=str(RESULTS_DIR / 'graded_cascade_comparison.csv'))
+def plot_graded_cascade(precomputed=None):
+    """precomputed, if given, may supply 'graded_rows' (already computed by
+    step 7b in main.py) so this figure reuses it instead of re-running the
+    ~90-120s Curie-graded cascade sweep a second time in the same pipeline
+    invocation."""
+    precomputed = precomputed or {}
+    rows_graded = precomputed.get('graded_rows')
+    if rows_graded is None:
+        rows_graded, _stage_info_all = cascade.compare_graded_cascade(
+            T_cold_C=18.0, spans=range(5, 21), mass_per_stage=5.0,
+            out_csv=str(RESULTS_DIR / 'graded_cascade_comparison.csv'))
     spans = [r['span_K'] for r in rows_graded]
 
     fig, axes = plt.subplots(1, 2, figsize=(13, 5.5))
@@ -1038,8 +1101,15 @@ def plot_giant_mce_targeting():
 # FIG 25 — Astronautics 6-layer Curie-graded La(Fe,Si)13Hy bed validation
 # ══════════════════════════════════════════════════════════════════════════
 
-def plot_astronautics_validation():
-    astro = cascade.validate_astronautics_graded_bed()
+def plot_astronautics_validation(precomputed=None):
+    """precomputed, if given, may supply 'astro_result' (already computed
+    by step 7c in main.py) so this figure reuses it instead of re-running
+    the ~33s six-layer Curie-graded Astronautics validation a second time
+    in the same pipeline invocation."""
+    precomputed = precomputed or {}
+    astro = precomputed.get('astro_result')
+    if astro is None:
+        astro = cascade.validate_astronautics_graded_bed()
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 5.5))
     if astro.get('feasible'):
@@ -1089,8 +1159,15 @@ def plot_astronautics_validation():
 # FIG 26 — Four-way material family comparison (Track A2 item)
 # ══════════════════════════════════════════════════════════════════════════
 
-def plot_material_family_comparison():
-    rows = material_family_comparison.build_comparison_table()
+def plot_material_family_comparison(precomputed=None):
+    """precomputed, if given, may supply 'material_rows' (already computed
+    by step 8d in main.py) so this figure reuses it instead of re-running
+    the ~6s four-way material-family sweep a second time in the same
+    pipeline invocation."""
+    precomputed = precomputed or {}
+    rows = precomputed.get('material_rows')
+    if rows is None:
+        rows = material_family_comparison.build_comparison_table()
     rep = [r for r in rows if r['span_K'] == material_family_comparison.REPRESENTATIVE_SPAN_K]
 
     labels = [r['candidate'].replace(' (', '\n(') for r in rep]
@@ -1126,8 +1203,27 @@ def plot_material_family_comparison():
 # Generate all figures
 # ══════════════════════════════════════════════════════════════════════════
 
-def run_all():
+def run_all(precomputed=None):
+    """Generates all 26 figures.
+
+    precomputed, if given, is a dict that may carry results already
+    computed earlier in the SAME pipeline run (main.py steps 7/7b/7c/8d/9/9b/11):
+      - 'sobol_const_Si', 'sobol_state_Si'  (step 9 / step 9b)
+      - 'pareto_rows'                       (step 11)
+      - 'cascade_rows_gd', 'cascade_rows_giant'  (step 7)
+      - 'graded_rows'                       (step 7b)
+      - 'astro_result'                      (step 7c)
+      - 'material_rows'                     (step 8d)
+    Figures 16, 18, 19, 20, 21, 25, and 26 reuse whichever of these are
+    supplied instead of recomputing them, which otherwise adds several
+    minutes of redundant work (mostly fig21's graded-cascade sweep and
+    fig25's Astronautics validation) on top of the identical computation
+    already performed earlier in the same run. When called standalone
+    (`python plots.py`, precomputed=None) every figure still computes its
+    own data fresh from core/, exactly as before.
+    """
     print("Generating all figures...\n")
+    precomputed = precomputed or {}
 
     figure_fns = [
         ("01 Gd MCE validation vs. Dan'kov et al. (1998)", plot_gd_validation),
@@ -1145,17 +1241,24 @@ def run_all():
         ("13 Parasitic-fraction scaling with device size", plot_parasitic_fraction_scaling),
         ("14 System-level validation vs. published prototypes", plot_system_validation),
         ("15 Curve-level (2-point) Qc(span) validation", plot_curve_validation),
-        ("16 Sobol global sensitivity analysis", plot_sobol_sensitivity),
+        ("16 Sobol global sensitivity analysis",
+         lambda: plot_sobol_sensitivity(precomputed)),
         ("17 RSM surrogate parity + coefficients", plot_rsm_surrogate),
-        ("18 NSGA-III Pareto front", plot_nsga3_pareto),
-        ("19 Cascade staging vs. baselines (Gd)", plot_cascade_staging_gd),
-        ("20 Cascade: Gd vs. Gd5Si2Ge2", plot_cascade_giant_vs_gd),
-        ("21 Curie-graded cascade performance", plot_graded_cascade),
+        ("18 NSGA-III Pareto front",
+         lambda: plot_nsga3_pareto(precomputed)),
+        ("19 Cascade staging vs. baselines (Gd)",
+         lambda: plot_cascade_staging_gd(precomputed)),
+        ("20 Cascade: Gd vs. Gd5Si2Ge2",
+         lambda: plot_cascade_giant_vs_gd(precomputed)),
+        ("21 Curie-graded cascade performance",
+         lambda: plot_graded_cascade(precomputed)),
         ("22 Economics: TCO and lifetime cost", plot_economics),
         ("23 Emissions comparison", plot_emissions),
         ("24 Giant-MCE targeting comparison", plot_giant_mce_targeting),
-        ("25 Astronautics graded-bed validation", plot_astronautics_validation),
-        ("26 Material family comparison (Track A2 item)", plot_material_family_comparison),
+        ("25 Astronautics graded-bed validation",
+         lambda: plot_astronautics_validation(precomputed)),
+        ("26 Material family comparison (Track A2 item)",
+         lambda: plot_material_family_comparison(precomputed)),
     ]
 
     failures = []

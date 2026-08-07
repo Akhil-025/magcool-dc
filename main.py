@@ -10,8 +10,10 @@ in the repository in one pass, in dependency order, so a single
     3.  Loss-model calibration report  (core/loss_model.py)
     3b. Regenerator thermal demo       (core/thermal.py)
     3c. Geometry-dependent pumping power (core/geometry_analysis.py, ROADMAP.md Phase 7 item)
+    3d. Hypereg parallel-hydraulic pumping-power analysis (core/hypereg_analysis.py, Phase 15 item 3)
     4.  Baseline comparison sweep      (this file, was the old main.py)
     5.  Economics / TCO                (core/economics.py)
+    5b. Full-system cost estimate by material family (core/economics.py, Phase 15 item 5)
     6.  Emissions comparison           (core/emissions.py)
     7.  Cascade staging comparison     (core/cascade.py)
     7b. Curie-graded cascade           (core/cascade.py, ROADMAP.md Phase 7 item)
@@ -23,7 +25,8 @@ in the repository in one pass, in dependency order, so a single
         Gschneidner (1997) peak-ratio check (core/giguere_validation.py)
     9.  Sobol sensitivity analysis     (core/sensitivity.py)
     10. RSM surrogate fit              (core/rsm.py)
-    11. NSGA-III design optimization   (core/optimize.py)
+    11. NSGA-III design optimization   (core/optimize.py, Phase 15: material +
+        geometry co-optimization, per-material-family fronts merged post-hoc)
     12. Figure generation (26 figures) (plots.py -> results/figures/*.png, *.pdf)
     13. Design-recommendations synthesis (core/design_recommendations.py) --
         consolidates steps 3c/7b/8d/9b/11's already-computed results into
@@ -82,6 +85,25 @@ the current bulk of it, not NSGA-III optimization or Sobol sampling
 a future change shifts where the time goes. Nothing here is required to
 reproduce results/ except the packages in requirements.txt (SALib, pymoo,
 and matplotlib included).
+
+Phase 15 (see ROADMAP.md) added: geometry (particle diameter) and material
+family as genuine NSGA-III design variables/candidates in step 11; a
+Hypereg-style parallel-hydraulic pumping-power analysis in new step 3d; a
+full-system BOM cost model (materials + soft-magnetic yoke, plus an
+order-of-magnitude full-system estimate and a CRF-based levelized cost of
+cooling) in step 5, plus a per-material-family cost comparison in new step
+5b; and confirmed (rather than duplicated) that the "does loss behavior
+differ for rotary vs. reciprocating / multi-bed AMR topologies" question
+was already answered by existing core/loss_model.py infrastructure
+(RotaryDriveLossModel, analyze_parasitic_fraction_scaling) -- see
+core/loss_model.py's module docstring "Phase 15 note" and ROADMAP.md for
+the full writeup. NOTE: the original Phase 15 plan's item 1 (dedicated
+tests for core/design_recommendations.py) was skipped in one earlier pass
+because that module appeared to be missing from an out-of-date project
+snapshot -- it is present here (step 13 above already exists and
+integrates it), so that concern does not apply to this version of the
+file; if tests for it are still wanted, they can be added directly against
+this module's actual summarize_*_lever()/build_report() signatures.
 """
 
 import logging
@@ -112,6 +134,7 @@ from core.thermal import regenerator_effectiveness
 from core.first_order_mce import GD5SI2GE2_FIRST_ORDER
 from core import giguere_validation
 from core import geometry_analysis
+from core import hypereg_analysis
 from core import plots
 from core import design_recommendations
 from core import sensitivity as sensitivity_module
@@ -307,6 +330,52 @@ def run_economics(representative_row):
         "floor for a specific design instead."
     )
 
+    # Phase 15 addition: full-system BOM cost model (economics.bom_cost/
+    # full_system_cost_estimate/levelized_cost_of_cooling). Uses the SAME
+    # design point (2T, 5kg Gd) as step 4's baseline sweep, so this is a
+    # priced version of the exact design already characterized above, not
+    # a separate illustrative example.
+    mu0H_T, mass_kg = 2.0, 5.0
+    amr_cop = representative_row["AMR_COP_electrical"]
+    bom = economics.bom_cost(mu0H_T, mass_kg, family_name="Gd")
+    full_system = economics.full_system_cost_estimate(mu0H_T, mass_kg, family_name="Gd")
+    lcoc = economics.levelized_cost_of_cooling(
+        mu0H_T, mass_kg, Qc_avg_W=representative_row["AMR_Qc_W"], COP_electrical=amr_cop,
+        family_name="Gd")
+    logger.info("")
+    logger.info(f"Phase 15: full-system BOM cost model, same design point (H={mu0H_T}T, "
+                f"mass={mass_kg}kg Gd) as above:")
+    logger.info(f"  Materials BOM: magnet ${bom['magnet_cost_$']:.0f} "
+                f"({bom['magnet_mass_kg']:.2f}kg) + MCM ${bom['mcm_cost_$']:.0f} + "
+                f"SMM yoke ${bom['smm_cost_$']:.0f} ({bom['smm_mass_kg']:.2f}kg) "
+                f"= ${bom['materials_bom_total_$']:.0f} total")
+    logger.info(f"  Full-system cost ESTIMATE (materials BOM x "
+                f"{full_system['non_materials_multiplier']:.0f}x, order-of-magnitude only -- "
+                f"see economics.py's Phase 15 section docstring for the Russek & Zimm (2006) "
+                f"vapor-compression-AC benchmark this multiplier comes from): "
+                f"${full_system['full_system_cost_estimate_$']:,.0f}")
+    logger.info(f"  Levelized cost of cooling (CRF-based, Silva et al. 2017 methodology, "
+                f"{lcoc['device_lifetime_years']:.0f}yr life, {lcoc['discount_rate']*100:.0f}% "
+                f"discount rate): ${lcoc['levelized_cost_of_cooling_$_per_kwh']:.4f}/kWh_cooling "
+                f"(${lcoc['annualized_capital_$_per_kwh_cooling']:.4f} capital + "
+                f"${lcoc['electricity_$_per_kwh_cooling']:.4f} electricity, materials-only "
+                f"capital basis -- see levelized_cost_of_cooling()'s docstring)")
+
+
+def run_full_system_cost_by_material():
+    """Step 5b (Phase 15 addition): compares the full-system cost estimate
+    (economics.full_system_cost_estimate) across the SAME material
+    candidates optimize.py's Phase 15 co-optimization considers
+    (core.optimize._material_candidates()), at a fixed representative
+    design point (2T, 5kg) -- a quick "does material choice matter for
+    cost, independent of the NSGA-III search's own field/frequency/flow/
+    geometry choices" sanity check alongside step 11's full multi-
+    objective search."""
+    for label, _material, family_name in optimize_module._material_candidates():
+        r = economics.full_system_cost_estimate(2.0, 5.0, family_name=family_name)
+        logger.info(f"  {label:<40} materials BOM=${r['materials_bom_total_$']:>8,.0f}   "
+                    f"full-system estimate=${r['full_system_cost_estimate_$']:>10,.0f}")
+
 
 def run_emissions(representative_row):
     """Step 6: emissions comparison fed with the *actual* COPs from the
@@ -327,7 +396,10 @@ def run_emissions(representative_row):
 
 def run_cascade_comparison():
     """Step 7: 1-4 stage cascaded AMR vs baselines, for both Gd and the
-    giant-MCE Gd5Si2Ge2 material."""
+    giant-MCE Gd5Si2Ge2 material. Returns both materials' rows (previously
+    only rows_gd was returned) so step 12's figure generation can reuse
+    both instead of recomputing the giant-MCE sweep a second time for
+    fig20."""
     logger.info("Material: Gd (baseline)")
     rows_gd = cascade.compare_staging(material=GADOLINIUM, mass_per_stage=5.0,
                                        out_csv="results/cascade_comparison.csv")
@@ -337,7 +409,7 @@ def run_cascade_comparison():
     rows_giant = cascade.compare_staging(material=GD5SI2GE2_FIRST_ORDER, mass_per_stage=5.0,
                                           out_csv="results/cascade_comparison_giant_mce.csv")
     logger.info(f"Wrote results/cascade_comparison_giant_mce.csv ({len(rows_giant)} rows)")
-    return rows_gd
+    return rows_gd, rows_giant
 
 
 def run_graded_cascade_comparison(rows_gd):
@@ -378,7 +450,9 @@ def run_astronautics_graded_validation():
     with a single-Tc=287K material; this uses cascade.py's generalized
     Curie-grading machinery (LAFESIH_FAMILY) to test the actual 6-layer
     hypothesis instead. See core/cascade.py's own __main__ block and
-    ROADMAP.md Phase 9 for the full writeup."""
+    ROADMAP.md Phase 9 for the full writeup. Returns the result dict
+    (previously discarded) so step 12's fig25 can reuse it instead of
+    re-running this ~33s validation a second time."""
     astro = cascade.validate_astronautics_graded_bed()
     if astro.get("feasible"):
         for s in astro["stage_info"]:
@@ -391,6 +465,7 @@ def run_astronautics_graded_validation():
                     f"the single-layer material in step 2 gave this same device.")
     else:
         logger.info(astro.get("status", "infeasible"))
+    return astro
 
 
 def run_thermal_demo():
@@ -424,17 +499,22 @@ def run_first_order_mce_demo():
     logger.info("Target: dS ~ -18 J/(kg K) at 5T (Pecharsky & Gschneidner 1997 review value)")
 
 
-def run_plot_generation():
+def run_plot_generation(precomputed=None):
     """Step 12: renders all 26 figures in plots.py (results/figures/*.png
     and *.pdf) covering material validation, AMR characteristic curves,
     thermal/geometry modelling, loss-model calibration, system/curve
     validation, cascade and Curie-graded staging, Sobol sensitivity, RSM
     surrogate fitting, NSGA-III optimization, economics, and emissions.
-    Most figures recompute their own data directly from core/ rather than
-    re-reading the CSVs written above, but this still runs last so the
-    CSV-writing figures (cascade, graded cascade, Pareto front) leave
-    results/ in a consistent, freshly-regenerated state."""
-    plots.run_all()
+    Most figures still compute their own data directly from core/, but the
+    seven figures that duplicate an earlier stage's expensive computation
+    exactly (fig16 Sobol, fig18 Pareto, fig19/20 cascade, fig21 graded
+    cascade, fig25 Astronautics validation, fig26 material family
+    comparison) now reuse the results already produced by steps
+    7/7b/7c/8d/9/9b/11 via `precomputed`, instead of re-running them from
+    scratch. This still runs last so the CSV-writing figures (cascade,
+    graded cascade, Pareto front) leave results/ in a consistent,
+    freshly-regenerated state."""
+    plots.run_all(precomputed=precomputed)
     n_figs = len(list(plots.FIG_DIR.glob("*.png"))) if plots.FIG_DIR.exists() else 0
     if n_figs:
         logger.info(f"Generated {n_figs} figure(s) (PNG + PDF) in {plots.FIG_DIR.as_posix()}/")
@@ -495,10 +575,14 @@ def main():
          run_thermal_demo),
         ("3c. Geometry-dependent pumping power: packed-bed + parallel-plate (core/geometry_analysis.py)",
          lambda: geometry_analysis.run_geometry_analysis()),
+        ("3d. Hypereg parallel-hydraulic pumping-power analysis (core/hypereg_analysis.py, Phase 15 item 3)",
+         lambda: hypereg_analysis.run_hypereg_analysis()),
         ("4. Baseline comparison sweep: AMR vs VCC vs liquid cooling vs Carnot",
          None),  # handled specially below, result captured
         ("5. Economics / TCO at the representative operating point",
          None),  # needs step 4's result
+        ("5b. Full-system cost estimate by material family (core/economics.py, Phase 15 item 5)",
+         run_full_system_cost_by_material),
         ("6. Emissions comparison at the representative operating point",
          None),  # needs step 4's result
         ("7. Cascade staging comparison (1-4 stage AMR, Gd and Gd5Si2Ge2)",
@@ -524,20 +608,23 @@ def main():
                                         use_state_dependent_losses=True)),
         ("10. Response-surface (RSM) surrogate fit",
          lambda: rsm.fit_rsm()),
-        ("11. NSGA-III multi-objective design optimization",
+        ("11. NSGA-III multi-objective design optimization (material + geometry co-optimization, Phase 15 item 2)",
          None),  # handled specially below, result (pareto_rows) captured for step 13
         ("12. Figure generation: 26 figures covering validation, AMR curves, "
          "cascade/graded staging, sensitivity, RSM, NSGA-III, economics, emissions (plots.py)",
-         run_plot_generation),
+         None),  # handled specially below, reuses steps 7/7b/9/9b/11's results
         ("13. Design-recommendations synthesis (core/design_recommendations.py)",
          None),  # handled specially below, consumes steps 3c/7b/8d/9b/11's results
     ]
 
     representative_row = None
     cascade_rows_gd = None
+    cascade_rows_giant = None
     graded_rows = None
+    astro_result = None
     material_rows = None
     pareto_rows = None
+    sobol_const_Si = None
     sobol_state_dependent_Si = None
     pb_best_cop_row = None
     pp_best_cop_row = None
@@ -557,9 +644,11 @@ def main():
                 elif name.startswith("6."):
                     run_emissions(representative_row)
                 elif name.startswith("7. "):
-                    cascade_rows_gd = run_cascade_comparison()
+                    cascade_rows_gd, cascade_rows_giant = run_cascade_comparison()
                 elif name.startswith("7b."):
                     graded_rows = run_graded_cascade_comparison(cascade_rows_gd)
+                elif name.startswith("7c."):
+                    astro_result = fn()
                 elif name.startswith("3c."):
                     fn()
                     # Cheap (sub-second), non-printing re-sweep purely to capture
@@ -574,8 +663,21 @@ def main():
                     material_rows = fn()
                 elif name.startswith("9b."):
                     sobol_state_dependent_Si = fn()
+                elif name.startswith("9."):
+                    sobol_const_Si = fn()
                 elif name.startswith("11."):
                     pareto_rows = optimize_module.run_optimization()
+                elif name.startswith("12."):
+                    run_plot_generation(precomputed={
+                        "sobol_const_Si": sobol_const_Si,
+                        "sobol_state_Si": sobol_state_dependent_Si,
+                        "pareto_rows": pareto_rows,
+                        "cascade_rows_gd": cascade_rows_gd,
+                        "cascade_rows_giant": cascade_rows_giant,
+                        "graded_rows": graded_rows,
+                        "astro_result": astro_result,
+                        "material_rows": material_rows,
+                    })
                 elif name.startswith("13."):
                     run_design_recommendations_synthesis(
                         sobol_state_dependent_Si=sobol_state_dependent_Si,
@@ -612,6 +714,8 @@ def main():
                      "material_family_comparison.csv, material_family_comparison.txt, "
                      "sobol_results.txt, sobol_results_phase2_constant.txt, "
                      "rsm_coefficients.txt, pareto_front.csv, "
+                     "pareto_front_by_material/*.csv (Phase 15), "
+                     "hypereg_analysis.txt (Phase 15), "
                      "geometry_optimization_analysis.txt, graded_cascade_comparison.csv, "
                      "design_recommendations.txt, figures/*.png+*.pdf (26 figures)")
     logger.info(f"Full run log: {LOG_FILE}")
@@ -656,6 +760,10 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
     logger.info("Economics & emissions (TCO and GWP at the representative operating point)")
     logger.info("  - results/*: economics.py CAPEX/OPEX comparison, emissions.py refrigerant + "
                 "operational CO2e comparison")
+    logger.info("  - Phase 15: full-system BOM cost model (materials + soft-magnetic yoke), "
+                "order-of-magnitude full-system cost estimate, and CRF-based levelized cost of "
+                "cooling, all at the same design point -- see step 5's log output above; step 5b "
+                "compares the same estimate across material families")
 
     logger.info("Cascade staging & Curie-temperature grading")
     if cascade_rows_gd and graded_rows and _ok("7"):
@@ -692,17 +800,27 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
     else:
         logger.info("  - unavailable (stage failed or was skipped)")
 
-    logger.info("NSGA-III multi-objective design optimization (COP vs. Qc vs. cost)")
-    if pareto_rows and _ok("11."):
-        best_cop = max(pareto_rows, key=lambda r: r["COP_electrical"])
-        logger.info(f"  - {len(pareto_rows)} Pareto-optimal designs; best electrical COP="
-                    f"{best_cop['COP_electrical']} at f={best_cop['frequency_Hz']}Hz "
-                    f"(results/pareto_front.csv)")
+    logger.info("Hypereg parallel-hydraulic pumping-power analysis (Phase 15 item 3)")
+    if _ok("3d."):
+        logger.info("  - Klinar et al. (2024)-motivated pumping-power-only sweep; see "
+                    "results/hypereg_analysis.txt and results/hypereg_findings.md for the full "
+                    "literature findings note and quantitative result")
     else:
         logger.info("  - unavailable (stage failed or was skipped)")
 
-    logger.info("Consolidated design recommendations (NEW -- step 13)")
-    logger.info("  - Ranks all 5 COP-maximization levers above by demonstrated Sobol "
+    logger.info("NSGA-III multi-objective design optimization (COP vs. Qc vs. cost; "
+                "Phase 15: material + geometry co-optimized)")
+    if pareto_rows and _ok("11."):
+        best_cop = max(pareto_rows, key=lambda r: r["COP_electrical"])
+        logger.info(f"  - {len(pareto_rows)} Pareto-optimal designs; best electrical COP="
+                    f"{best_cop['COP_electrical']} at f={best_cop['frequency_Hz']}Hz, "
+                    f"material={best_cop.get('material', 'Gd')} "
+                    f"(results/pareto_front.csv, results/pareto_front_by_material/*.csv)")
+    else:
+        logger.info("  - unavailable (stage failed or was skipped)")
+
+    logger.info("Consolidated design recommendations (step 13)")
+    logger.info("  - Ranks all COP-maximization levers above by demonstrated Sobol "
                 "sensitivity and reports a recommended starting design point "
                 "(results/design_recommendations.txt)")
 

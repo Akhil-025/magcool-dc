@@ -54,17 +54,34 @@ state-dependent-loss Sobol analysis, `sensitivity.py` step 9b):
     5. Field strength / flow rate (`optimize.py`'s NSGA-III Pareto front:
                                    the knee-point design balances field,
                                    frequency, and flow rather than pushing
-                                   any one of them to its bound)
+                                   any one of them to its bound -- as of
+                                   phase 15, this same Pareto front also
+                                   co-optimizes material choice (lever 2)
+                                   and regenerator geometry (lever 4), so
+                                   this lever's knee point is no longer
+                                   computed at a fixed material/geometry)
 
-Recent literature context (not used quantitatively, cited for the reader):
-Klinar, Kitanovski, Law, Franco & Moya, "Perspectives and Energy
-Applications of Magnetocaloric, Pyromagnetic, Electrocaloric, and
-Pyroelectric Materials," Adv. Energy Mater. 14, 2401739 (2024) -- a 2024
-roadmap-style review that (among other things) profiles a novel
-high-frequency active caloric regenerator design concept ("Hypereg")
-aimed squarely at this repo's own finding that frequency is the dominant
-COP lever; see ROADMAP.md's "Future work" section for how that connects
-to a possible extension of `loss_model.py`'s eddy-current term.
+phase 15 update: `optimize.py`'s NSGA-III search now folds material choice
+and regenerator geometry into the same multi-objective search as field,
+frequency, and flow (see core/optimize.py's module docstring for the
+per-material-family NSGA-III + global-merge approach used). Levers 2 and
+4 above remain independently useful as focused single-lever sweeps for
+understanding WHY a given material/geometry wins, but are no longer this
+repo's only way to explore those two choices -- lever 5's own knee point
+is now this repo's most complete single answer to the joint design
+question.
+
+Recent literature context: Klinar, Kitanovski, Law, Franco & Moya,
+"Perspectives and Energy Applications of Magnetocaloric, Pyromagnetic,
+Electrocaloric, and Pyroelectric Materials," Adv. Energy Mater. 14,
+2401739 (2024) -- a 2024 roadmap-style review that (among other things)
+profiles a novel high-frequency active caloric regenerator design concept
+("Hypereg") aimed squarely at this repo's own finding that frequency is
+the dominant COP lever. As of phase 15 this is no longer just cited
+context: `core/hypereg_analysis.py` and `core/thermal.py`'s
+`pumping_power_packed_bed_hypereg()` implement and quantify the
+mechanism (a hydraulic/pumping-power effect, not an eddy-current one --
+see `results/hypereg_findings.md`), wired into `main.py` as step 3d.
 """
 
 from __future__ import annotations
@@ -209,26 +226,49 @@ def summarize_field_flow_lever(pareto_rows):
     """Lever 5: field strength / flow rate balance, from the NSGA-III
     Pareto front's knee-point design (main.py step 11,
     `optimize.run_optimization()`), which is this repo's own definition
-    of a balanced (not extreme) design point."""
+    of a balanced (not extreme) design point.
+
+    phase 15 update: `optimize.run_optimization()` now co-optimizes
+    material choice and regenerator geometry (particle diameter) alongside
+    field/frequency/flow/mass (see core/optimize.py's module docstring),
+    so `pareto_rows` may include a "material" and "particle_diameter_mm"
+    column that pre-Phase-16 callers/fixtures did not provide. Both are
+    reported here when present, but this function still degrades
+    gracefully (matching the rest of this module's convention) if an
+    older-shaped `pareto_rows` (missing those two keys) is passed in."""
     import numpy as np
-    lines = ["5. FIELD STRENGTH / FLOW RATE BALANCE"]
+    lines = ["5. FIELD STRENGTH / FLOW RATE BALANCE (now co-optimized with material and geometry)"]
     if pareto_rows:
         F = np.array([[-r["COP_electrical"], -r["Qc_W"], r["cost_index_USD"]]
                       for r in pareto_rows])
         Fn = (F - F.min(axis=0)) / (F.max(axis=0) - F.min(axis=0) + 1e-12)
         knee_idx = int(np.argmin(np.linalg.norm(Fn, axis=1)))
         knee = pareto_rows[knee_idx]
+        material_note = f", material={knee['material']}" if "material" in knee else ""
+        criticality_note = f"; resource criticality: {knee['resource_criticality']}" if "resource_criticality" in knee else ""
+        geometry_note = f", d_p={knee['particle_diameter_mm']} mm" if "particle_diameter_mm" in knee else ""
         lines.append(f"   Knee-point (balanced) Pareto design: "
                      f"H={knee['mu0H_max_T']} T, f={knee['frequency_Hz']} Hz, "
                      f"mdot={knee['fluid_mdot_kgs']} kg/s, mass={knee['mass_regenerator_kg']} kg, "
-                     f"eps={knee['regen_effectiveness']}  "
+                     f"eps={knee['regen_effectiveness']}{geometry_note}{material_note}  "
                      f"-> COP_elec={knee['COP_electrical']}, Qc={knee['Qc_W']} W, "
                      f"cost=${knee['cost_index_USD']}")
         lines.append("   Action: operate near this balanced point rather than at either "
                      "objective's own extreme (max-COP alone drives frequency and Qc very "
                      "low; max-Qc alone raises parasitic loss and cuts COP roughly 3x in "
                      "this repo's Pareto front) -- see results/pareto_front.csv for the full "
-                     f"{len(pareto_rows)}-design front and the other extreme points.")
+                     f"{len(pareto_rows)}-design front and the other extreme points. As of "
+                     "phase 15 this knee point already reflects the best-performing material "
+                     "and regenerator geometry found jointly with field/frequency/flow, not "
+                     "just the best fixed-Gd, fixed-geometry point -- levers 2 and 4 above "
+                     "remain useful as focused single-lever sweeps for understanding WHY a "
+                     "given material/geometry wins, but are no longer this repo's only way to "
+                     "explore those two choices.")
+        if criticality_note:
+            lines.append(f"   Note{criticality_note} (Gauss, Homm & Gutfleisch 2016 -- see "
+                         "economics.py; a qualitative, non-cost input not yet part of the "
+                         "NSGA-III objective itself, so a design's COP/Qc/cost ranking here "
+                         "does not account for it).")
         return "\n".join(lines), {"knee_point": knee}
     lines.append("   Pareto front not available for this run.")
     return "\n".join(lines), {"knee_point": None}
@@ -278,12 +318,20 @@ def build_report(sobol_state_dependent_Si=None, pareto_rows=None, material_rows=
                      f"fluid_mdot = {knee['fluid_mdot_kgs']} kg/s,  "
                      f"mass_regenerator = {knee['mass_regenerator_kg']} kg,  "
                      f"regen_effectiveness = {knee['regen_effectiveness']}")
+        geometry_note = f", particle_diameter = {knee['particle_diameter_mm']} mm" if "particle_diameter_mm" in knee else ""
+        material_note = f", material = {knee['material']}" if "material" in knee else ""
         lines.append(f"  -> Predicted COP_electrical = {knee['COP_electrical']}, "
-                     f"Qc = {knee['Qc_W']} W, cost_index = ${knee['cost_index_USD']}")
-    lines.append("This is a starting point, not a final specification: the geometry (lever 4) "
-                 "and material (lever 2) choices above are NOT yet co-optimized with the "
-                 "NSGA-III field/frequency/flow search in this repo's current optimize.py -- "
-                 "see ROADMAP.md's Future Work for that open item.")
+                     f"Qc = {knee['Qc_W']} W, cost_index = ${knee['cost_index_USD']}"
+                     f"{geometry_note}{material_note}")
+    lines.append("This is a starting point, not a final specification, but as of phase 15 the "
+                 "geometry (lever 4) and material (lever 2) choices above ARE co-optimized "
+                 "with the NSGA-III field/frequency/flow search (see core/optimize.py's module "
+                 "docstring for how material is handled -- per-family NSGA-III passes merged "
+                 "into one global Pareto front, since material family is categorical). "
+                 "geometry_analysis.py and material_family_comparison.py remain independently "
+                 "useful as focused single-lever sweeps for understanding WHY a given choice "
+                 "wins, but optimize.py's own Pareto front is now this repo's most complete "
+                 "answer to the joint design question.")
     lines.append("-" * 100)
 
     text = "\n".join(lines)

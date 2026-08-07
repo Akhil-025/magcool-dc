@@ -1,5 +1,5 @@
 """
-Unit tests for core/design_recommendations.py (Phase 16 item).
+Unit tests for core/design_recommendations.py (phase 15 item).
 
 Uses small synthetic input dicts/rows rather than real pipeline output
 (the same way the rest of core/ is unit-tested) so these tests run in
