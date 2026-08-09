@@ -32,6 +32,8 @@ in the repository in one pass, in dependency order, so a single
         (core/hysteresis_sensitivity.py)
     11c. Thermal-diode sensitivity study, mechanical-contact active thermal
         diode (core/thermal_diode.py, core/thermal_diode_analysis.py, Phase 18)
+    11d. Magnet-geometry (Halbach-cylinder) field-vs-mass cost model
+        (core/magnet_geometry.py, Phase 19)
     12. Figure generation (26 figures) (plots.py -> results/figures/*.png, *.pdf)
     13. Design-recommendations synthesis (core/design_recommendations.py) --
         consolidates steps 3c/7b/8d/9b/11's already-computed results into
@@ -168,6 +170,23 @@ AMR benchmark device in this repo's corpus uses thermal diodes, so this
 step is explicitly a design-exploration tool rather than a validated
 result -- see ROADMAP.md's Phase 18 entry for the full scoping
 discussion and what was deliberately not built.
+
+Phase 19 (see ROADMAP.md) added core/magnet_geometry.py: a standard,
+closed-form idealized-Halbach-cylinder relation for magnet mass vs.
+field, usable (as an opt-in, not a default -- see that module's own
+docstring for why) as a replacement for economics.py's pre-Phase-19 flat
+per-Tesla magnet-mass ratio with a genuinely nonlinear (super-linear-in-
+field) one. New step 11d runs `run_magnet_geometry_analysis()` (a cheap,
+deterministic cost-per-Kelvin sweep, no NSGA-III) and a reduced-
+resolution `run_geometric_cost_pareto_sensitivity()` A/B Pareto-front
+comparison (flat vs. geometric magnet-mass cost term), the same
+controlled-A/B pattern step 11b already established for Phase 16. This
+pass also found and flagged (see magnet_geometry.py's HONESTY FLAG #2)
+that the Phase 19 plan's own citation for the qualitative "~2 T is a
+cost/performance sweet spot" claim pointed at the wrong Bjørk et al.
+paper; the simple proxy this step checks that claim against does NOT
+independently reproduce it -- reported honestly rather than massaged to
+agree.
 """
 
 import logging
@@ -201,6 +220,7 @@ from core import geometry_analysis
 from core import hypereg_analysis
 from core import hysteresis_sensitivity
 from core import thermal_diode_analysis
+from core import magnet_geometry
 from core import plots
 from core import design_recommendations
 from core import sensitivity as sensitivity_module
@@ -708,6 +728,10 @@ def main():
         ("11c. Thermal-diode sensitivity study: mechanical-contact active thermal diode "
          "(core/thermal_diode.py, core/thermal_diode_analysis.py, Phase 18)",
          lambda: thermal_diode_analysis.run_thermal_diode_analysis()),
+        ("11d. Magnet-geometry (Halbach-cylinder) field-vs-mass cost model "
+         "(core/magnet_geometry.py, Phase 19)",
+         None),  # handled specially below, result (magnet_geometry_result) captured
+                 # for the executive summary
         ("12. Figure generation: 26 figures covering validation, AMR curves, "
          "cascade/graded staging, sensitivity, RSM, NSGA-III, economics, emissions (plots.py)",
          None),  # handled specially below, reuses steps 7/7b/9/9b/11's results
@@ -728,6 +752,7 @@ def main():
     pb_best_cop_row = None
     pp_best_cop_row = None
     hysteresis_result = None
+    magnet_geometry_result = None
 
     for name, fn in stages:
         _banner(name)
@@ -781,6 +806,9 @@ def main():
                     sobol_const_Si = fn()
                 elif name.startswith("11b."):
                     hysteresis_result = hysteresis_sensitivity.run_hysteresis_sensitivity()
+                elif name.startswith("11d."):
+                    magnet_geometry.run_magnet_geometry_analysis()
+                    magnet_geometry_result = magnet_geometry.run_geometric_cost_pareto_sensitivity()
                 elif name.startswith("11."):
                     pareto_rows = optimize_module.run_optimization()
                 elif name.startswith("12."):
@@ -837,18 +865,23 @@ def main():
                      "hysteresis_sensitivity.txt (Phase 16), "
                      "cycle_type_validation.txt (Phase 17), "
                      "thermal_diode_analysis.txt (Phase 18), "
+                     "magnet_geometry_analysis.txt, "
+                     "magnet_geometry_pareto_sensitivity.txt, "
+                     "pareto_front_magnet_flat.csv, pareto_front_magnet_geometric.csv "
+                     "(Phase 19), "
                      "geometry_optimization_analysis.txt, graded_cascade_comparison.csv, "
                      "design_recommendations.txt, figures/*.png+*.pdf (26 figures)")
     logger.info(f"Full run log: {LOG_FILE}")
 
     _print_executive_summary(representative_row, cascade_rows_gd, graded_rows,
                               material_rows, pareto_rows, pb_best_cop_row,
-                              pp_best_cop_row, hysteresis_result, failures)
+                              pp_best_cop_row, hysteresis_result,
+                              magnet_geometry_result, failures)
 
 
 def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, material_rows,
                               pareto_rows, pb_best_cop_row, pp_best_cop_row,
-                              hysteresis_result, failures):
+                              hysteresis_result, magnet_geometry_result, failures):
     """Final, well-structured overview of every implemented analysis and
     its headline metric, printed once at the very end of the run so a
     reader does not have to scroll back through 13 stages of log output
@@ -970,6 +1003,27 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
                     "small COP_electrical cost of an illustrative diode actuation-switching-"
                     "power term -- no benchmark device in this repo's corpus uses thermal "
                     "diodes, so this is not a validated feature")
+    else:
+        logger.info("  - unavailable (stage failed or was skipped)")
+
+    logger.info("Magnet-geometry (Halbach-cylinder) field-vs-mass cost model "
+                "(step 11d, Phase 19)")
+    if magnet_geometry_result and _ok("11d."):
+        counts_flat = magnet_geometry_result["counts_flat"]
+        counts_geom = magnet_geometry_result["counts_geometric"]
+        rows_flat = magnet_geometry_result["rows_flat"]
+        rows_geom = magnet_geometry_result["rows_geometric"]
+        mean_flat = (sum(r["mu0H_max_T"] for r in rows_flat) / len(rows_flat)
+                     if rows_flat else float("nan"))
+        mean_geom = (sum(r["mu0H_max_T"] for r in rows_geom) / len(rows_geom)
+                     if rows_geom else float("nan"))
+        logger.info(f"  - Merged Pareto front mean mu0H_max_T: {mean_flat:.2f} T (flat "
+                    f"per-Tesla magnet-mass ratio) -> {mean_geom:.2f} T (Phase 19 "
+                    "geometric Halbach-cylinder magnet-mass relation) -- see "
+                    "results/magnet_geometry_pareto_sensitivity.txt and "
+                    "core/magnet_geometry.py's docstring honesty flags (incl. a citation "
+                    "correction found in this pass) before treating this as a settled, "
+                    "publication-quality answer rather than a directional sensitivity check")
     else:
         logger.info("  - unavailable (stage failed or was skipped)")
 

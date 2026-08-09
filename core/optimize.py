@@ -90,6 +90,26 @@ Phase 15 additions
    Gd's $20/kg -- material choice now has a genuine, family-specific cost
    consequence in the optimization, not just a performance one.
 
+Phase 19 addition
+-------------------
+`cost_index()` (and hence `AMRDesignProblem`/`run_optimization_for_
+material()`/`run_optimization()`) gained an opt-in
+`use_geometric_magnet_mass` parameter (default False = unchanged
+behavior): when True, the magnet-mass term inside the cost objective
+comes from `economics.bom_cost_geometric()` -- itself built on
+`core.magnet_geometry`'s closed-form idealized-Halbach-cylinder relation
+-- instead of `economics.bom_cost()`'s flat per-Tesla mass ratio. The
+geometric relation is NONLINEAR (super-linear) in mu0H, closing the gap
+ROADMAP.md's Phase 19 plan named ("achieving high mu0H should cost
+nonlinearly more magnet mass ... which is physically real and currently
+absent"). Default is unchanged (flat ratio) so every pre-Phase-19 caller,
+including this module's own `if __name__ == "__main__"` production run
+and main.py's step 11, is completely unaffected unless
+`use_geometric_magnet_mass=True` is passed explicitly. See
+`core/magnet_geometry.py`'s `run_geometric_cost_pareto_sensitivity()` for
+the A/B (flat vs. geometric) Pareto-front comparison this enables, and
+that module's own docstring for the underlying physics and honesty flags.
+
 Objectives (all converted to minimization for pymoo):
     f1 = -COP_electrical        (maximize electrical COP; uses the
                                  state-dependent loss model so the
@@ -123,7 +143,7 @@ from pymoo.optimize import minimize as pymoo_minimize
 from core.mce_material import GADOLINIUM
 from core.amr_cycle import AMRSystem
 from core.loss_model import StateDependentLossModel
-from core.economics import material_cost, bom_cost
+from core.economics import material_cost, bom_cost, bom_cost_geometric
 from core.cascade import (GD_FAMILY, LAFESIH_FAMILY, MNFEPSI_FAMILY,
                             _target_composition_for_peak)
 
@@ -145,7 +165,8 @@ _XL = np.array([1.0, 0.3, 0.02, 1.0, 0.6, 0.1, 0.05])
 _XU = np.array([3.0, 5.0, 0.5, 15.0, 0.95, 0.6, 2.0])
 
 
-def cost_index(mu0H, mass_regenerator, family_name="Gd"):
+def cost_index(mu0H, mass_regenerator, family_name="Gd",
+                use_geometric_magnet_mass=False):
     """Materials-BOM cost proxy (Phase 15: now includes the soft-magnetic
     -material yoke term and looks the MCM cost up per material family --
     see module docstring item 3). `family_name` defaults to "Gd" so
@@ -154,8 +175,20 @@ def cost_index(mu0H, mass_regenerator, family_name="Gd"):
     the old `material_cost()`-based `cost_index()` for the same (mu0H,
     mass) because it now also includes the SMM yoke term -- this is an
     intentional, documented improvement (a more complete materials-cost
-    proxy), not a bug; see economics.py's Phase 15 section."""
-    return bom_cost(mu0H, mass_regenerator, family_name)["materials_bom_total_$"]
+    proxy), not a bug; see economics.py's Phase 15 section.
+
+    Phase 19 addition: `use_geometric_magnet_mass=False` (default,
+    fully backward-compatible) keeps using `economics.bom_cost()`'s flat
+    per-Tesla magnet-mass ratio; passing `True` switches the magnet-mass
+    term to `economics.bom_cost_geometric()`'s closed-form idealized-
+    Halbach-cylinder relation (`core/magnet_geometry.py`), which is
+    NONLINEAR (super-linear) in mu0H rather than linear -- see that
+    module's own docstring for the physics and honesty flags.
+    `AMRDesignProblem`/`run_optimization_for_material`/
+    `run_optimization()` all thread this flag through with the same
+    default-False backward-compatible convention."""
+    cost_fn = bom_cost_geometric if use_geometric_magnet_mass else bom_cost
+    return cost_fn(mu0H, mass_regenerator, family_name)["materials_bom_total_$"]
 
 
 def _material_candidates(T_mid_K=T_MID_K, mu0H_max_for_tuning=2.0):
@@ -197,9 +230,11 @@ def _material_candidates(T_mid_K=T_MID_K, mu0H_max_for_tuning=2.0):
 
 
 class AMRDesignProblem(ElementwiseProblem):
-    def __init__(self, material=GADOLINIUM, family_name="Gd"):
+    def __init__(self, material=GADOLINIUM, family_name="Gd",
+                 use_geometric_magnet_mass=False):
         self.material = material
         self.family_name = family_name
+        self.use_geometric_magnet_mass = use_geometric_magnet_mass
         super().__init__(
             n_var=7, n_obj=3, n_constr=0,
             xl=_XL, xu=_XU,
@@ -216,7 +251,7 @@ class AMRDesignProblem(ElementwiseProblem):
         result = sys_.run(T_COLD_K, SPAN_K)
         f1 = -result.COP_electrical
         f2 = -result.Qc
-        f3 = cost_index(mu0H, mass, self.family_name)
+        f3 = cost_index(mu0H, mass, self.family_name, self.use_geometric_magnet_mass)
         out["F"] = [f1, f2, f3]
 
 
@@ -247,17 +282,22 @@ def _write_csv(rows, path):
 
 def run_optimization_for_material(material, family_name, material_label,
                                     pop_size=40, n_gen=25, seed=1,
-                                    out_csv=None):
+                                    out_csv=None, use_geometric_magnet_mass=False):
     """Runs NSGA-III for a single material candidate. This is the
     per-family sub-search of the Phase 15 "option (b)" material
     co-optimization (see module docstring item 2). `pop_size`/`n_gen` are
     reduced from the pre-Phase-15 single-material defaults (60/40) since
     Phase 15's `run_optimization()` now runs this once per material
     candidate (typically 3-4) -- see that function's docstring for the
-    total-runtime accounting."""
+    total-runtime accounting.
+
+    `use_geometric_magnet_mass` (Phase 19, default False = old behavior)
+    is passed straight through to `AMRDesignProblem`/`cost_index()` --
+    see `cost_index()`'s own docstring."""
     ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=6)
     algorithm = NSGA3(pop_size=pop_size, ref_dirs=ref_dirs)
-    problem = AMRDesignProblem(material=material, family_name=family_name)
+    problem = AMRDesignProblem(material=material, family_name=family_name,
+                                use_geometric_magnet_mass=use_geometric_magnet_mass)
     res = pymoo_minimize(problem, algorithm, ("n_gen", n_gen), seed=seed, verbose=False)
 
     X, F = res.X, res.F
@@ -292,7 +332,8 @@ def _pareto_filter(rows):
 
 def run_optimization(pop_size=40, n_gen=25, seed=1,
                       out_csv="results/pareto_front.csv",
-                      per_material_out_dir="results/pareto_front_by_material"):
+                      per_material_out_dir="results/pareto_front_by_material",
+                      use_geometric_magnet_mass=False):
     """Phase 15: runs NSGA-III separately for each material candidate
     (`_material_candidates()`), writes each material's own Pareto front to
     `per_material_out_dir/<label>.csv`, then merges all candidate rows and
@@ -309,6 +350,16 @@ def run_optimization(pop_size=40, n_gen=25, seed=1,
     Tests (`tests/test_optimize.py`,
     `tests/test_optimize_material_geometry.py`) pass much smaller
     `pop_size`/`n_gen` explicitly and run in ~1s total.
+
+    Phase 19 addition: `use_geometric_magnet_mass=False` (default, fully
+    backward-compatible) is threaded through to every per-material
+    `run_optimization_for_material()` call -- see `cost_index()`'s own
+    docstring for what passing `True` changes (a nonlinear, closed-form
+    Halbach-cylinder magnet-mass cost term instead of the flat per-Tesla
+    ratio). `core/magnet_geometry.py`'s
+    `run_geometric_cost_pareto_sensitivity()` runs this function twice
+    (flat vs. geometric) as an A/B comparison, the same pattern
+    `core/hysteresis_sensitivity.py` established for Phase 16.
     """
     candidates = _material_candidates()
     all_rows = []
@@ -321,7 +372,8 @@ def run_optimization(pop_size=40, n_gen=25, seed=1,
             if per_material_out_dir else None
         rows = run_optimization_for_material(
             material, family_name, label, pop_size=pop_size, n_gen=n_gen,
-            seed=seed, out_csv=out_path)
+            seed=seed, out_csv=out_path,
+            use_geometric_magnet_mass=use_geometric_magnet_mass)
         per_material_rows[label] = rows
         all_rows.extend(rows)
         print(f"  {label:<40} {len(rows)} Pareto-optimal design(s) found"

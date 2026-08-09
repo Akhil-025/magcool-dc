@@ -430,3 +430,115 @@ def resource_criticality_note(family_name="Gd"):
     `material_cost_by_family()`'s own fallback convention."""
     return RESOURCE_CRITICALITY_BY_FAMILY.get(
         family_name, f"not assessed in this repo's corpus for {family_name!r}")
+
+
+# =============================================================================
+# Phase 19 addition: geometric (Halbach-cylinder) magnet-mass term
+# =============================================================================
+#
+# `material_cost()`/`bom_cost()` above scale magnet mass LINEARLY with
+# mu0H_max via MAGNET_TO_MCM_MASS_RATIO_PER_TESLA -- explicitly documented
+# as "a rough fit to Bjork et al.'s two worked examples," not a physical
+# model. ROADMAP.md's Phase 19 plan named the resulting gap directly:
+# "achieving high mu0H should cost nonlinearly more magnet mass for a
+# fixed air-gap geometry, which is physically real and currently absent."
+#
+# `core/magnet_geometry.py`'s new `halbach_field_vs_mass()` (a standard,
+# closed-form idealized-Halbach-cylinder relation -- see that module's
+# own honesty flags for what it is and is not sourced from) closes this
+# specific gap. The functions below are NEW, ADDITIVE entry points
+# (`*_geometric` suffix) rather than in-place replacements of
+# `material_cost()`/`bom_cost()`/`full_system_cost_estimate()` -- unlike
+# the original Phase 19 plan's literal wording ("Replace economics.py's
+# current flat $/kg-with-a-ratio-fudge-factor..."), keeping the existing
+# functions' exact numeric behavior unchanged avoids silently changing
+# every existing caller's $ figures (main.py steps 5/5b, economics.py's
+# own `lifetime_cost()`/`levelized_cost_of_cooling()`, and every existing
+# test) with no explicit opt-in -- the same "new parameter/function,
+# old default preserved" backward-compatibility discipline this repo has
+# used consistently since Phase 15 (`pumping_power_override`,
+# `cycle_type="brayton"`, `thermal_diode=None`). `core/optimize.py`'s
+# `cost_index()` gained its own explicit `use_geometric_magnet_mass`
+# opt-in flag for the same reason -- see that module's docstring.
+#
+# `air_gap_volume_m3` for the geometric relation is derived from
+# `mass_regenerator` using core/thermal.py's own packed-bed volume
+# convention (V_bed = mass_regenerator / (RHO_GD * (1 - porosity))) at
+# thermal.py's own default porosity (0.365) and core/optimize.py's own
+# default `BED_CROSS_SECTION_AREA_M2` (0.002 m^2) -- so a caller already
+# using this repo's one consistent bed-geometry convention gets a
+# matching magnet-bore geometry, not an independently-guessed one.
+
+DEFAULT_POROSITY = 0.365                    # matches core/thermal.py's own default
+DEFAULT_BED_CROSS_SECTION_AREA_M2 = 0.002   # matches core/optimize.py's
+                                              # BED_CROSS_SECTION_AREA_M2
+
+
+def geometric_magnet_mass_kg(mu0H_max, mass_regenerator,
+                               porosity=DEFAULT_POROSITY,
+                               bed_cross_section_area_m2=DEFAULT_BED_CROSS_SECTION_AREA_M2):
+    """Magnet mass (kg) from core.magnet_geometry's closed-form idealized-
+    Halbach-cylinder relation, instead of `material_cost()`'s flat
+    `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA * mu0H_max * mass_regenerator`
+    proxy. `mass_regenerator` (kg of MCM) is converted to an air-gap
+    volume using core/thermal.py's own RHO_GD-based packed-bed volume
+    convention (see section docstring) before being handed to
+    `core.magnet_geometry.halbach_field_vs_mass()`."""
+    from core.thermal import RHO_GD
+    from core.magnet_geometry import halbach_field_vs_mass
+    air_gap_volume_m3 = mass_regenerator / (RHO_GD * (1 - porosity))
+    return halbach_field_vs_mass(mu0H_max, air_gap_volume_m3,
+                                   bed_cross_section_area_m2)["magnet_mass_kg"]
+
+
+def bom_cost_geometric(mu0H_max, mass_regenerator, family_name="Gd",
+                         smm_mass_fraction=0.5, porosity=DEFAULT_POROSITY,
+                         bed_cross_section_area_m2=DEFAULT_BED_CROSS_SECTION_AREA_M2):
+    """Geometric-magnet-mass counterpart of `bom_cost()`: same MCM and
+    soft-magnetic-material (SMM) yoke line items (SMM mass still scaled
+    off the magnet mass via `smm_mass_fraction`, same convention as
+    `bom_cost()`), but the magnet-mass term comes from
+    `geometric_magnet_mass_kg()` instead of the flat per-Tesla ratio.
+    Returns the same dict shape as `bom_cost()` (with the same key names)
+    so downstream callers (e.g. a `cost_index_geometric()` in
+    core/optimize.py) can be written as a near drop-in swap."""
+    mcm_cost_per_kg = MCM_COST_PER_KG_BY_FAMILY.get(family_name, COST_MCM_PER_KG)
+    magnet_mass = geometric_magnet_mass_kg(mu0H_max, mass_regenerator, porosity,
+                                             bed_cross_section_area_m2)
+    smm_mass = smm_mass_fraction * magnet_mass
+    magnet_cost = COST_MAGNET_PER_KG * magnet_mass
+    mcm_cost = mcm_cost_per_kg * mass_regenerator
+    smm_cost = COST_SMM_PER_KG * smm_mass
+    return {
+        "magnet_mass_kg": round(magnet_mass, 4),
+        "smm_mass_kg": round(smm_mass, 4),
+        "magnet_cost_$": round(magnet_cost, 2),
+        "mcm_cost_$": round(mcm_cost, 2),
+        "smm_cost_$": round(smm_cost, 2),
+        "materials_bom_total_$": round(magnet_cost + mcm_cost + smm_cost, 2),
+    }
+
+
+def full_system_cost_estimate_geometric(
+        mu0H_max, mass_regenerator, family_name="Gd", smm_mass_fraction=0.5,
+        porosity=DEFAULT_POROSITY,
+        bed_cross_section_area_m2=DEFAULT_BED_CROSS_SECTION_AREA_M2,
+        non_materials_multiplier=NON_MATERIALS_COST_MULTIPLIER):
+    """Geometric-magnet-mass counterpart of `full_system_cost_estimate()` --
+    same ORDER-OF-MAGNITUDE non-materials multiplier (see that function's
+    own docstring for its Russek & Zimm (2006) provenance and caveats),
+    applied to `bom_cost_geometric()`'s materials-only BOM total instead
+    of `bom_cost()`'s flat-ratio one."""
+    bom = bom_cost_geometric(mu0H_max, mass_regenerator, family_name,
+                               smm_mass_fraction, porosity, bed_cross_section_area_m2)
+    full_system = bom["materials_bom_total_$"] * non_materials_multiplier
+    return {
+        **bom,
+        "non_materials_multiplier": non_materials_multiplier,
+        "full_system_cost_estimate_$": round(full_system, 2),
+        "note": "Same order-of-magnitude caveats as full_system_cost_estimate() "
+                "(see that function's docstring) -- this version's magnet-mass "
+                "term additionally uses core.magnet_geometry's closed-form "
+                "Halbach-cylinder relation instead of the flat per-Tesla ratio; "
+                "see that module's own honesty flags.",
+    }

@@ -63,3 +63,41 @@ def test_run_optimization_merges_multiple_materials_and_writes_per_material_csvs
     # no design should be strictly dominated by another in the merged set
     refiltered = _pareto_filter(rows)
     assert len(refiltered) == len(rows), "run_optimization()'s own merged output should already be non-dominated"
+
+# =============================================================================
+# Phase 19: opt-in geometric magnet-mass cost term
+# =============================================================================
+
+def test_cost_index_geometric_flag_default_is_unchanged():
+    """use_geometric_magnet_mass defaults to False -- omitting it must
+    reproduce the exact pre-Phase-19 cost_index() value."""
+    default = cost_index(1.5, 5.0, "Gd")
+    explicit_false = cost_index(1.5, 5.0, "Gd", use_geometric_magnet_mass=False)
+    assert default == explicit_false
+
+
+def test_cost_index_geometric_flag_changes_value_at_high_field():
+    flat = cost_index(3.0, 5.0, "Gd", use_geometric_magnet_mass=False)
+    geometric = cost_index(3.0, 5.0, "Gd", use_geometric_magnet_mass=True)
+    assert geometric != flat
+
+
+def test_run_optimization_for_material_geometric_flag_runs(tmp_path):
+    rows = run_optimization_for_material(
+        GADOLINIUM, "Gd", "Gd", pop_size=12, n_gen=5, seed=1,
+        out_csv=str(tmp_path / "gd_front_geom.csv"),
+        use_geometric_magnet_mass=True)
+    assert len(rows) > 0
+    for r in rows:
+        assert r["material"] == "Gd"
+
+
+def test_run_optimization_geometric_flag_runs_and_merges(tmp_path):
+    out_csv = tmp_path / "merged_geom.csv"
+    rows = run_optimization(pop_size=12, n_gen=5, seed=1,
+                             out_csv=str(out_csv), per_material_out_dir=None,
+                             use_geometric_magnet_mass=True)
+    assert out_csv.exists()
+    assert len(rows) > 0
+    refiltered = _pareto_filter(rows)
+    assert len(refiltered) == len(rows)
