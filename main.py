@@ -30,6 +30,8 @@ in the repository in one pass, in dependency order, so a single
         geometry co-optimization, per-material-family fronts merged post-hoc)
     11b. Hysteresis sensitivity (ON/OFF Pareto-front A/B check, Phase 16)
         (core/hysteresis_sensitivity.py)
+    11c. Thermal-diode sensitivity study, mechanical-contact active thermal
+        diode (core/thermal_diode.py, core/thermal_diode_analysis.py, Phase 18)
     12. Figure generation (26 figures) (plots.py -> results/figures/*.png, *.pdf)
     13. Design-recommendations synthesis (core/design_recommendations.py) --
         consolidates steps 3c/7b/8d/9b/11's already-computed results into
@@ -137,6 +139,35 @@ and reports whether the per-device COP prediction error shrinks. A full
 NSGA-III categorical cycle_type search (mirroring how Phase 15 handled
 material family) was deliberately NOT added in this pass -- see
 ROADMAP.md's Phase 17 entry for why.
+
+A follow-up pass (see ROADMAP.md's Phase 17 entry, "closed after the
+fact") threaded cycle_type through core/cascade.py's `run_graded_cascade()`/
+`validate_astronautics_graded_bed()` (Phase 17's own "did NOT do" item),
+and step 7c now also reports the same brayton-vs-ericsson comparison for
+the Astronautics_rotary_2014 graded-bed reproduction that step 2b already
+gave DTU_Eriksen_rotary_Gd_2015 -- a genuine, single-device null result
+(ericsson does not narrow this device's much larger -81.1% error), stated
+plainly rather than omitted because it disagrees with the other rotary
+device's result.
+
+Phase 18 (see ROADMAP.md) added a narrowly-scoped mechanical-contact
+active thermal diode model (core/thermal_diode.py's MechanicalContactDiode,
+core/amr_cycle.py's AMRSystem `thermal_diode` parameter, default None =
+pre-Phase-18 behavior unchanged). New step 11c
+(core/thermal_diode_analysis.py) is a cost-only sensitivity study, NOT a
+validated feature: it (1) directly checks and reports that this repo's
+model has no internal mechanical-switching frequency ceiling for a
+diode-assisted design to relax (the Phase 18 plan's own premise for that
+part of the item), and (2) sweeps the (illustrative, unbenchmarked --
+see that module's honesty flag) diode actuation switching-power cost
+against frequency at the representative operating point. No offsetting
+heat-transfer benefit from the diode's rectification_ratio is modeled
+(no closed-form relation for Sect. 6.2.4 was available to digitize --
+this project's copy of Kitanovski et al. does not include Ch. 6), and no
+AMR benchmark device in this repo's corpus uses thermal diodes, so this
+step is explicitly a design-exploration tool rather than a validated
+result -- see ROADMAP.md's Phase 18 entry for the full scoping
+discussion and what was deliberately not built.
 """
 
 import logging
@@ -169,6 +200,7 @@ from core import giguere_validation
 from core import geometry_analysis
 from core import hypereg_analysis
 from core import hysteresis_sensitivity
+from core import thermal_diode_analysis
 from core import plots
 from core import design_recommendations
 from core import sensitivity as sensitivity_module
@@ -497,6 +529,31 @@ def run_astronautics_graded_validation():
         logger.info(f"Predicted COP={astro['COP_cascade']}  vs.  reported COP={astro['COP_lit']} "
                     f"({astro['COP_error_pct']:+.1f}% error) -- vs. the flat 'no calibration found' "
                     f"the single-layer material in step 2 gave this same device.")
+        # ROADMAP.md Phase 17 follow-up: closes that phase's own "did NOT
+        # do" item (cycle_type was never threaded through cascade.py).
+        # Astronautics_rotary_2014 is the one device with the largest COP
+        # error on record, and is itself the naming-convention "rotary"
+        # case infer_cycle_type_for_device() would flag -- so check
+        # directly whether cycle_type="ericsson" (which narrowed
+        # DTU_Eriksen_rotary_Gd_2015's error in step 2b) does the same
+        # here, reusing the already-computed brayton `astro` result above
+        # rather than recomputing it.
+        ericsson = cascade.validate_astronautics_graded_bed(cycle_type="ericsson")
+        if ericsson.get("feasible"):
+            logger.info(f"Phase 17 follow-up: same graded bed under cycle_type='ericsson' "
+                        f"(rotary-device naming-convention proxy, see validation_system."
+                        f"infer_cycle_type_for_device()): COP={ericsson['COP_cascade']} "
+                        f"({ericsson['COP_error_pct']:+.1f}% error) vs. brayton's "
+                        f"{astro['COP_error_pct']:+.1f}% -- "
+                        + ("ericsson narrows the error, a second data point in the same "
+                           "direction as DTU_Eriksen_rotary_Gd_2015's step 2b result."
+                           if abs(ericsson["COP_error_pct"]) < abs(astro["COP_error_pct"]) else
+                           "ericsson does NOT narrow the error here, unlike "
+                           "DTU_Eriksen_rotary_Gd_2015's step 2b result -- the remaining "
+                           "gap is dominated by other documented issues (single-Tc-vs-6-"
+                           "real-layers approximation, the ~2.4x DeltaT_ad overestimate in "
+                           "giguere_validation.py), not by cycle topology."))
+        astro["ericsson_followup"] = ericsson
     else:
         logger.info(astro.get("status", "infeasible"))
     return astro
@@ -648,6 +705,9 @@ def main():
         ("11b. Hysteresis sensitivity: does Phase 16's thermal-hysteresis loss change the "
          "Phase 15 material-selection result? (core/hysteresis_sensitivity.py, Phase 16)",
          None),  # handled specially below, result (hysteresis_result) captured for the executive summary
+        ("11c. Thermal-diode sensitivity study: mechanical-contact active thermal diode "
+         "(core/thermal_diode.py, core/thermal_diode_analysis.py, Phase 18)",
+         lambda: thermal_diode_analysis.run_thermal_diode_analysis()),
         ("12. Figure generation: 26 figures covering validation, AMR curves, "
          "cascade/graded staging, sensitivity, RSM, NSGA-III, economics, emissions (plots.py)",
          None),  # handled specially below, reuses steps 7/7b/9/9b/11's results
@@ -776,6 +836,7 @@ def main():
                      "hypereg_analysis.txt (Phase 15), "
                      "hysteresis_sensitivity.txt (Phase 16), "
                      "cycle_type_validation.txt (Phase 17), "
+                     "thermal_diode_analysis.txt (Phase 18), "
                      "geometry_optimization_analysis.txt, graded_cascade_comparison.csv, "
                      "design_recommendations.txt, figures/*.png+*.pdf (26 figures)")
     logger.info(f"Full run log: {LOG_FILE}")
@@ -896,6 +957,19 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
                     "results/hysteresis_sensitivity.txt and that module's docstring honesty "
                     "flags 1-2 before treating this as a settled, publication-quality answer "
                     "rather than a directional sensitivity check")
+    else:
+        logger.info("  - unavailable (stage failed or was skipped)")
+
+    logger.info("Thermal-diode sensitivity study: mechanical-contact active thermal diode "
+                "(step 11c, Phase 18)")
+    if _ok("11c."):
+        logger.info("  - Cost-only, unbenchmarked design-exploration study (see "
+                    "results/thermal_diode_analysis.txt and core/thermal_diode.py's docstring "
+                    "honesty flag): confirms this repo's model has no internal mechanical-"
+                    "switching frequency ceiling for a diode to relax, and quantifies the "
+                    "small COP_electrical cost of an illustrative diode actuation-switching-"
+                    "power term -- no benchmark device in this repo's corpus uses thermal "
+                    "diodes, so this is not a validated feature")
     else:
         logger.info("  - unavailable (stage failed or was skipped)")
 

@@ -18,6 +18,7 @@ from core.first_order_mce import (
 )
 from core.hysteresis_sensitivity import (
     run_hysteresis_sensitivity, _set_all_hysteresis, _material_counts,
+    run_hysteresis_multiseed_stability_check,
 )
 
 _POP, _GEN = 14, 5  # small but >= n_var=7-ish reference-direction count concerns
@@ -103,3 +104,52 @@ def test_material_counts_helper():
     rows = [{"material": "A"}, {"material": "B"}, {"material": "A"}]
     counts = _material_counts(rows)
     assert counts == {"A": 2, "B": 1}
+
+# ---------------------------------------------------------------------------
+# run_hysteresis_multiseed_stability_check() -- closes the "Open item" flagged
+# in this module's own honesty flag #1 and in ROADMAP.md's Phase 16 entry.
+# ---------------------------------------------------------------------------
+
+def test_multiseed_stability_check_restores_original_values(tmp_path):
+    before = _hysteresis_snapshot()
+    out_path = str(tmp_path / "stability.txt")
+    run_hysteresis_multiseed_stability_check(seeds=(1, 2), pop_size=_POP,
+                                              n_gen=_GEN, out_path=out_path)
+    after = _hysteresis_snapshot()
+    assert before == after
+
+
+def test_multiseed_stability_check_returns_one_row_per_seed(tmp_path):
+    out_path = str(tmp_path / "stability.txt")
+    result = run_hysteresis_multiseed_stability_check(
+        seeds=(1, 2, 3), pop_size=_POP, n_gen=_GEN, out_path=out_path)
+    assert len(result["per_seed"]) == 3
+    assert [s["seed"] for s in result["per_seed"]] == [1, 2, 3]
+    for s in result["per_seed"]:
+        assert 0.0 <= s["lafesih_frac_off"] <= 1.0
+        assert 0.0 <= s["lafesih_frac_on"] <= 1.0
+    assert isinstance(result["stable"], bool)
+
+
+def test_multiseed_stability_check_writes_output_file_and_cleans_scratch(tmp_path):
+    out_path = str(tmp_path / "sub" / "stability.txt")
+    run_hysteresis_multiseed_stability_check(
+        seeds=(1,), pop_size=_POP, n_gen=_GEN, out_path=out_path)
+    assert os.path.isfile(out_path)
+    with open(out_path) as f:
+        content = f.read()
+    assert "RESULT:" in content
+    assert "seed" in content
+    # scratch CSVs the function writes internally must not be left behind
+    assert not os.path.exists("results/_scratch_hysteresis_multiseed_on.csv")
+    assert not os.path.exists("results/_scratch_hysteresis_multiseed_off.csv")
+
+
+def test_multiseed_stability_check_stable_flag_matches_per_seed_data(tmp_path):
+    out_path = str(tmp_path / "stability.txt")
+    result = run_hysteresis_multiseed_stability_check(
+        seeds=(1, 2), pop_size=_POP, n_gen=_GEN, out_path=out_path)
+    expected_stable = all(
+        s["lafesih_frac_on"] >= s["lafesih_frac_off"] - 1e-9
+        for s in result["per_seed"])
+    assert result["stable"] == expected_stable

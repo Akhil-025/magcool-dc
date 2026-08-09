@@ -43,6 +43,17 @@ QUALITATIVE ranking Carnot-like >= Ericsson-like >= Brayton-like described
 in the AMR-cycle-comparison literature -- see CYCLE_TYPE_FACTORS below for
 the honesty flag on why these are illustrative multipliers rather than a
 digitization of Kitanovski et al.'s own closed-form relations.
+
+Phase 18 (ROADMAP.md) added an optional `thermal_diode` parameter
+(default None = pre-Phase-18 behavior unchanged): when a
+`core.thermal_diode.MechanicalContactDiode` instance is supplied,
+its (illustrative -- see that module's honesty flag)
+`actuation_energy_J_per_cycle * frequency` switching power is added to
+W_parasitic, the same additive-parasitic-load accounting Phase 16 used
+for hysteresis loss. See `_diode_switching_power_W()` and
+`core/thermal_diode_analysis.py`'s docstring for what this module
+deliberately does NOT claim (no frequency-ceiling relaxation is
+modeled -- see that finding's own writeup).
 """
 
 import numpy as np
@@ -178,7 +189,11 @@ class AMRCycleResult:
     W_parasitic: float    # W, pump + motor-drive overhead (see note below) --
                             # Phase 16: also includes material thermal-
                             # hysteresis loss (_hysteresis_power_W()), 0.0
-                            # for GADOLINIUM/pre-Phase-16 materials
+                            # for GADOLINIUM/pre-Phase-16 materials.
+                            # Phase 18: also includes thermal-diode
+                            # actuation switching power
+                            # (_diode_switching_power_W()), 0.0 unless a
+                            # thermal_diode is supplied
     COP: float            # ideal magnetic-cycle-only COP (Qc / W_mag)
     COP_electrical: float  # device-level electrical COP (Qc / (W_mag + W_parasitic))
                              # -- this is the number comparable to published
@@ -199,7 +214,8 @@ class AMRSystem:
                  particle_diameter: float = None,
                  bed_cross_section_area: float = 0.002,
                  hypereg_n_parallel: int = None,
-                 cycle_type: str = "brayton"):
+                 cycle_type: str = "brayton",
+                 thermal_diode=None):
         """
         material               : MagnetocaloricMaterial instance
         mu0H_max                : peak applied field, Tesla
@@ -318,6 +334,30 @@ class AMRSystem:
                                      preserves ALL pre-Phase-17 behavior
                                      exactly (qc_multiplier=eta_uplift=1.0).
                                      Raises ValueError for any other value.
+        thermal_diode                : Phase 18 addition. Optional
+                                     core.thermal_diode.MechanicalContactDiode
+                                     instance. Default None preserves ALL
+                                     pre-Phase-18 behavior exactly (no
+                                     switching-power term is added to
+                                     W_parasitic). When supplied, its
+                                     switching_power_W(frequency) --
+                                     an illustrative, unbenchmarked
+                                     actuation cost, see that module's
+                                     honesty flag -- is added to
+                                     W_parasitic unconditionally, the same
+                                     accounting pattern Phase 16 used for
+                                     hysteresis loss. This parameter does
+                                     NOT change cooling_capacity() or
+                                     magnetic_work() in any way: no
+                                     frequency-ceiling relaxation or
+                                     rectification-ratio heat-transfer
+                                     benefit is modeled here (see
+                                     core/thermal_diode_analysis.py's
+                                     docstring for why, and for what a
+                                     rectification-ratio-driven heat
+                                     -transfer benefit would require that
+                                     this repo does not yet have the data
+                                     to support).
         """
         if cycle_type not in CYCLE_TYPE_FACTORS:
             raise ValueError(
@@ -337,6 +377,7 @@ class AMRSystem:
         self.bed_cross_section_area = bed_cross_section_area
         self.hypereg_n_parallel = hypereg_n_parallel
         self.cycle_type = cycle_type
+        self.thermal_diode = thermal_diode
         self._last_ntu_info = None
 
     def _cycle_type_factor(self):
@@ -381,6 +422,21 @@ class AMRSystem:
         """
         hysteresis_loss_J_per_kg = getattr(self.mat, "hysteresis_loss_J_per_kg", 0.0)
         return hysteresis_loss_J_per_kg * self.m_reg * self.f
+
+    def _diode_switching_power_W(self):
+        """Phase 18 addition. Returns the parasitic electrical power (W)
+        to actuate this system's `thermal_diode` (a
+        core.thermal_diode.MechanicalContactDiode) once per AMR cycle, or
+        exactly 0.0 if thermal_diode is None (the default) -- so every
+        pre-Phase-18 caller and test gets IDENTICAL numbers to before this
+        addition, the same backward-compatibility guarantee Phase 15-17
+        used for particle_diameter/cycle_type/etc. Unlike
+        _hysteresis_power_W(), this does NOT scale with mass_regenerator:
+        see core.thermal_diode.MechanicalContactDiode's docstring for why
+        actuation energy is modeled as a per-diode, not per-kg, quantity."""
+        if self.thermal_diode is None:
+            return 0.0
+        return self.thermal_diode.switching_power_W(self.f)
 
     def _blow_fraction_qc_multiplier(self):
         ref = BLOW_FRACTION_MASCHE
@@ -512,6 +568,15 @@ class AMRSystem:
         # Returns 0.0 for GADOLINIUM and for any pre-Phase-16
         # FirstOrderMCEMaterial -- see _hysteresis_power_W()'s docstring.
         W_parasitic += self._hysteresis_power_W()
+        # Phase 18: thermal-diode actuation switching power, added HERE
+        # unconditionally for the same reason (catches both the
+        # loss_model and constant-parasitic_fraction branches above with
+        # one code path). Returns 0.0 unless thermal_diode is supplied --
+        # see _diode_switching_power_W()'s docstring. Deliberately does
+        # NOT change Qc or W_mag: no rectification-ratio heat-transfer
+        # benefit or frequency-ceiling relaxation is modeled here (see
+        # core/thermal_diode_analysis.py's docstring for why).
+        W_parasitic += self._diode_switching_power_W()
         Qh = Qc + W
         COP = Qc / W if W > 0 else 0.0
         COP_electrical = Qc / (W + W_parasitic) if (W + W_parasitic) > 0 else 0.0

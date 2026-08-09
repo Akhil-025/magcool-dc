@@ -4,6 +4,7 @@ from core.mce_material import GADOLINIUM
 from core.amr_cycle import (AMRSystem, BLOW_FRACTION_MASCHE,
                              _blow_fraction_multiplier, CYCLE_TYPE_FACTORS)
 from core.loss_model import StateDependentLossModel
+from core.thermal_diode import MechanicalContactDiode
 
 
 def make_system(**overrides):
@@ -256,3 +257,87 @@ def test_cycle_type_qc_multiplier_applied_directly():
     expected_ratio = (CYCLE_TYPE_FACTORS["ericsson"]["qc_multiplier"]
                        / CYCLE_TYPE_FACTORS["brayton"]["qc_multiplier"])
     assert Qc_ericsson == pytest.approx(Qc_brayton * expected_ratio, rel=1e-9)
+
+
+# ---------------------------------------------------------------------------
+# Phase 18: thermal-diode-assisted AMRSystem (core/thermal_diode.py)
+# ---------------------------------------------------------------------------
+
+def test_thermal_diode_default_none_reproduces_pre_phase18_numbers():
+    """thermal_diode=None (the default) must give IDENTICAL results to a
+    system built without the parameter at all -- the same backward-
+    compatibility guarantee Phase 15-17 gave particle_diameter/cycle_type."""
+    sys_with_default = make_system()
+    sys_explicit_none = make_system(thermal_diode=None)
+    r1 = sys_with_default.run(291.0, 10.0)
+    r2 = sys_explicit_none.run(291.0, 10.0)
+    assert r1.W_parasitic == pytest.approx(r2.W_parasitic)
+    assert r1.COP_electrical == pytest.approx(r2.COP_electrical)
+
+
+def test_thermal_diode_adds_switching_power_to_parasitic():
+    diode = MechanicalContactDiode(forward_conductance_W_K=5.0,
+                                    reverse_conductance_W_K=0.5,
+                                    actuation_energy_J_per_cycle=1.0)
+    sys_no_diode = make_system()
+    sys_diode = make_system(thermal_diode=diode)
+    r_no_diode = sys_no_diode.run(291.0, 10.0)
+    r_diode = sys_diode.run(291.0, 10.0)
+    expected_switch_power = diode.switching_power_W(sys_diode.f)
+    assert r_diode.W_parasitic == pytest.approx(
+        r_no_diode.W_parasitic + expected_switch_power)
+
+
+def test_thermal_diode_never_changes_Qc_or_W_mag():
+    """Phase 18 deliberately adds a cost-only term -- Qc and W_mag must be
+    bit-for-bit unaffected by thermal_diode (see core/thermal_diode.py's
+    honesty flag: no heat-transfer benefit is modeled)."""
+    diode = MechanicalContactDiode(forward_conductance_W_K=5.0,
+                                    reverse_conductance_W_K=0.5,
+                                    actuation_energy_J_per_cycle=1.0)
+    sys_no_diode = make_system()
+    sys_diode = make_system(thermal_diode=diode)
+    r_no_diode = sys_no_diode.run(291.0, 10.0)
+    r_diode = sys_diode.run(291.0, 10.0)
+    assert r_diode.Qc == pytest.approx(r_no_diode.Qc)
+    assert r_diode.W_mag == pytest.approx(r_no_diode.W_mag)
+
+
+def test_thermal_diode_zero_actuation_energy_is_a_noop():
+    diode = MechanicalContactDiode(forward_conductance_W_K=5.0,
+                                    reverse_conductance_W_K=0.5,
+                                    actuation_energy_J_per_cycle=0.0)
+    sys_no_diode = make_system()
+    sys_diode = make_system(thermal_diode=diode)
+    r_no_diode = sys_no_diode.run(291.0, 10.0)
+    r_diode = sys_diode.run(291.0, 10.0)
+    assert r_diode.W_parasitic == pytest.approx(r_no_diode.W_parasitic)
+
+
+def test_thermal_diode_stacks_additively_with_hysteresis():
+    """Phase 16 (hysteresis) and Phase 18 (diode switching) must combine
+    additively in W_parasitic, each independent of the other -- both are
+    added unconditionally in run() via the same accounting pattern."""
+    from core.first_order_mce import LAFESIH_FIRST_ORDER
+    diode = MechanicalContactDiode(forward_conductance_W_K=5.0,
+                                    reverse_conductance_W_K=0.5,
+                                    actuation_energy_J_per_cycle=1.0)
+    sys_neither = AMRSystem(material=GADOLINIUM, mu0H_max=2.0,
+                             mass_regenerator=5.0, frequency=1.0,
+                             fluid_mdot=0.1, regenerator_effectiveness=0.8)
+    sys_hyst_only = AMRSystem(material=LAFESIH_FIRST_ORDER, mu0H_max=2.0,
+                               mass_regenerator=5.0, frequency=1.0,
+                               fluid_mdot=0.1, regenerator_effectiveness=0.8)
+    sys_diode_only = AMRSystem(material=GADOLINIUM, mu0H_max=2.0,
+                                mass_regenerator=5.0, frequency=1.0,
+                                fluid_mdot=0.1, regenerator_effectiveness=0.8,
+                                thermal_diode=diode)
+    sys_both = AMRSystem(material=LAFESIH_FIRST_ORDER, mu0H_max=2.0,
+                          mass_regenerator=5.0, frequency=1.0,
+                          fluid_mdot=0.1, regenerator_effectiveness=0.8,
+                          thermal_diode=diode)
+    base = sys_neither.run(291.0, 10.0).W_parasitic
+    hyst_extra = sys_hyst_only.run(291.0, 10.0).W_parasitic - base
+    diode_extra = sys_diode_only.run(291.0, 10.0).W_parasitic - base
+    both = sys_both.run(291.0, 10.0).W_parasitic
+    assert both == pytest.approx(base + hyst_extra + diode_extra)

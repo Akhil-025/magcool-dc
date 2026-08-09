@@ -467,7 +467,7 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
                         mass_per_stage=2.0, frequency=1.0, fluid_mdot=0.08,
                         regenerator_effectiveness=0.85,
                         apply_giguere_correction=True, family=None,
-                        executor=None):
+                        executor=None, cycle_type="brayton"):
     """Curie-graded cascade (ROADMAP.md Phase 7 open item; generalized in
     Phase 9): rather than identical stages of one material (run_cascade
     above), each stage is assigned a hypothetical composition-tuned material
@@ -503,7 +503,18 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
     executor is None (the default -- no behavior change for existing
     callers) or when `family` isn't one of this module's own named
     families (a custom/closure-based family can't be resolved inside a
-    separate worker process; see _family_name() above)."""
+    separate worker process; see _family_name() above).
+
+    `cycle_type`: ROADMAP.md Phase 17 addition, threaded through here as
+    a follow-up closing that phase's own "did NOT do" item (cycle_type
+    was NOT threaded through core/cascade.py's multi-stage/graded-bed
+    helpers). Default "brayton" reproduces every pre-existing call's
+    behavior exactly (see core.amr_cycle.AMRSystem's own
+    CYCLE_TYPE_FACTORS honesty flag for what "ericsson"/"carnot" do and
+    do not claim). Passed unchanged to every per-stage AMRSystem below --
+    every stage in a graded cascade shares one physical field-change
+    mechanism, so there is no physical reason for cycle_type to vary
+    stage-to-stage."""
     if family is None:
         family = GD_FAMILY if apply_giguere_correction else GradedFamily(
             name=GD_FAMILY.name,
@@ -555,7 +566,8 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
     stage1 = AMRSystem(material=stage_materials[0], mu0H_max=mu0H_max,
                         mass_regenerator=mass_per_stage, frequency=frequency,
                         fluid_mdot=fluid_mdot, regenerator_effectiveness=regenerator_effectiveness,
-                        loss_model=_LOSS_MODEL, use_ntu_thermal_model=USE_NTU_THERMAL_MODEL)
+                        loss_model=_LOSS_MODEL, use_ntu_thermal_model=USE_NTU_THERMAL_MODEL,
+                        cycle_type=cycle_type)
     r1 = stage1.run(T_local, span_per_stage)
     Qc_target = r1.Qc
     if Qc_target <= 0:
@@ -570,7 +582,8 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
         stage = AMRSystem(material=stage_materials[i], mu0H_max=mu0H_max,
                            mass_regenerator=mass_per_stage, frequency=frequency,
                            fluid_mdot=fluid_mdot, regenerator_effectiveness=regenerator_effectiveness,
-                           loss_model=_LOSS_MODEL, use_ntu_thermal_model=USE_NTU_THERMAL_MODEL)
+                           loss_model=_LOSS_MODEL, use_ntu_thermal_model=USE_NTU_THERMAL_MODEL,
+                           cycle_type=cycle_type)
         r_i = stage.run(T_local, span_per_stage)
         if r_i.Qc > 0:
             scale = Qc_target / r_i.Qc
@@ -685,7 +698,7 @@ def compare_staging(T_cold_C=18.0, spans=range(5, 21), stage_counts=(1, 2, 3, 4)
     return rows
 
 
-def validate_astronautics_graded_bed(apply_correction=None):
+def validate_astronautics_graded_bed(apply_correction=None, cycle_type="brayton"):
     """Phase 9 follow-up: builds a 6-layer Curie-graded La(Fe,Si)13Hy bed
     (LAFESIH_FAMILY) at the REAL Astronautics_rotary_2014 operating point
     (Jacobs et al., Int. J. Refrig. 37 (2014) 84-91: mu0H=1.44T, 1.52kg
@@ -730,6 +743,18 @@ def validate_astronautics_graded_bed(apply_correction=None):
     Qc_lit_W by construction), predicted vs. literature COP and its error,
     and the per-stage breakdown -- or a "no calibration found" status dict
     if no mdot in [1e-6, 1.0] kg/s reproduces the reported Qc.
+
+    `cycle_type` (ROADMAP.md Phase 17 addition, follow-up closing that
+    phase's "did NOT do" item on cascade.py): default "brayton"
+    reproduces pre-existing behavior exactly. Astronautics_rotary_2014 is
+    itself the one device `core.validation_system.infer_cycle_type_for_device()`
+    flags as "rotary" (continuous-field) via its naming-convention proxy
+    -- and it's ALSO the device with the largest single-Tc-approximation
+    COP error already on record (single-Tc: -81.1%, see run 8/step 2's
+    docstring). `run_astronautics_cycle_type_sensitivity()` below
+    directly checks whether "ericsson" narrows that error for the
+    graded-bed reproduction the way it narrowed DTU_Eriksen_rotary_Gd_2015's
+    (-2.1% -> +0.6%, Phase 17's own single comparable-device result).
     """
     from scipy.optimize import brentq
 
@@ -772,7 +797,8 @@ def validate_astronautics_graded_bed(apply_correction=None):
         def qc_residual(mdot):
             r = run_graded_cascade(T_cold_K, span_K, n_stages, mu0H_max=mu0H,
                                     mass_per_stage=mass_total / n_stages, frequency=freq,
-                                    fluid_mdot=max(mdot, 1e-6), family=family, executor=pool)
+                                    fluid_mdot=max(mdot, 1e-6), family=family, executor=pool,
+                                    cycle_type=cycle_type)
             return (r["Qc_W"] if r["feasible"] else 0.0) - Qc_lit
 
         try:
@@ -784,7 +810,8 @@ def validate_astronautics_graded_bed(apply_correction=None):
 
         result = run_graded_cascade(T_cold_K, span_K, n_stages, mu0H_max=mu0H,
                                      mass_per_stage=mass_total / n_stages, frequency=freq,
-                                     fluid_mdot=mdot_cal, family=family, executor=pool)
+                                     fluid_mdot=mdot_cal, family=family, executor=pool,
+                                     cycle_type=cycle_type)
     finally:
         if pool is not None:
             pool.shutdown(wait=True)
@@ -796,6 +823,75 @@ def validate_astronautics_graded_bed(apply_correction=None):
     result["COP_lit"] = cop_lit
     result["COP_error_pct"] = round(100 * (result["COP_cascade"] - cop_lit) / cop_lit, 1)
     return result
+
+
+def run_astronautics_cycle_type_sensitivity(apply_correction=None, verbose=True):
+    """ROADMAP.md Phase 17 follow-up, closing that phase's own "did NOT
+    do" item: cycle_type was validated system-wide in step 2b
+    (core.validation_system.run_cycle_type_validation()) but NEVER
+    threaded through core/cascade.py's graded-bed helpers, so
+    Astronautics_rotary_2014 -- the one device this repo's own step-2
+    single-Tc validation flags with the largest COP error on record
+    (-81.1%) -- never got the same "ericsson" check its rotary sibling
+    DTU_Eriksen_rotary_Gd_2015 got in step 2b (where ericsson narrowed
+    -2.1% to +0.6%). This function runs `validate_astronautics_graded_bed()`
+    under both cycle_type="brayton" (baseline, unchanged) and
+    cycle_type="ericsson" (the naming-convention-heuristic classification
+    `core.validation_system.infer_cycle_type_for_device()` would assign
+    this device, since "rotary" is in its name) and reports whether the
+    graded-bed reproduction's COP error shrinks.
+
+    Returns a dict with both results and the resulting finding. Does NOT
+    modify CYCLE_TYPE_FACTORS or claim this settles whether "ericsson" is
+    the objectively correct classification for this device (that
+    classification is itself only a naming-convention proxy -- see
+    core.validation_system.infer_cycle_type_for_device()'s own honesty
+    flag, unchanged by this function)."""
+    brayton_result = validate_astronautics_graded_bed(
+        apply_correction=apply_correction, cycle_type="brayton")
+    ericsson_result = validate_astronautics_graded_bed(
+        apply_correction=apply_correction, cycle_type="ericsson")
+
+    both_feasible = bool(brayton_result.get("feasible") and ericsson_result.get("feasible"))
+    improved = None
+    if both_feasible:
+        improved = bool(abs(ericsson_result["COP_error_pct"])
+                         < abs(brayton_result["COP_error_pct"]))
+
+    if verbose:
+        print("Astronautics_rotary_2014 6-layer graded-bed reproduction: "
+              "brayton (baseline) vs. ericsson (ROADMAP.md Phase 17 follow-up)")
+        if both_feasible:
+            print(f"  brayton:  COP_cascade={brayton_result['COP_cascade']}  "
+                  f"COP_error={brayton_result['COP_error_pct']}%")
+            print(f"  ericsson: COP_cascade={ericsson_result['COP_cascade']}  "
+                  f"COP_error={ericsson_result['COP_error_pct']}%")
+            if improved:
+                print(f"  FINDING: ericsson narrows the error "
+                      f"({brayton_result['COP_error_pct']}% -> "
+                      f"{ericsson_result['COP_error_pct']}%), consistent with "
+                      f"DTU_Eriksen_rotary_Gd_2015's step-2b result -- a second, "
+                      f"independent (graded-bed, not single-Tc) data point in the "
+                      f"same direction.")
+            else:
+                print(f"  FINDING: ericsson does NOT narrow the error "
+                      f"({brayton_result['COP_error_pct']}% -> "
+                      f"{ericsson_result['COP_error_pct']}%) for this device's "
+                      f"graded-bed reproduction -- unlike DTU_Eriksen_rotary_Gd_2015's "
+                      f"step-2b result. This is a genuine, single-device disagreement, "
+                      f"not smoothed over: the naming-convention 'rotary -> ericsson' "
+                      f"proxy does not generalize cleanly across both rotary devices "
+                      f"checked so far, at least not for the graded-bed's much larger "
+                      f"remaining error (-81.1% at baseline, dominated by other "
+                      f"documented gaps -- the single-Tc-approximation-vs-6-real-layers "
+                      f"issue this function's own docstring describes, and the model's "
+                      f"~2.4x DeltaT_ad overestimate documented in "
+                      f"giguere_validation.py -- not by cycle topology).")
+        else:
+            print("  Not comparable: one or both cycle_type runs did not calibrate.")
+
+    return {"brayton": brayton_result, "ericsson": ericsson_result,
+            "both_feasible": both_feasible, "ericsson_improves": improved}
 
 
 if __name__ == "__main__":

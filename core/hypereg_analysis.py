@@ -91,6 +91,41 @@ def sweep_frequency_at_fixed_n(frequencies=(0.5, 1.0, 2.0, 4.0, 8.0), n_parallel
     return rows
 
 
+def sweep_n_parallel_at_higher_mdot(n_values=(1, 2, 4, 8, 16), frequency=1.0,
+                                      mdot=0.3, verbose=True):
+    """Closes the open ROADMAP.md Phase 16 candidate: "should Hypereg's
+    benefit turn out non-negligible at a different (e.g. higher-frequency,
+    higher-mdot) operating point than the one checked [at the module
+    default MDOT_KG_S=0.08 kg/s], extend that sweep." This module's own
+    Step 2 docstring already established WHY mdot, not frequency, is the
+    right axis to check: pumping power scales with mdot (Darcy-flow
+    dP~mdot in thermal.pumping_power_packed_bed()), not with frequency
+    directly, so a higher-mdot point is where a bigger Hypereg benefit
+    would actually be expected to show up, if it shows up anywhere in
+    this repo's model. `mdot=0.3 kg/s` (vs. the module default 0.08
+    kg/s) is an otherwise-arbitrary ~4x increase, not a value read off
+    any specific device or paper -- chosen only to be clearly higher than
+    the baseline while remaining within `AMRSystem`'s workable range, in
+    the same spirit as the module default's own "representative,
+    lab-scale" framing (see Klinar et al. 2024's own Fig. 19 example,
+    which this module already notes gives no validated pressure-drop
+    data to calibrate a "real" high-mdot point against)."""
+    rows = []
+    for n in n_values:
+        sys_ = AMRSystem(GADOLINIUM, mu0H_max=MU0H_T, mass_regenerator=MASS_KG,
+                          frequency=frequency, fluid_mdot=mdot,
+                          regenerator_effectiveness=0.85, loss_model=_LOSS_MODEL,
+                          use_ntu_thermal_model=True, particle_diameter=PARTICLE_DIAMETER_M,
+                          hypereg_n_parallel=n)
+        res = sys_.run(T_COLD_K, SPAN_K)
+        rows.append((n, res.Qc, res.COP_electrical, res.W_parasitic))
+        if verbose:
+            print(f"  n_parallel={n:3d}   Qc={res.Qc:8.2f}W   "
+                  f"COP_electrical={res.COP_electrical:7.4f}   "
+                  f"W_parasitic={res.W_parasitic:7.2f}W")
+    return rows
+
+
 def run_hypereg_analysis(out_path="results/hypereg_analysis.txt"):
     import io, contextlib
     buf = io.StringIO()
@@ -111,6 +146,12 @@ def run_hypereg_analysis(out_path="results/hypereg_analysis.txt"):
               "(the paper's own illustrative example) ---")
         f_rows = sweep_frequency_at_fixed_n()
 
+        mdot_high = 0.3
+        print(f"\n--- Step 3: does the benefit become non-negligible at a higher mdot "
+              f"({mdot_high}kg/s vs. the {MDOT_KG_S}kg/s baseline above)? "
+              f"(ROADMAP.md Phase 16 open candidate) ---")
+        n_rows_high_mdot = sweep_n_parallel_at_higher_mdot(mdot=mdot_high)
+
         print("\n--- Conclusion ---")
         conv_cop = n_rows[0][2]
         best_cop = max(n_rows, key=lambda r: r[2])
@@ -128,6 +169,27 @@ def run_hypereg_analysis(out_path="results/hypereg_analysis.txt"):
               "representable in this repo's own model, WITHOUT claiming a validated "
               "optimum n or a device-level performance prediction for an as-yet-"
               "unbuilt concept -- see results/hypereg_findings.md's honesty flags.")
+        conv_cop_high = n_rows_high_mdot[0][2]
+        best_cop_high = max(n_rows_high_mdot, key=lambda r: r[2])
+        rel_gain_baseline = (100 * (best_cop[2] - conv_cop) / conv_cop) if conv_cop > 0 else 0.0
+        rel_gain_high = (100 * (best_cop_high[2] - conv_cop_high) / conv_cop_high) if conv_cop_high > 0 else 0.0
+        print(f"Step 3 finding: at mdot={mdot_high}kg/s, the SAME n={best_cop_high[0]} split "
+              f"raises COP_electrical from {conv_cop_high:.3f} (n=1) to {best_cop_high[2]:.3f} "
+              f"-- a {rel_gain_high:.2f}% relative gain, vs. {rel_gain_baseline:.2f}% at the "
+              f"{MDOT_KG_S}kg/s baseline. "
+              + ("This IS meaningfully larger, consistent with pumping power's mdot-driven "
+                 "scaling (thermal.pumping_power_packed_bed()'s Darcy-flow dP~mdot term) "
+                 "making the pumping-loss channel a bigger share of W_parasitic at higher "
+                 "flow -- worth extending this sweep further if a specific higher-mdot "
+                 "design point is ever targeted."
+                 if rel_gain_high > 2 * rel_gain_baseline else
+                 "This is NOT meaningfully larger than the baseline finding -- the modest, "
+                 "saturating benefit in Step 1 is not an artifact of the particular "
+                 f"{MDOT_KG_S}kg/s operating point chosen; base_frac*Qc and k_eddy*f^2*H^2 "
+                 "still dominate W_parasitic even at this higher flow rate in this repo's "
+                 "own calibrated loss model, so the ROADMAP.md Phase 16 candidate asking "
+                 "whether a higher-mdot point changes this conclusion is answered here: "
+                 "it does not, at least not at this mdot.") )
 
     text = buf.getvalue()
     print(text, end="")

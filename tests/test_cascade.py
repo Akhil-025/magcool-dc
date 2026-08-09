@@ -4,7 +4,7 @@ import pytest
 from core.cascade import (  
     run_cascade, run_graded_cascade, GD_FAMILY, LAFESIH_FAMILY, MNFEPSI_FAMILY,
     _target_composition_for_peak, _peak_temperature,
-    validate_astronautics_graded_bed,
+    validate_astronautics_graded_bed, run_astronautics_cycle_type_sensitivity,
 )
 from core.mce_material import GADOLINIUM
 from core.first_order_mce import (
@@ -170,3 +170,64 @@ def test_validate_astronautics_graded_bed_reproduces_reported_qc_and_close_cop()
     assert r["feasible"]
     assert r["Qc_W"] == pytest.approx(2502.0, rel=1e-3)
     assert abs(r["COP_error_pct"]) < 100.0
+
+# ---------------------------------------------------------------------------
+# ROADMAP.md Phase 17 follow-up: cycle_type threaded through cascade.py
+# ---------------------------------------------------------------------------
+
+def test_run_graded_cascade_cycle_type_default_matches_explicit_brayton():
+    """cycle_type='brayton' (the default) must give IDENTICAL results to a
+    call without the parameter at all -- the same backward-compatibility
+    guarantee every other cascade.py addition has given."""
+    kwargs = dict(T_cold_K=291.15, total_span_K=12.0, n_stages=3,
+                   mass_per_stage=5.0, family=GD_FAMILY)
+    r_default = run_graded_cascade(**kwargs)
+    r_explicit = run_graded_cascade(**kwargs, cycle_type="brayton")
+    assert r_default["feasible"] and r_explicit["feasible"]
+    assert r_default["Qc_W"] == pytest.approx(r_explicit["Qc_W"])
+    assert r_default["COP_cascade"] == pytest.approx(r_explicit["COP_cascade"])
+
+
+def test_run_graded_cascade_ericsson_changes_result():
+    """cycle_type='ericsson' must actually be threaded through to each
+    per-stage AMRSystem (not silently ignored) -- Qc/COP should differ
+    from the brayton baseline given CYCLE_TYPE_FACTORS' nonzero
+    multipliers (see core/amr_cycle.py)."""
+    kwargs = dict(T_cold_K=291.15, total_span_K=12.0, n_stages=3,
+                   mass_per_stage=5.0, family=GD_FAMILY)
+    r_brayton = run_graded_cascade(**kwargs, cycle_type="brayton")
+    r_ericsson = run_graded_cascade(**kwargs, cycle_type="ericsson")
+    assert r_brayton["feasible"] and r_ericsson["feasible"]
+    assert r_ericsson["Qc_W"] != pytest.approx(r_brayton["Qc_W"])
+
+
+def test_run_graded_cascade_invalid_cycle_type_raises():
+    with pytest.raises(ValueError):
+        run_graded_cascade(T_cold_K=291.15, total_span_K=12.0, n_stages=3,
+                            mass_per_stage=5.0, family=GD_FAMILY,
+                            cycle_type="not_a_real_cycle_type")
+
+
+def test_validate_astronautics_graded_bed_cycle_type_default_is_brayton():
+    r_default = validate_astronautics_graded_bed()
+    r_explicit = validate_astronautics_graded_bed(cycle_type="brayton")
+    assert r_default["feasible"] and r_explicit["feasible"]
+    assert r_default["COP_cascade"] == pytest.approx(r_explicit["COP_cascade"])
+
+
+def test_run_astronautics_cycle_type_sensitivity_returns_both_results():
+    result = run_astronautics_cycle_type_sensitivity(verbose=False)
+    assert "brayton" in result and "ericsson" in result
+    assert result["both_feasible"] is True
+    assert result["brayton"]["feasible"] and result["ericsson"]["feasible"]
+    assert isinstance(result["ericsson_improves"], bool)
+
+
+def test_run_astronautics_cycle_type_sensitivity_brayton_matches_direct_call():
+    """The sensitivity check's own 'brayton' entry must match a direct
+    validate_astronautics_graded_bed() call -- no silent divergence
+    between the two code paths."""
+    direct = validate_astronautics_graded_bed(cycle_type="brayton")
+    via_sensitivity = run_astronautics_cycle_type_sensitivity(verbose=False)["brayton"]
+    assert direct["COP_cascade"] == pytest.approx(via_sensitivity["COP_cascade"])
+    assert direct["Qc_W"] == pytest.approx(via_sensitivity["Qc_W"])
