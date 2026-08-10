@@ -39,6 +39,10 @@ in the repository in one pass, in dependency order, so a single
         consolidates steps 3c/7b/8d/9b/11's already-computed results into
         one ranked, actionable "how do I raise AMR electrical COP" report
         (results/design_recommendations.txt)
+    14. Magnetocaloric fluids (ferrofluid/MR suspension) as an alternative
+        working-body class (core/fluid_mce_cycle.py, core/fluid_mce_analysis.py,
+        Phase 20) -- design-exploration/comparison tool, not a validated
+        feature (see that module's own honesty flags)
 
 Steps 3b and 8b reproduce core/thermal.py's and core/first_order_mce.py's
 own __main__ demo blocks. Both modules are otherwise only reached
@@ -187,6 +191,38 @@ cost/performance sweet spot" claim pointed at the wrong Bjørk et al.
 paper; the simple proxy this step checks that claim against does NOT
 independently reproduce it -- reported honestly rather than massaged to
 agree.
+
+Phase 20 (see ROADMAP.md) added core/fluid_mce_cycle.py: FerrofluidMCESystem,
+a NEW SIBLING to AMRSystem (not a parameter on it, per the plan's own
+scoping) modeling magnetocaloric fluids (ferrofluid/magnetorheological
+suspension) as an alternative working-body class -- a continuous
+flow-through loop with no packed regenerator bed, using standard
+Krieger-Dougherty suspension rheology and Darcy-Weisbach pipe pumping
+power instead of core/thermal.py's packed-bed correlations, and a
+mixture-heat-capacity dilution model for the suspension's own effective
+adiabatic temperature change (see that module's own docstring for why
+neither project book was needed, or available, for any of this). New
+step 14 (core/fluid_mce_analysis.py) runs a particle-volume-fraction
+sweep (the viscosity-vs-phi/MCE-intensity-vs-phi tradeoff the plan named
+directly) and a comparison, at this architecture's own favorable (small)
+span, against a representative solid AMRSystem and against
+core/baseline_cooling.py's liquid-cooling/vapor-compression references.
+No usable magnetocaloric-fluid-as-working-body benchmark was found in
+this pass's literature search (see that module's HONESTY FLAG #2, which
+also documents a distinct, adjacent ferrofluid-AS-THERMAL-SWITCH
+technology this module deliberately does not conflate with its own
+topic) -- this step is a design-exploration/comparison tool, not a
+validated result, the same disposition Phase 18 gave
+core/thermal_diode_analysis.py. Its headline finding is a genuine,
+unforced one: fluid dilution combined with this architecture's lack of
+regeneration collapses the usable span to a fraction of a Kelvin up to a
+couple of Kelvin at realistic particle loadings in this repo's own
+model, dramatically less than solid AMR achieves at the same field/flow
+-- reported directly rather than hidden, along with a secondary,
+narrower finding (the fluid system's own COP_electrical can exceed solid
+AMR's at that shared tiny span, though both trail the liquid-cooling and
+vapor-compression baselines there) that this step's own writeup is
+careful not to overstate.
 """
 
 import logging
@@ -221,6 +257,7 @@ from core import hypereg_analysis
 from core import hysteresis_sensitivity
 from core import thermal_diode_analysis
 from core import magnet_geometry
+from core import fluid_mce_analysis
 from core import plots
 from core import design_recommendations
 from core import sensitivity as sensitivity_module
@@ -737,6 +774,11 @@ def main():
          None),  # handled specially below, reuses steps 7/7b/9/9b/11's results
         ("13. Design-recommendations synthesis (core/design_recommendations.py)",
          None),  # handled specially below, consumes steps 3c/7b/8d/9b/11's results
+        ("14. Magnetocaloric fluids (ferrofluid/MR suspension) as an alternative "
+         "working-body class (core/fluid_mce_cycle.py, core/fluid_mce_analysis.py, "
+         "Phase 20)",
+         None),  # handled specially below, result (fluid_mce_result) captured
+                 # for the executive summary
     ]
 
     representative_row = None
@@ -753,6 +795,7 @@ def main():
     pp_best_cop_row = None
     hysteresis_result = None
     magnet_geometry_result = None
+    fluid_mce_result = None
 
     for name, fn in stages:
         _banner(name)
@@ -834,6 +877,8 @@ def main():
                         pb_best_cop_row=pb_best_cop_row,
                         pp_best_cop_row=pp_best_cop_row,
                     )
+                elif name.startswith("14."):
+                    fluid_mce_result = fluid_mce_analysis.run_fluid_mce_analysis()
                 else:
                     fn()
         except Exception:
@@ -869,6 +914,7 @@ def main():
                      "magnet_geometry_pareto_sensitivity.txt, "
                      "pareto_front_magnet_flat.csv, pareto_front_magnet_geometric.csv "
                      "(Phase 19), "
+                     "fluid_mce_analysis.txt (Phase 20), "
                      "geometry_optimization_analysis.txt, graded_cascade_comparison.csv, "
                      "design_recommendations.txt, figures/*.png+*.pdf (26 figures)")
     logger.info(f"Full run log: {LOG_FILE}")
@@ -876,12 +922,13 @@ def main():
     _print_executive_summary(representative_row, cascade_rows_gd, graded_rows,
                               material_rows, pareto_rows, pb_best_cop_row,
                               pp_best_cop_row, hysteresis_result,
-                              magnet_geometry_result, failures)
+                              magnet_geometry_result, fluid_mce_result, failures)
 
 
 def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, material_rows,
                               pareto_rows, pb_best_cop_row, pp_best_cop_row,
-                              hysteresis_result, magnet_geometry_result, failures):
+                              hysteresis_result, magnet_geometry_result, fluid_mce_result,
+                              failures):
     """Final, well-structured overview of every implemented analysis and
     its headline metric, printed once at the very end of the run so a
     reader does not have to scroll back through 13 stages of log output
@@ -1035,6 +1082,28 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
     logger.info("Figures")
     n_figs = len(list(plots.FIG_DIR.glob("*.png"))) if plots.FIG_DIR.exists() else 0
     logger.info(f"  - {n_figs} figure(s) generated (results/figures/*.png, *.pdf)")
+
+    logger.info("Magnetocaloric fluids (ferrofluid/MR suspension) as an alternative "
+                "working-body class (step 14, Phase 20)")
+    if fluid_mce_result and _ok("14."):
+        sweep = fluid_mce_result["sweep"]
+        comp = fluid_mce_result["comparison"]
+        best = sweep["best_row"]
+        interior_note = ("a genuine interior optimum" if sweep["interior_optimum_found"]
+                          else "no interior optimum (monotonic over the swept range)")
+        logger.info(f"  - Volume-fraction sweep: COP_electrical best at phi={best['phi']:.2f} "
+                    f"({interior_note}) -- results/fluid_mce_analysis.txt")
+        logger.info(f"  - At its own favorable span ({comp['span_K']:.2f} K, phi="
+                    f"{comp['phi']:.2f}): ferrofluid Qc={comp['fluid_MCE']['Qc_W']:.2f}W "
+                    f"vs. solid AMR Qc={comp['solid_AMR']['Qc_W']:.2f}W -- fluid dilution "
+                    "plus this architecture's lack of regeneration (see "
+                    "core/fluid_mce_cycle.py's own docstring) collapses usable span far "
+                    "below solid AMR's, a design-exploration finding, not a validated "
+                    "benchmark-backed result (no fluid-MCE-as-working-body device was "
+                    "found in this pass's own literature search -- see that module's "
+                    "HONESTY FLAG #2)")
+    else:
+        logger.info("  - unavailable (stage failed or was skipped)")
 
 
 if __name__ == "__main__":
