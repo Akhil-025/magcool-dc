@@ -77,3 +77,201 @@ def liquid_cooling_cop(Tc, Th, economizer_hours_fraction=0.6,
                           % (economizer_hours_fraction * 100),
                           Tc, Th, cop_avg, cc, eff_2nd_law_blended)
 
+
+# ---------------------------------------------------------------------------
+# Phase 21 -- passive/hybrid magnetic regenerator augmentation of a
+# conventional (vapor-compression) gas cycle.
+# ---------------------------------------------------------------------------
+#
+# HONESTY FLAG (book access -- same tier as Phases 17-20's own flags). The
+# ROADMAP.md Phase 21 plan's stated data sources were Tishin & Spichkin
+# (2003) Sect. 11.1 (passive magnetic regenerators used inside conventional
+# gas-cycle refrigerators), Sect. 11.2.3 (magnetically-augmented gas
+# regenerators) and Sect. 11.2.4 (hybrid magnetic working bodies). As
+# already documented in this project's Phase 20 ROADMAP.md entry, this
+# project's copy of Tishin & Spichkin (2003) is a scanned, image-only PDF
+# with NO extractable text layer (confirmed again for this pass) -- none of
+# those sections' own equations, reported effectiveness-vs-alignment curves,
+# or COP figures could be digitized. What is implemented below is instead,
+# exactly as the Phase 21 plan itself anticipated ("this doesn't need new
+# physics or new benchmark data -- it recombines your existing
+# mce_material.py entropy/heat-capacity curves with your existing
+# baseline_cooling.py gas-cycle correlations in a new way"): a reuse of data
+# this repo already computes, not a reproduction of Tishin's own numbers.
+#
+# Physical picture. A "passive" magnetic regenerator is not actively
+# magnetized/demagnetized in step with the flow (that would make it an AMR,
+# already covered by core/amr_cycle.py) -- instead its lambda-anomaly heat
+# capacity near its own Curie temperature is exploited passively to boost
+# the *thermal mass* of a conventional gas-cycle's internal regenerator
+# (e.g. a vapor-compression system's liquid-suction heat exchanger), the
+# same way core/thermal.py's regenerator_effectiveness() already treats
+# higher solid-side heat capacity (relative to the fluid-side heat-capacity
+# flow rate) as reducing its utilization term U and therefore raising
+# effectiveness eps for the SAME mass/frequency/flow geometry. This module
+# reuses that existing eps(cp_solid) relationship (via thermal.py's new,
+# backward-compatible cp_solid override) rather than inventing a second
+# effectiveness model.
+#
+# How effectiveness maps to COP. There is no digitized source (Tishin or
+# otherwise) in this pass's corpus for exactly how much a real gas cycle's
+# COP improves as its internal-regenerator effectiveness rises. The general
+# phenomenon -- internal (liquid-suction) heat exchangers raising
+# vapor-compression COP by a modest amount -- is well established in the
+# refrigeration literature (see e.g. ASHRAE Handbook -- Refrigeration,
+# internal heat exchanger chapter; commonly-cited ranges are on the order of
+# a few percent up to roughly 10%, refrigerant- and design-dependent), so
+# `MAX_COP_GAIN_AT_FULL_EFFECTIVENESS` below is set from that generic,
+# non-magnetic-specific literature range as an illustrative CEILING (the
+# gain if eps rose from the non-magnetic baseline all the way to eps=1),
+# scaled linearly by this module's own delta_eps -- explicitly NOT a fitted
+# coefficient and NOT specific to a magnetically-augmented regenerator
+# (same evidentiary tier as Phase 16's hysteresis_loss_J_per_kg and Phase
+# 18's actuation_energy_J_per_cycle placeholders: a round, cited-range
+# illustration, not a calibrated fit).
+
+from core.thermal import regenerator_effectiveness, CP_SOLID_GD  # noqa: E402
+
+MAX_COP_GAIN_AT_FULL_EFFECTIVENESS = 0.08  # illustrative ceiling, see docstring above
+
+
+@dataclass
+class PassiveRegeneratorResult:
+    technology: str
+    material_name: str
+    T_cold: float
+    T_hot: float
+    base_COP: float
+    augmented_COP: float
+    cop_gain_fraction: float
+    eps_baseline: float
+    eps_augmented: float
+    delta_eps: float
+    cp_solid_baseline_J_kgK: float
+    cp_solid_augmented_J_kgK: float
+
+
+def _mean_total_heat_capacity(material, T_cold, T_hot, H_field=0.0, n_points=25):
+    """Average, over [T_cold, T_hot], of `material`'s own total (lattice +
+    magnetic-anomaly) specific heat from core/mce_material.py's
+    MagnetocaloricMaterial.total_heat_capacity() -- the SAME quantity every
+    existing validation figure in this repo already computes (e.g.
+    validation.py's Dan'kov cross-check), just averaged over a temperature
+    window and reused here for a new purpose. If T_cold >= T_hot (a caller
+    error) falls back to the single point T_cold rather than raising, since
+    linspace(T_cold, T_hot, n) with T_hot <= T_cold is still well-defined
+    for n=1 but not informative for n>1."""
+    if T_hot <= T_cold:
+        Ts = np.array([T_cold])
+    else:
+        Ts = np.linspace(T_cold, T_hot, n_points)
+    C = material.total_heat_capacity(Ts, H=H_field)
+    return float(np.mean(C))
+
+
+def _mean_lattice_heat_capacity(material, T_cold, T_hot, n_points=25):
+    """Same window-averaging as _mean_total_heat_capacity(), but the
+    LATTICE-ONLY term (material.lattice_heat_capacity()) -- i.e. the same
+    material with its own magnetic lambda-anomaly switched off. This is
+    used as the DEFAULT baseline in passive_regenerator_augmentation()
+    below (see that function's own docstring for why: comparing two
+    DIFFERENT materials' total_heat_capacity against one shared flat
+    constant conflates each material's own bulk lattice heat capacity --
+    which varies a lot with atoms-per-formula-unit and molar mass, and has
+    nothing to do with magnetic alignment -- with the actual effect this
+    module is trying to isolate)."""
+    if T_hot <= T_cold:
+        Ts = np.array([T_cold])
+    else:
+        Ts = np.linspace(T_cold, T_hot, n_points)
+    C = material.lattice_heat_capacity(Ts)
+    return float(np.mean(C))
+
+
+def passive_regenerator_augmentation(passive_regenerator_material, T_cold, T_hot,
+                                      mass_regenerator=2.0, frequency=1.0, mdot=0.08,
+                                      H_field=0.0, cp_solid_baseline=None,
+                                      n_T_points=25):
+    """Compares regenerator effectiveness (core/thermal.py's own
+    regenerator_effectiveness(), same geometry/frequency/flow both times)
+    for a `passive_regenerator_material`-based regenerator WITHOUT its own
+    magnetic lambda-anomaly (lattice-only heat capacity -- i.e. the same
+    material used far from its own Curie point, or a hypothetical
+    non-magnetic analog of the same bulk composition) against the SAME
+    material WITH its own total_heat_capacity(T) (lattice + magnetic
+    anomaly), both averaged over [T_cold, T_hot].
+
+    IMPLEMENTATION NOTE (a real decision made during this phase, stated
+    rather than left implicit): the baseline deliberately uses the SAME
+    material's own lattice_heat_capacity(), not a shared flat constant
+    (e.g. CP_SOLID_GD) applied across every candidate material. An early
+    version of this function used the latter and produced a materially
+    wrong ranking -- e.g. La0.7Ca0.3MnO3 (5 atoms per formula unit, a much
+    larger Dulong-Petit lattice heat capacity per kg than Gd) ranked ABOVE
+    Gd even though Gd's own Curie temperature (294K) sits inside the
+    representative [291.15K, 301.15K] operating window and
+    La0.7Ca0.3MnO3's (267K) does not -- because the flat-constant
+    comparison was mostly measuring each material's bulk lattice
+    properties, not magnetic alignment. Using each material's own
+    lattice-only heat capacity as its own baseline isolates the magnetic-
+    anomaly contribution specifically, matching the Phase 21 plan's own
+    framing ("the augmentation factor is a function of how well the
+    material's heat capacity peak aligns with the gas cycle's cold-end
+    temperature") rather than rewarding heavy, multi-atom formula units.
+    `cp_solid_baseline` remains available as an explicit override (e.g.
+    CP_SOLID_GD) for a caller who specifically wants the flat-reference
+    comparison instead; default None selects the same-material lattice-only
+    baseline described above."""
+    cp_augmented = _mean_total_heat_capacity(passive_regenerator_material, T_cold, T_hot,
+                                              H_field=H_field, n_points=n_T_points)
+    cp_baseline = (cp_solid_baseline if cp_solid_baseline is not None else
+                   _mean_lattice_heat_capacity(passive_regenerator_material, T_cold, T_hot,
+                                                n_points=n_T_points))
+    eps_baseline = regenerator_effectiveness(mass_regenerator, frequency, mdot,
+                                              cp_solid=cp_baseline)["eps"]
+    eps_augmented = regenerator_effectiveness(mass_regenerator, frequency, mdot,
+                                               cp_solid=cp_augmented)["eps"]
+    return {
+        "cp_solid_baseline_J_kgK": cp_baseline,
+        "cp_solid_augmented_J_kgK": cp_augmented,
+        "eps_baseline": eps_baseline,
+        "eps_augmented": eps_augmented,
+        "delta_eps": eps_augmented - eps_baseline,
+    }
+
+
+def augmented_regenerator_cop(base_cop, passive_regenerator_material, T_range,
+                               mass_regenerator=2.0, frequency=1.0, mdot=0.08,
+                               H_field=0.0, cp_solid_baseline=None,
+                               max_cop_gain_at_full_effectiveness=MAX_COP_GAIN_AT_FULL_EFFECTIVENESS,
+                               n_T_points=25):
+    """Phase 21 deliverable, named and shaped exactly as the plan
+    specified: `augmented_regenerator_cop(base_cop, passive_regenerator_material,
+    T_range)`. `base_cop` is normally `vapor_compression_cop(Tc, Th).COP`
+    (this module's own existing function -- see main.py step 15 for a
+    worked call). `T_range=(T_cold, T_hot)` sets both the regenerator's own
+    operating window (for _mean_total_heat_capacity's alignment check) and
+    the reported Tc/Th on the returned result. Returns a
+    PassiveRegeneratorResult; augmented_COP >= base_COP always, since
+    delta_eps is clipped at 0 (a passive regenerator whose material is
+    poorly aligned with the operating window should reduce to the
+    unaugmented baseline, not degrade it -- this module does not attempt to
+    model a *worse*-than-baseline passive regenerator)."""
+    T_cold, T_hot = T_range
+    aug = passive_regenerator_augmentation(
+        passive_regenerator_material, T_cold, T_hot, mass_regenerator, frequency, mdot,
+        H_field, cp_solid_baseline, n_T_points)
+    cop_gain_fraction = max_cop_gain_at_full_effectiveness * max(aug["delta_eps"], 0.0)
+    augmented_cop = base_cop * (1.0 + cop_gain_fraction)
+    return PassiveRegeneratorResult(
+        technology="Vapor-compression + passive magnetic regenerator (%s)"
+                   % passive_regenerator_material.name,
+        material_name=passive_regenerator_material.name,
+        T_cold=T_cold, T_hot=T_hot,
+        base_COP=base_cop, augmented_COP=augmented_cop,
+        cop_gain_fraction=cop_gain_fraction,
+        eps_baseline=aug["eps_baseline"], eps_augmented=aug["eps_augmented"],
+        delta_eps=aug["delta_eps"],
+        cp_solid_baseline_J_kgK=aug["cp_solid_baseline_J_kgK"],
+        cp_solid_augmented_J_kgK=aug["cp_solid_augmented_J_kgK"],
+    )

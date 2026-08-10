@@ -14,6 +14,26 @@ def test_packed_bed_effectiveness_between_zero_and_clip():
     assert 0.0 <= r["eps"] <= 0.97 + 1e-9
 
 
+def test_cp_solid_none_reproduces_default_behavior():
+    """Phase 21 addition: cp_solid=None must reproduce the exact pre-Phase-21
+    result (module-level CP_SOLID_GD), for every existing caller."""
+    from core.thermal import CP_SOLID_GD
+    r_default = regenerator_effectiveness(2.0, 1.0, 0.08)
+    r_explicit_none = regenerator_effectiveness(2.0, 1.0, 0.08, cp_solid=None)
+    r_explicit_same = regenerator_effectiveness(2.0, 1.0, 0.08, cp_solid=CP_SOLID_GD)
+    assert r_default["eps"] == r_explicit_none["eps"]
+    assert r_default["eps"] == pytest.approx(r_explicit_same["eps"])
+
+
+def test_cp_solid_override_changes_utilization_and_effectiveness():
+    """A higher solid heat capacity should lower the utilization term U and
+    therefore raise (or leave unchanged, if already NTU-capped) eps."""
+    r_low_cp = regenerator_effectiveness(2.0, 1.0, 0.08, cp_solid=50.0)
+    r_high_cp = regenerator_effectiveness(2.0, 1.0, 0.08, cp_solid=5000.0)
+    assert r_high_cp["U"] < r_low_cp["U"]
+    assert r_high_cp["eps"] >= r_low_cp["eps"]
+
+
 def test_packed_bed_pumping_power_increases_as_particle_shrinks():
     """Smaller particles -> smaller hydraulic diameter -> more viscous
     pressure drop at a fixed mdot. This is the physical relationship

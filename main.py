@@ -43,6 +43,14 @@ in the repository in one pass, in dependency order, so a single
         working-body class (core/fluid_mce_cycle.py, core/fluid_mce_analysis.py,
         Phase 20) -- design-exploration/comparison tool, not a validated
         feature (see that module's own honesty flags)
+    15. Passive/hybrid magnetic regenerator: does loading a conventional
+        (vapor-compression) gas cycle's internal regenerator with a
+        magnetocaloric material's own Curie-point heat-capacity anomaly
+        raise its COP? (core/baseline_cooling.py's augmented_regenerator_cop()
+        + passive_regenerator_augmentation(), core/passive_regenerator_analysis.py,
+        Phase 21) -- design-exploration/comparison tool with an illustrative,
+        literature-range-anchored effectiveness-to-COP ceiling, not a
+        validated feature (see that module's own honesty flags)
 
 Steps 3b and 8b reproduce core/thermal.py's and core/first_order_mce.py's
 own __main__ demo blocks. Both modules are otherwise only reached
@@ -223,6 +231,37 @@ narrower finding (the fluid system's own COP_electrical can exceed solid
 AMR's at that shared tiny span, though both trail the liquid-cooling and
 vapor-compression baselines there) that this step's own writeup is
 careful not to overstate.
+
+Phase 21 (see ROADMAP.md) added core/baseline_cooling.py's
+`passive_regenerator_augmentation()` / `augmented_regenerator_cop()`: a
+PASSIVE (not actively magnetized/demagnetized) magnetic regenerator
+loaded into a conventional gas cycle's own internal regenerator, whose
+Curie-point heat-capacity anomaly (core/mce_material.py's own
+`total_heat_capacity()`, already computed for every other analysis in
+this repo) can raise regenerator effectiveness (reusing
+core/thermal.py's existing `regenerator_effectiveness()`, given a new
+backward-compatible `cp_solid` override) relative to the same material's
+own lattice-only heat capacity -- cheap, per the plan's own framing,
+because it recombines two things this repo already computes rather than
+adding new physics or new benchmark data. New step 15
+(core/passive_regenerator_analysis.py) compares Gd, Gd5Si2Ge2, and
+La0.7Ca0.3MnO3 as candidate passive-regenerator materials at the
+representative ASHRAE operating point: Gd (Tc=294K, inside the
+[291.15K, 301.15K] window) gives the largest boost, while the other two
+materials (Curie temperatures well outside the window) give none --
+directly confirming the plan's own "alignment" framing in this repo's
+own model. See that module's docstring for a real implementation
+correction made along the way (an early version compared each
+candidate's full heat capacity against one shared flat reference value
+and thereby mostly ranked materials by bulk lattice heat capacity, not
+magnetic alignment; the fix compares each material against its OWN
+lattice-only baseline instead). The effectiveness-to-COP mapping itself
+is an illustrative, literature-range-anchored ceiling (generic
+internal-heat-exchanger COP-improvement figures from the refrigeration
+literature), not a fitted or digitized coefficient -- Tishin & Spichkin
+(2003)'s own passive-regenerator chapter (Ch. 11) could not be digitized
+for this pass, same book-access limitation already documented for
+Phase 20.
 """
 
 import logging
@@ -258,6 +297,7 @@ from core import hysteresis_sensitivity
 from core import thermal_diode_analysis
 from core import magnet_geometry
 from core import fluid_mce_analysis
+from core import passive_regenerator_analysis
 from core import plots
 from core import design_recommendations
 from core import sensitivity as sensitivity_module
@@ -779,6 +819,11 @@ def main():
          "Phase 20)",
          None),  # handled specially below, result (fluid_mce_result) captured
                  # for the executive summary
+        ("15. Passive/hybrid magnetic regenerator augmentation of a conventional "
+         "gas cycle (core/baseline_cooling.py, core/passive_regenerator_analysis.py, "
+         "Phase 21)",
+         None),  # handled specially below, result (passive_regen_result) captured
+                 # for the executive summary
     ]
 
     representative_row = None
@@ -796,6 +841,7 @@ def main():
     hysteresis_result = None
     magnet_geometry_result = None
     fluid_mce_result = None
+    passive_regen_result = None
 
     for name, fn in stages:
         _banner(name)
@@ -879,6 +925,8 @@ def main():
                     )
                 elif name.startswith("14."):
                     fluid_mce_result = fluid_mce_analysis.run_fluid_mce_analysis()
+                elif name.startswith("15."):
+                    passive_regen_result = passive_regenerator_analysis.run_passive_regenerator_analysis()
                 else:
                     fn()
         except Exception:
@@ -915,6 +963,7 @@ def main():
                      "pareto_front_magnet_flat.csv, pareto_front_magnet_geometric.csv "
                      "(Phase 19), "
                      "fluid_mce_analysis.txt (Phase 20), "
+                     "passive_regenerator_analysis.txt (Phase 21), "
                      "geometry_optimization_analysis.txt, graded_cascade_comparison.csv, "
                      "design_recommendations.txt, figures/*.png+*.pdf (26 figures)")
     logger.info(f"Full run log: {LOG_FILE}")
@@ -922,13 +971,14 @@ def main():
     _print_executive_summary(representative_row, cascade_rows_gd, graded_rows,
                               material_rows, pareto_rows, pb_best_cop_row,
                               pp_best_cop_row, hysteresis_result,
-                              magnet_geometry_result, fluid_mce_result, failures)
+                              magnet_geometry_result, fluid_mce_result,
+                              passive_regen_result, failures)
 
 
 def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, material_rows,
                               pareto_rows, pb_best_cop_row, pp_best_cop_row,
                               hysteresis_result, magnet_geometry_result, fluid_mce_result,
-                              failures):
+                              passive_regen_result, failures):
     """Final, well-structured overview of every implemented analysis and
     its headline metric, printed once at the very end of the run so a
     reader does not have to scroll back through 13 stages of log output
@@ -1102,6 +1152,28 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
                     "benchmark-backed result (no fluid-MCE-as-working-body device was "
                     "found in this pass's own literature search -- see that module's "
                     "HONESTY FLAG #2)")
+    else:
+        logger.info("  - unavailable (stage failed or was skipped)")
+
+    logger.info("Passive/hybrid magnetic regenerator: augmenting a conventional gas "
+                "cycle's own regenerator with a magnetocaloric material's Curie-point "
+                "heat-capacity anomaly (step 15, Phase 21)")
+    if passive_regen_result and _ok("15."):
+        best = passive_regen_result["candidate_results"][0]
+        base_cop = passive_regen_result["base"].COP
+        logger.info(f"  - Best candidate at the representative operating point: "
+                    f"{best.material_name}  eps {best.eps_baseline:.3f} -> "
+                    f"{best.eps_augmented:.3f}  COP {base_cop:.3f} -> "
+                    f"{best.augmented_COP:.3f} ({best.cop_gain_fraction:+.2%}) -- "
+                    "results/passive_regenerator_analysis.txt")
+        logger.info("  - Alignment effect confirmed directly (not assumed): candidate "
+                    "materials whose own Curie temperature falls outside the operating "
+                    "window show ~0% gain, since delta_eps is clipped at 0 by "
+                    "construction (see core/baseline_cooling.py's own docstring). The "
+                    "effectiveness-to-COP mapping is an illustrative, literature-range-"
+                    "anchored ceiling, not a fitted or digitized coefficient -- see that "
+                    "module's Phase 21 honesty flag before treating this as a validated "
+                    "device-level COP prediction")
     else:
         logger.info("  - unavailable (stage failed or was skipped)")
 

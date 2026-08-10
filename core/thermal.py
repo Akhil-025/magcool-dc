@@ -145,12 +145,27 @@ def water_properties(T_K=300.0):
 
 def regenerator_effectiveness(mass_regenerator, frequency, mdot,
                                 particle_diameter=0.0005, porosity=0.365,
-                                bed_cross_section_area=0.002, T_K=300.0):
+                                bed_cross_section_area=0.002, T_K=300.0,
+                                cp_solid=None):
     """Returns (eps, NTU, utilization, h, Re) for a packed-sphere-bed AMR
     regenerator. bed_cross_section_area (m^2) sets superficial velocity from
     mdot; default 0.002 m^2 (~ a 5x4 cm bed face) is representative of the
-    lab-scale devices in data/amr_experimental_benchmarks.csv."""
+    lab-scale devices in data/amr_experimental_benchmarks.csv.
+
+    cp_solid (Phase 21 addition, core/baseline_cooling.py's
+    passive_regenerator_augmentation()): optional override for the solid
+    regenerator specific heat used in the utilization term U, J/(kg K).
+    Default None reproduces the exact pre-Phase-21 behavior (module-level
+    CP_SOLID_GD, a fixed Gd-near-room-temperature value) for every existing
+    caller. Passing a temperature-averaged *total* (lattice + magnetic-
+    anomaly) heat capacity from core/mce_material.py's own
+    MagnetocaloricMaterial.total_heat_capacity() lets a passive regenerator's
+    Curie-point heat-capacity peak reduce U (raise buffering capacity per
+    cycle) relative to a conventional non-magnetic regenerator material at
+    the same mass/frequency/flow -- same additive-override discipline as
+    Phase 15's pumping_power_override and Phase 18's thermal_diode=None."""
     fluid = water_properties(T_K)
+    cp_solid_eff = CP_SOLID_GD if cp_solid is None else cp_solid
     V_bed = mass_regenerator / (RHO_GD * (1 - porosity))
     a_specific = 6 * (1 - porosity) / particle_diameter   # m^2/m^3
     A_total = a_specific * V_bed
@@ -162,7 +177,7 @@ def regenerator_effectiveness(mass_regenerator, frequency, mdot,
     h = Nu * fluid["k"] / particle_diameter
 
     NTU = h * A_total / (mdot * fluid["cp"]) if mdot > 0 else 0.0
-    U = (mdot * fluid["cp"]) / (2 * frequency * mass_regenerator * CP_SOLID_GD) \
+    U = (mdot * fluid["cp"]) / (2 * frequency * mass_regenerator * cp_solid_eff) \
         if (frequency > 0 and mass_regenerator > 0) else np.inf
 
     eps_base = NTU / (NTU + 2)
