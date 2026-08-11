@@ -44,7 +44,8 @@ if _PROJECT_ROOT not in sys.path:
 from core.mce_material import GADOLINIUM
 from core.first_order_mce import GD5SI2GE2_FIRST_ORDER, LAFESIH_FIRST_ORDER
 from core.amr_cycle import AMRSystem
-from core.baseline_cooling import vapor_compression_cop, liquid_cooling_cop
+from core.baseline_cooling import (vapor_compression_cop, liquid_cooling_cop,
+                                    elastocaloric_reference_cop)
 from core.thermal import regenerator_effectiveness
 from core import validation
 from core import validation_system
@@ -442,6 +443,15 @@ def plot_amr_vs_baselines(precomputed=None):
     precomputed = precomputed or {}
     baseline_rows = precomputed.get('baseline_rows')
 
+    # Phase 23: elastocaloric reference line. A SINGLE static literature
+    # value (core/baseline_cooling.py's own honesty flag explains why it
+    # is not a span-dependent simulation the way the other three curves
+    # are), repeated across every span so it plots as a flat horizontal
+    # line -- the same "reference line, not a simulated system" treatment
+    # already used for the Carnot curve, just flat instead of span-varying
+    # since no elastocaloric COP(span) relation is available to evaluate.
+    elasto = elastocaloric_reference_cop()
+
     T_cold_K = 291.15
     if baseline_rows is not None:
         spans = [r['span_K'] for r in baseline_rows]
@@ -449,6 +459,8 @@ def plot_amr_vs_baselines(precomputed=None):
         vcc_l = [r['VaporCompression_COP'] for r in baseline_rows]
         liq_l = [r['LiquidCooling_COP'] for r in baseline_rows]
         carnot_l = [r['Carnot_COP'] for r in baseline_rows]
+        elasto_l = [r.get('Elastocaloric_COP_ref', elasto.COP_representative)
+                    for r in baseline_rows]
     else:
         spans = np.arange(5, 21, 1)
         results = [cascade.staged_baseline_result(
@@ -464,11 +476,15 @@ def plot_amr_vs_baselines(precomputed=None):
             vcc_l.append(v.COP)
             liq_l.append(l.COP)
             carnot_l.append(v.COP_carnot)
+        elasto_l = [elasto.COP_representative] * len(spans)
 
     fig, ax = plt.subplots(figsize=(8, 5.5))
     ax.plot(spans, cop_e, color=COLOR_POWER, marker='o', label='Magnetic (AMR) — electrical COP')
     ax.plot(spans, vcc_l, color=COLOR_MAIN, marker='s', label='Vapor-compression')
     ax.plot(spans, liq_l, color='#85bb65', marker='^', label='Liquid cooling (blended)')
+    ax.plot(spans, elasto_l, color='#8e44ad', linestyle='--',
+             label='Elastocaloric (literature ref., static — see honesty flag)')
+    ax.axhspan(elasto.COP_low, elasto.COP_high, color='#8e44ad', alpha=0.08, lw=0)
     ax.plot(spans, carnot_l, color='grey', linestyle=':', label='Carnot limit')
     ax.set_yscale('log')
     ax.set_xlabel('Temperature Span [K]')

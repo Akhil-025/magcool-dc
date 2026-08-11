@@ -10,7 +10,7 @@ Test 1: BOTH materials at the ASHRAE operating point (T_cold=291K, span=10.0K)
   Gd5Si2Ge2:  Qc=     0.0 W   COP_elec=0.00   <- collapses to ~0: 10.0K span is centered ~9.6K from its own peak
 
 Test 2: Gd5Si2Ge2 at ITS OWN favorable point (T_cold=281.4K = 8.2C, span=10.0K, straddling its 286.4K peak)
-  Gd5Si2Ge2:  Qc=  5319.3 W   COP_elec=7.29   <- strong performance when correctly targeted
+  Gd5Si2Ge2:  Qc=  5319.3 W   COP_elec=6.92   <- strong performance when correctly targeted
   Gd (same point): Qc=     0.0 W   COP_elec=0.00   <- Gd fails here (point is far from Gd's own 294.5K)
 
 CONCLUSION:
@@ -31,4 +31,4 @@ research question rather than a result established here.
 
 For reference, baselines at this operating point: VCC COP=12.22, Liquid COP=19.89
 
-Note also: even correctly targeted, Gd5Si2Ge2's COP_electrical (7.29) is close to Gd's own COP_electrical at its matched point (5.12), not dramatically higher, despite ~4x the cooling capacity (Qc). This is consistent with the Sobol sensitivity analysis: COP_electrical is driven mainly by frequency/flow/field-dependent losses (loss_model.py), not by which material is loaded into the regenerator -- a bigger MCE mostly buys more Qc per kg, not a better COP.
+Note also: even correctly targeted, Gd5Si2Ge2's COP_electrical (6.92) is close to Gd's own COP_electrical at its matched point (5.12), not dramatically higher, despite ~4x the cooling capacity (Qc). This is consistent with the Sobol sensitivity analysis: COP_electrical is driven mainly by frequency/flow/field-dependent losses (loss_model.py), not by which material is loaded into the regenerator -- a bigger MCE mostly buys more Qc per kg, not a better COP.

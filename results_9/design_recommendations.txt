@@ -5,17 +5,17 @@ Every figure below was computed by an earlier pipeline stage in this same run; t
 
 1. OPERATING FREQUENCY -- the dominant lever
    Sobol total-order sensitivity (state-dependent loss model): ST(frequency) = 0.877
-   NSGA-III best-electrical-COP design:  f=0.980 Hz  -> COP_elec=9.92, Qc=35209 W
-   NSGA-III best-cooling-capacity design: f=3.720 Hz  -> COP_elec=9.03, Qc=38495 W
+   NSGA-III best-electrical-COP design:  f=0.423 Hz  -> COP_elec=9.53, Qc=25481 W
+   NSGA-III best-cooling-capacity design: f=2.559 Hz  -> COP_elec=6.21, Qc=39282 W
    Action: reduce cycle frequency toward the low-speed end of the design space when electrical COP is the priority; raise it toward the high end only when cooling capacity is the priority and higher parasitic loss is acceptable. This is a genuine Pareto trade-off in this repo's model, not a free win in either direction.
 
 2. MCE MATERIAL / COMPOSITION CHOICE
-   Best candidate at 10K span (ASHRAE point): La(Fe,Si)13Hy (tuned)  COP_elec=7.33, Qc=4989 W
-   vs. plain Gd: COP_elec=5.09 (+44% relative to Gd)
+   Best candidate at 10K span (ASHRAE point): La(Fe,Si)13Hy (tuned)  COP_elec=6.72, Qc=4989 W
+   vs. plain Gd: COP_elec=5.09 (+32% relative to Gd)
    Action: prefer a composition-tuned giant-MCE family (e.g. La(Fe,Si)13Hy-type) whose documented Tc window covers the target operating point, over a fixed-composition material whose peak may sit off-target -- see material_family_comparison.py for the full span-by-span ranking and which families actually cover which spans.
 
 3. CURIE-TEMPERATURE GRADING (layered/graded regenerator beds)
-   3-stage cascade at this span: graded COP=2.781, Qc=2388.1 W   vs.  plain-Gd COP=2.415, Qc=1258.0 W
+   3-stage cascade at this span: graded COP=2.443, Qc=2388.1 W   vs.  plain-Gd COP=2.415, Qc=1258.0 W
    Action: grade each stage's composition so its local peak MCE temperature tracks the fluid temperature at that point in the bed, rather than using one uniform material across the whole span -- see cascade.py's compare_graded_cascade() for the per-span/stage-count feasibility breakdown (not every span/stage-count combination stays within the documented composition-tunability window; some stages fall back to plain Gd, which is reported explicitly rather than silently).
 
 4. REGENERATOR GEOMETRY (packed-bed vs. parallel-plate)
@@ -24,12 +24,12 @@ Every figure below was computed by an earlier pipeline stage in this same run; t
    Action: target these interior optima rather than minimizing particle/channel size without bound -- shrinking geometry indefinitely raises thermal effectiveness only marginally further while hydraulic pumping power keeps growing, which is what produces the interior optimum in the first place (Tusek, Kitanovski & Poredos 2013).
 
 5. FIELD STRENGTH / FLOW RATE BALANCE (now co-optimized with material and geometry)
-   Knee-point (balanced) Pareto design: H=1.005 T, f=2.476 Hz, mdot=0.4957 kg/s, mass=4.21 kg, eps=0.797, d_p=0.7238 mm, material=La(Fe,Si)13Hy (tuned, Tc=285.3K)  -> COP_elec=9.404, Qc=33704.44 W, cost=$573.4
-   Action: operate near this balanced point rather than at either objective's own extreme (max-COP alone drives frequency and Qc very low; max-Qc alone raises parasitic loss and cuts COP roughly 3x in this repo's Pareto front) -- see results/pareto_front.csv for the full 23-design front and the other extreme points. As of phase 15 this knee point already reflects the best-performing material and regenerator geometry found jointly with field/frequency/flow, not just the best fixed-Gd, fixed-geometry point -- levers 2 and 4 above remain useful as focused single-lever sweeps for understanding WHY a given material/geometry wins, but are no longer this repo's only way to explore those two choices.
+   Knee-point (balanced) Pareto design: H=1.056 T, f=2.47 Hz, mdot=0.4985 kg/s, mass=6.31 kg, eps=0.881, d_p=0.3416 mm, material=La(Fe,Si)13Hy (tuned, Tc=285.3K)  -> COP_elec=8.908, Qc=36287.31 W, cost=$900.4
+   Action: operate near this balanced point rather than at either objective's own extreme (max-COP alone drives frequency and Qc very low; max-Qc alone raises parasitic loss and cuts COP roughly 3x in this repo's Pareto front) -- see results/pareto_front.csv for the full 21-design front and the other extreme points. As of phase 15 this knee point already reflects the best-performing material and regenerator geometry found jointly with field/frequency/flow, not just the best fixed-Gd, fixed-geometry point -- levers 2 and 4 above remain useful as focused single-lever sweeps for understanding WHY a given material/geometry wins, but are no longer this repo's only way to explore those two choices.
 
 ----------------------------------------------------------------------------------------------------
 RECOMMENDED STARTING DESIGN POINT (NSGA-III knee point, this run):
-  mu0H_max = 1.005 T,  frequency = 2.476 Hz,  fluid_mdot = 0.4957 kg/s,  mass_regenerator = 4.21 kg,  regen_effectiveness = 0.797
-  -> Predicted COP_electrical = 9.404, Qc = 33704.44 W, cost_index = $573.4, particle_diameter = 0.7238 mm, material = La(Fe,Si)13Hy (tuned, Tc=285.3K)
+  mu0H_max = 1.056 T,  frequency = 2.47 Hz,  fluid_mdot = 0.4985 kg/s,  mass_regenerator = 6.31 kg,  regen_effectiveness = 0.881
+  -> Predicted COP_electrical = 8.908, Qc = 36287.31 W, cost_index = $900.4, particle_diameter = 0.3416 mm, material = La(Fe,Si)13Hy (tuned, Tc=285.3K)
 This is a starting point, not a final specification, but as of phase 15 the geometry (lever 4) and material (lever 2) choices above ARE co-optimized with the NSGA-III field/frequency/flow search (see core/optimize.py's module docstring for how material is handled -- per-family NSGA-III passes merged into one global Pareto front, since material family is categorical). geometry_analysis.py and material_family_comparison.py remain independently useful as focused single-lever sweeps for understanding WHY a given choice wins, but optimize.py's own Pareto front is now this repo's most complete answer to the joint design question.
 ----------------------------------------------------------------------------------------------------

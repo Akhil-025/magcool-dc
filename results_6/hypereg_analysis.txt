@@ -20,5 +20,13 @@ Operating point: T_cold=291.0K, span=10.0K, mu0H=1.5T, mass=5.0kg, mdot=0.08kg/s
   f= 4.00Hz   COP_conventional= 0.7521   COP_hypereg(n=4)= 0.7523   W_parasitic saving=  0.0%
   f= 8.00Hz   COP_conventional= 0.2007   COP_hypereg(n=4)= 0.2007   W_parasitic saving=  0.0%
 
+--- Step 3: does the benefit become non-negligible at a higher mdot (0.3kg/s vs. the 0.08kg/s baseline above)? (ROADMAP.md Phase 16 open candidate) ---
+  n_parallel=  1   Qc= 2906.01W   COP_electrical= 7.0336   W_parasitic= 219.85W
+  n_parallel=  2   Qc= 2906.01W   COP_electrical= 7.1245   W_parasitic= 214.58W
+  n_parallel=  4   Qc= 2906.01W   COP_electrical= 7.1709   W_parasitic= 211.94W
+  n_parallel=  8   Qc= 2906.01W   COP_electrical= 7.1943   W_parasitic= 210.63W
+  n_parallel= 16   Qc= 2906.01W   COP_electrical= 7.2060   W_parasitic= 209.97W
+
 --- Conclusion ---
 At this repo's own representative operating point, splitting the regenerator into n=16 parallel sub-beds raises COP_electrical from 5.264 (conventional, n=1) to 5.278 -- a real but modest benefit in THIS model, because pumping power (W_pump) is only one of three loss channels (k_eddy*f^2*H^2 + k_pump*mdot^2 + base_frac*Qc) and is not the dominant one at this lab-scale operating point. The benefit saturates quickly with n (diminishing returns are visible in Step 1) since the other two loss channels are untouched by parallelization. This confirms the qualitative mechanism the paper describes (reduced pumping power from parallel vs. series hydraulic flow) is real and representable in this repo's own model, WITHOUT claiming a validated optimum n or a device-level performance prediction for an as-yet-unbuilt concept -- see results/hypereg_findings.md's honesty flags.
+Step 3 finding: at mdot=0.3kg/s, the SAME n=16 split raises COP_electrical from 7.034 (n=1) to 7.206 -- a 2.45% relative gain, vs. 0.27% at the 0.08kg/s baseline. This IS meaningfully larger, consistent with pumping power's mdot-driven scaling (thermal.pumping_power_packed_bed()'s Darcy-flow dP~mdot term) making the pumping-loss channel a bigger share of W_parasitic at higher flow -- worth extending this sweep further if a specific higher-mdot design point is ever targeted.

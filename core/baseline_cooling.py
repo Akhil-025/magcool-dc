@@ -275,3 +275,117 @@ def augmented_regenerator_cop(base_cop, passive_regenerator_material, T_range,
         cp_solid_baseline_J_kgK=aug["cp_solid_baseline_J_kgK"],
         cp_solid_augmented_J_kgK=aug["cp_solid_augmented_J_kgK"],
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 23 -- elastocaloric energy conversion as a static comparison
+# reference point (NOT a simulated system -- see docstring below for why).
+# ---------------------------------------------------------------------------
+#
+# HONESTY FLAG (book access -- same tier as Phases 17-22's own flags).
+# phase_plan.md's own Phase 23 data source is Kitanovski et al. (2015)
+# Ch. 10 Sect. 10.3 ("Elastocaloric Energy Conversion", per that book's own
+# table of contents pp. 438-446). Checked directly for this pass: this
+# project's copy of Kitanovski et al. (2015) is a 30-page excerpt (cover,
+# front matter, preface, full table of contents, and the opening pages of
+# Chapter 1 only, confirmed by pdfplumber's own extracted page count) --
+# Chapter 10 is simply not present in the file this repo has access to.
+# Tishin & Spichkin (2003) does not cover elastocalorics at all (the book
+# predates the field's modern development; no elastocaloric chapter appears
+# in its own table of contents) and is separately an image-only scan with
+# no text layer besides (already re-confirmed in Phases 20-22's own
+# honesty flags). So, exactly as phase_plan.md's own Phase 23 entry
+# anticipated ("using published elastocaloric COP/exergy-efficiency
+# figures as a static reference point"), the values below come from
+# external, independently-published, peer-reviewed literature located by
+# this pass's own search -- NOT from either of this repo's two source
+# books, and NOT reproducing any specific book's own numbers.
+#
+# Sourced anchors (device/SYSTEM-level COP -- not the narrower COP_mat
+# material figure-of-merit some elastocaloric papers report separately,
+# which is not directly comparable to this repo's own COP_electrical):
+#   - Qian, Catalini, Muehlbauer, Liu, Mevada, Hou, Hwang, Radermacher &
+#     Takeuchi, "High-performance multimode elastocaloric cooling system",
+#     Science 380, 722-727 (2023): simulated steady-state SYSTEM COP = 5.8,
+#     at up to a 22.5 K span -- the closest published anchor to this
+#     repo's own 5-20K ASHRAE sweep range. The paper's own initial
+#     hardware measurements did not yet include every system loss, so the
+#     authors themselves report this simulated figure as the one still
+#     requiring future experimental verification -- stated here rather
+#     than smoothed over.
+#   - Wu et al., "Continuous and efficient elastocaloric air cooling by
+#     coil-bending", Nat. Commun. 14, 7982 (2023): MEASURED device-level
+#     system COP = 3.7, but at a much narrower ~0.9-1 K temperature drop --
+#     a genuinely different, far smaller operating span than this repo's
+#     own sweep, so this anchor is weaker evidence for this repo's own
+#     span range specifically than the Qian et al. figure is. Kept as the
+#     LOW end of the reported range for that reason, not averaged in as an
+#     equal-weight data point.
+#
+# What this deliberately is NOT: a span-dependent model, and NOT a
+# simulation of an elastocaloric AMR-analog cycle the way core/amr_cycle.py
+# simulates magnetic AMR. Neither literature anchor above reports a
+# COP(span) curve over anything resembling this repo's own 5-20K sweep
+# (Qian et al.'s own device reaches spans up to 22.5K but at a single
+# reported operating COP, not a swept curve; Wu et al.'s own COP=3.7 figure
+# is reported at a ~1K span). Fitting a COP(span) curve from two
+# single-point anchors measured at different, non-overlapping spans would
+# invent a slope this repo has no data for. So, exactly per phase_plan.md's
+# own framing ("similar treatment to how Carnot COP is already just a
+# reference line in plots.py fig08, not a simulated system"), the function
+# below returns ONE flat representative COP (plus the [low, high]
+# literature range it was drawn from) meant to be plotted as a single
+# horizontal reference line across the whole span sweep -- not a per-span
+# calculation, and not claimed to be one.
+
+ELASTOCALORIC_COP_LOW = 3.7    # Wu et al. (2023) Nat. Commun. 14, 7982 -- MEASURED, ~1K span
+ELASTOCALORIC_COP_HIGH = 5.8   # Qian et al. (2023) Science 380, 722-727 -- SIMULATED, up to 22.5K span
+ELASTOCALORIC_COP_SOURCE_NOTE = (
+    "External literature (NOT this repo's two source books -- see "
+    "core/baseline_cooling.py's Phase 23 honesty flag): Qian et al. (2023) "
+    "Science 380, 722-727 (simulated steady-state system COP=5.8, up to a "
+    "22.5K span) and Wu et al. (2023) Nat. Commun. 14, 7982 (measured "
+    "system COP=3.7, at a much narrower ~1K span). A single static "
+    "reference point, not a span-dependent simulation."
+)
+
+
+@dataclass
+class ElastocaloricReferenceResult:
+    technology: str
+    COP_representative: float
+    COP_low: float
+    COP_high: float
+    source_note: str
+
+
+def elastocaloric_reference_cop():
+    """Phase 23 deliverable, named and shaped as the plan's own
+    `elastocaloric_reference_cop()` lookup (not a simulation -- see the
+    module-level honesty flag above). Returns a STATIC literature
+    reference point for use as a fourth comparison entry alongside
+    Carnot / vapor-compression / liquid-cooling, e.g. as a horizontal
+    reference line in core/plots.py's fig08 and as a reference row/column
+    in main.py step 4's own comparison table.
+
+    Takes no arguments (T_cold/T_hot/span) on purpose: unlike
+    vapor_compression_cop()/liquid_cooling_cop(), which compute an actual
+    Carnot-fraction COP from the requested temperatures, this function has
+    no digitized or literature-sourced elastocaloric COP(span) relation to
+    evaluate (see honesty flag) -- it always returns the same static
+    reference regardless of what temperatures a caller has in mind, and
+    callers should read COP_low/COP_high before treating COP_representative
+    as more precise than the literature it was drawn from actually is.
+
+    COP_representative is the geometric mean of the two sourced anchors
+    (chosen over an arithmetic mean since COP is a ratio-like efficiency
+    figure -- the physically meaningful "middle" of two COP values is
+    their geometric, not arithmetic, mean)."""
+    cop_rep = float(np.sqrt(ELASTOCALORIC_COP_LOW * ELASTOCALORIC_COP_HIGH))
+    return ElastocaloricReferenceResult(
+        technology="Elastocaloric (literature reference)",
+        COP_representative=cop_rep,
+        COP_low=ELASTOCALORIC_COP_LOW,
+        COP_high=ELASTOCALORIC_COP_HIGH,
+        source_note=ELASTOCALORIC_COP_SOURCE_NOTE,
+    )

@@ -4,6 +4,8 @@ from core.baseline_cooling import (
     carnot_cop, vapor_compression_cop, liquid_cooling_cop,
     passive_regenerator_augmentation, augmented_regenerator_cop,
     MAX_COP_GAIN_AT_FULL_EFFECTIVENESS,
+    elastocaloric_reference_cop, ElastocaloricReferenceResult,
+    ELASTOCALORIC_COP_LOW, ELASTOCALORIC_COP_HIGH,
 )
 from core.mce_material import GADOLINIUM, LACAMNO3
 
@@ -59,6 +61,34 @@ def test_augmented_regenerator_cop_return_shape():
     assert result.T_hot == 301.15
     assert result.augmented_COP == pytest.approx(
         result.base_COP * (1.0 + result.cop_gain_fraction))
+
+
+# --- Phase 23: elastocaloric static literature reference ---
+
+def test_elastocaloric_reference_returns_expected_shape():
+    result = elastocaloric_reference_cop()
+    assert isinstance(result, ElastocaloricReferenceResult)
+    assert result.COP_low == ELASTOCALORIC_COP_LOW
+    assert result.COP_high == ELASTOCALORIC_COP_HIGH
+    assert "literature" in result.source_note.lower()
+
+
+def test_elastocaloric_reference_representative_is_geometric_mean_within_range():
+    result = elastocaloric_reference_cop()
+    assert result.COP_low < result.COP_representative < result.COP_high
+    assert result.COP_representative == pytest.approx(
+        (ELASTOCALORIC_COP_LOW * ELASTOCALORIC_COP_HIGH) ** 0.5)
+
+
+def test_elastocaloric_reference_takes_no_span_argument():
+    """This is a deliberately STATIC reference (see the module's own
+    Phase 23 honesty flag) -- confirms the function is callable with no
+    arguments and returns the identical value every time, i.e. it is not
+    secretly reading global mutable state or varying with anything."""
+    a = elastocaloric_reference_cop()
+    b = elastocaloric_reference_cop()
+    assert a.COP_representative == b.COP_representative
+    assert a.COP_representative > 0
 
 
 def test_explicit_cp_solid_baseline_override():

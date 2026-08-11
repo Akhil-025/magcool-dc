@@ -279,7 +279,8 @@ import csv
 
 from core.mce_material import GADOLINIUM
 from core.amr_cycle import AMRSystem
-from core.baseline_cooling import vapor_compression_cop, liquid_cooling_cop
+from core.baseline_cooling import (vapor_compression_cop, liquid_cooling_cop,
+                                    elastocaloric_reference_cop)
 from core import validation
 from core import validation_system
 from core import loss_model
@@ -439,6 +440,14 @@ def run_baseline_sweep():
         regenerator_effectiveness=0.85,
     )
 
+    # Phase 23: a single STATIC literature reference point (not a function
+    # of span -- see core/baseline_cooling.py's own Phase 23 honesty flag
+    # for why), computed once and repeated on every row so it plots as a
+    # flat comparison line/column alongside the span-dependent AMR/VCC/
+    # liquid/Carnot figures, exactly the way Carnot is already a per-row
+    # reference figure but elastocaloric here is deliberately NOT.
+    elasto = elastocaloric_reference_cop()
+
     rows = []
     for span in spans:
         T_hot_K = T_cold_K + span
@@ -456,6 +465,7 @@ def run_baseline_sweep():
             "VaporCompression_COP": round(vcc.COP, 2),
             "LiquidCooling_COP": round(liq.COP, 2),
             "Carnot_COP": round(vcc.COP_carnot, 2),
+            "Elastocaloric_COP_ref": round(elasto.COP_representative, 2),
         })
 
     with open(RESULTS_CSV, "w", newline="") as f:
@@ -463,10 +473,15 @@ def run_baseline_sweep():
         writer.writeheader()
         writer.writerows(rows)
 
-    logger.info(f"{'span(K)':>8} {'AMR elec COP':>13} {'stages':>7} {'VCC COP':>9} {'Liquid COP':>11} {'Carnot':>8}")
+    logger.info(f"{'span(K)':>8} {'AMR elec COP':>13} {'stages':>7} {'VCC COP':>9} {'Liquid COP':>11} {'Carnot':>8} {'Elasto ref':>10}")
     for r in rows:
         logger.info(f"{r['span_K']:>8} {r['AMR_COP_electrical']:>13} {r['AMR_n_stages']:>7} "
-                    f"{r['VaporCompression_COP']:>9} {r['LiquidCooling_COP']:>11} {r['Carnot_COP']:>8}")
+                    f"{r['VaporCompression_COP']:>9} {r['LiquidCooling_COP']:>11} {r['Carnot_COP']:>8} "
+                    f"{r['Elastocaloric_COP_ref']:>10}")
+    logger.info(f"Elastocaloric reference COP={elasto.COP_representative:.2f} "
+                f"(range {elasto.COP_low:.1f}-{elasto.COP_high:.1f}), a flat literature "
+                f"anchor repeated across every span -- NOT a span-dependent simulation. "
+                f"Source: {elasto.source_note}")
     logger.info(f"Wrote {RESULTS_CSV}")
     logger.info(
         "Note: AMR_COP_electrical includes estimated parasitic losses and is "
@@ -1021,6 +1036,9 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
                     f"{representative_row['VaporCompression_COP']}, Liquid_COP="
                     f"{representative_row['LiquidCooling_COP']}, Carnot_COP="
                     f"{representative_row['Carnot_COP']}  (results/comparison_table.csv)")
+        logger.info(f"  - Elastocaloric (Phase 23, static literature reference, NOT "
+                    f"span-simulated -- see core/baseline_cooling.py's own honesty flag): "
+                    f"COP_ref={representative_row['Elastocaloric_COP_ref']}")
     else:
         logger.info("  - unavailable (stage failed or was skipped)")
 
