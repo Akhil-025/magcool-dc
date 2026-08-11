@@ -6,6 +6,10 @@ in the repository in one pass, in dependency order, so a single
 ``python main.py`` reproduces every file under results/ from scratch:
 
     1.  Material-level validation      (core/validation.py)
+    1b. Inhomogeneous/polycrystalline Tc-broadening sensitivity (core/
+        inhomogeneous_broadening.py, Phase 22 item 1) -- runs right after
+        step 1 since it directly extends that same Dan'kov et al. (1998)
+        comparison
     2.  System-level validation        (core/validation_system.py)
     2b. Cycle-type validation sensitivity (core/validation_system.py, Phase 17)
     3.  Loss-model calibration report  (core/loss_model.py)
@@ -285,6 +289,7 @@ from core import cascade
 from core.cascade import staged_baseline_result
 from core import giant_mce_analysis
 from core import material_family_comparison
+from core import nanocomposite_material
 from core import sensitivity
 from core import rsm
 from core import optimize as optimize_module
@@ -298,6 +303,7 @@ from core import thermal_diode_analysis
 from core import magnet_geometry
 from core import fluid_mce_analysis
 from core import passive_regenerator_analysis
+from core import inhomogeneous_broadening
 from core import plots
 from core import design_recommendations
 from core import sensitivity as sensitivity_module
@@ -538,6 +544,10 @@ def run_full_system_cost_by_material():
         r = economics.full_system_cost_estimate(2.0, 5.0, family_name=family_name)
         logger.info(f"  {label:<40} materials BOM=${r['materials_bom_total_$']:>8,.0f}   "
                     f"full-system estimate=${r['full_system_cost_estimate_$']:>10,.0f}")
+    logger.info("")
+    logger.info("Phase 22 item 3 note (qualitative only, no candidate priced above uses "
+                "amorphous MCM data -- see core/economics.py's own section docstring):")
+    logger.info(f"  {economics.amorphous_material_cost_performance_note()}")
 
 
 def run_emissions(representative_row):
@@ -753,6 +763,9 @@ def main():
          lambda: (validation.run_validation(),
                   validation.run_giguere_gd_extension(),
                   validation.run_curie_shift_check())),
+        ("1b. Inhomogeneous/polycrystalline Tc-broadening sensitivity "
+         "(core/inhomogeneous_broadening.py, Phase 22 item 1)",
+         lambda: inhomogeneous_broadening.run_inhomogeneous_broadening_analysis()),
         ("2. System-level validation vs. published AMR prototypes",
          None),  # handled specially below, result (system_validation_results) captured
         ("2b. Cycle-type (Ericsson-like vs. Brayton-like) validation sensitivity "
@@ -770,7 +783,7 @@ def main():
          None),  # handled specially below, result captured
         ("5. Economics / TCO at the representative operating point",
          None),  # needs step 4's result
-        ("5b. Full-system cost estimate by material family (core/economics.py, Phase 15 item 5)",
+        ("5b. Full-system cost estimate by material family (core/economics.py, Phase 15 item 5) + amorphous-material cost/performance note (Phase 22 item 3)",
          run_full_system_cost_by_material),
         ("6. Emissions comparison at the representative operating point",
          None),  # needs step 4's result
@@ -782,8 +795,10 @@ def main():
          run_astronautics_graded_validation),
         ("8. Giant-MCE materials analysis (Gd vs Gd5Si2Ge2)",
          lambda: giant_mce_analysis.run_analysis()),
-        ("8d. Four-way material family comparison (Gd, Gd5Si2Ge2-fixed, GD/LAFESIH/MNFEPSI-tuned; Track A2 item)",
+        ("8d. Six-way material family comparison (Gd, Gd5Si2Ge2-fixed, GD/LAFESIH/MNFEPSI-tuned, LAFESIH-nanocomposite; Track A2 item + Phase 22 item 2)",
          lambda: material_family_comparison.run_analysis()),
+        ("8e. Nanocomposite off-design robustness check (core/nanocomposite_material.py, Phase 22 item 2 follow-up)",
+         lambda: nanocomposite_material.run_robustness_check()),
         ("8b. First-order Landau model calibration check (core/first_order_mce.py, reached transitively otherwise)",
          run_first_order_mce_demo),
         ("8c. Giguere et al. (1999) direct-measurement cross-check (core/giguere_validation.py)",

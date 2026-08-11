@@ -433,6 +433,76 @@ def resource_criticality_note(family_name="Gd"):
 
 
 # =============================================================================
+# Phase 22 item 3: amorphous-material cost/performance note (qualitative
+# only, per phase_plan.md's own scoping -- "worth a one-line cost/
+# performance note in economics.py rather than a full model")
+# =============================================================================
+#
+# HONESTY FLAG (book access, same tier as Phases 17-22's own flags): Tishin
+# & Spichkin (2003) Ch. 9 (amorphous magnetic materials) is this item's
+# named source. Re-confirmed directly for this pass: pdfplumber extracts
+# zero characters from every page of this project's copy sampled (0, 1, 2,
+# 50, 51) -- the same image-only-PDF finding already recorded for Tishin
+# Ch. 11 (Phase 21), Sect. 2.8 (Phase 22 item 1), and Sect. 2.9/Ch. 10
+# (Phase 22 item 2). Ch. 9's specific reported materials/numbers could not
+# be read or digitized here. What follows is a general, qualitative,
+# well-established materials-science characterization of amorphous
+# (melt-spun ribbon / metallic-glass) magnetic alloys relative to their
+# crystalline counterparts -- not a reproduction of Ch. 9's own content --
+# kept deliberately to a short qualitative note rather than a cost model,
+# per phase_plan.md's own explicit scoping of this as the lowest-priority
+# item in Phase 22 with "no clear near-term payoff for the data-center
+# application specifically."
+#
+# The general trade-off: amorphous (melt-spun / rapidly-quenched)
+# magnetic alloys are cheaper to MANUFACTURE than the single- or
+# poly-crystalline MCM families this repo already prices
+# (MCM_COST_PER_KG_BY_FAMILY above) -- melt-spinning is a single-step,
+# continuous process that skips the slow directional solidification /
+# single-crystal-growth / long high-temperature annealing steps
+# crystalline rare-earth and La(Fe,Si)13-type MCMs typically need -- but
+# the lack of long-range crystalline order that makes this cheap to
+# produce is the SAME structural feature that broadens and shallows the
+# magnetic phase transition, so amorphous MCM candidates generally show a
+# LOWER peak DeltaS_M / DeltaT_ad than a well-ordered crystalline sample
+# of a comparable composition (this is the same broadening-vs-peak-height
+# trade-off core/inhomogeneous_broadening.py, Phase 22 item 1, and
+# core/nanocomposite_material.py, Phase 22 item 2, already quantify for
+# OTHER broadening mechanisms in this repo -- amorphous structural
+# disorder is a third, distinct source of the same qualitative trade-off,
+# not a new mechanism this repo models separately).
+AMORPHOUS_MATERIAL_COST_PERFORMANCE_NOTE = (
+    "Amorphous (melt-spun ribbon / metallic-glass) MCM candidates trade "
+    "LOWER manufacturing cost (melt-spinning is a single continuous step, "
+    "skipping the slow single-crystal-growth/annealing this repo's priced "
+    "crystalline families need) for LOWER peak DeltaS_M/DeltaT_ad -- "
+    "structural disorder that makes them cheap to produce also broadens "
+    "and shallows the magnetic transition, the same qualitative peak-vs-"
+    "width trade-off Phase 22 items 1-2 already quantify for random "
+    "grain-to-grain Tc inhomogeneity and deliberate multi-phase blending "
+    "respectively. No amorphous-MCM $/kg figure or DeltaS_M value is "
+    "digitized anywhere in this repo's corpus (Tishin Ch. 9, the natural "
+    "source, is an image-only PDF here -- see this section's own honesty "
+    "flag above), so this is recorded as a qualitative note only, NOT "
+    "wired into MCM_COST_PER_KG_BY_FAMILY or any cost/performance "
+    "calculation -- adding a numeric placeholder here, unlike the "
+    "already-sourced entries in that dict, would be inventing a number "
+    "this repo has no basis for, which core/economics.py's existing "
+    "MNFEPSI_FAMILY/GD_FAMILY entries already deliberately avoid doing "
+    "for their own missing figures (see MCM_COST_PER_KG_BY_FAMILY's own "
+    "comment above)."
+)
+
+
+def amorphous_material_cost_performance_note():
+    """Phase 22 item 3: returns AMORPHOUS_MATERIAL_COST_PERFORMANCE_NOTE
+    (see the section docstring above for scope, sourcing, and why this is
+    a qualitative note rather than a cost model or a new
+    MCM_COST_PER_KG_BY_FAMILY entry)."""
+    return AMORPHOUS_MATERIAL_COST_PERFORMANCE_NOTE
+
+
+# =============================================================================
 # Phase 19 addition: geometric (Halbach-cylinder) magnet-mass term
 # =============================================================================
 #

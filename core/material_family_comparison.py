@@ -14,12 +14,21 @@ question is not "does the one fixed composition work here" but "can EACH
 family be tuned to a composition that works here, and if so, how does it
 actually perform against Gd and against each other".
 
-This module runs all five candidates --
+This module runs all six candidates --
     1. Gd                      (fixed, core.mce_material.GADOLINIUM)
     2. Gd5Si2Ge2 (fixed comp.) (core.first_order_mce.GD5SI2GE2_FIRST_ORDER)
     3. Gd5(SixGe1-x)4(-Ga)     (GD_FAMILY, composition-tuned per span)
     4. La(Fe,Si)13Hy           (LAFESIH_FAMILY, composition-tuned per span)
     5. (Mn,Fe)2(P,Si)          (MNFEPSI_FAMILY, composition-tuned per span)
+    6. Nanocomposite (LAFESIH 3-phase blend)
+                               (NANOCOMPOSITE_FAMILY, Phase 22 item 2 --
+                                an engineered multi-phase blend of three
+                                LAFESIH_FAMILY compositions spread around a
+                                per-span target, rather than one single
+                                composition -- see
+                                core/nanocomposite_material.py's own
+                                docstring for the physical motivation and
+                                its honesty flags)
 through the SAME fixed ASHRAE operating point(s) and the SAME cascade logic
 (core.cascade.run_cascade, 1-4 stage), and outputs a ranked table of Qc,
 COP, and whether each tunable family's own documented Tc window
@@ -52,6 +61,7 @@ from core.cascade import (
     run_cascade, GD_FAMILY, LAFESIH_FAMILY, MNFEPSI_FAMILY,
     _target_composition_for_peak,
 )
+from core.nanocomposite_material import NANOCOMPOSITE_FAMILY
 from core.baseline_cooling import vapor_compression_cop, liquid_cooling_cop
 
 MU0H_MAX = 2.0
@@ -62,7 +72,7 @@ T_COLD_K = T_COLD_C + 273.15
 SPANS_K = (5.0, 10.0, 15.0, 20.0)   # ASHRAE-range representative sweep
 REPRESENTATIVE_SPAN_K = 10.0        # matches main.py's steps 5/6/9/11 anchor
 
-TUNABLE_FAMILIES = (GD_FAMILY, LAFESIH_FAMILY, MNFEPSI_FAMILY)
+TUNABLE_FAMILIES = (GD_FAMILY, LAFESIH_FAMILY, MNFEPSI_FAMILY, NANOCOMPOSITE_FAMILY)
 
 
 def _tuned_candidate(family, T_mid_K, mu0H_max=MU0H_MAX):
@@ -138,7 +148,7 @@ def run_analysis(out_csv="results/material_family_comparison.csv",
         writer.writerows(rows)
 
     lines = []
-    lines.append("Four-way material family comparison at the ASHRAE operating point")
+    lines.append("Six-way material family comparison at the ASHRAE operating point (Phase 22 item 2 adds the nanocomposite candidate)")
     lines.append(f"(T_cold={T_COLD_C:.0f}C={T_COLD_K:.2f}K, spans={list(SPANS_K)}K, "
                  f"mu0H={MU0H_MAX:.1f}T, {MASS_PER_STAGE:.0f}kg/stage, 1-4 stage cascade)")
     lines.append("=" * 100)

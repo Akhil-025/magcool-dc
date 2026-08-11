@@ -1182,13 +1182,13 @@ def plot_astronautics_validation(precomputed=None):
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# FIG 26 — Four-way material family comparison (Track A2 item)
+# FIG 26 — Six-way material family comparison (Track A2 item + Phase 22 item 2)
 # ══════════════════════════════════════════════════════════════════════════
 
 def plot_material_family_comparison(precomputed=None):
     """precomputed, if given, may supply 'material_rows' (already computed
     by step 8d in main.py) so this figure reuses it instead of re-running
-    the ~6s four-way material-family sweep a second time in the same
+    the ~6s six-way material-family sweep a second time in the same
     pipeline invocation."""
     precomputed = precomputed or {}
     rows = precomputed.get('material_rows')
@@ -1197,14 +1197,19 @@ def plot_material_family_comparison(precomputed=None):
     rep = [r for r in rows if r['span_K'] == material_family_comparison.REPRESENTATIVE_SPAN_K]
 
     labels = [r['candidate'].replace(' (', '\n(') for r in rep]
-    colors5 = [COLOR_MAIN, COLOR_POWER, '#85bb65', '#e8a33d', '#7b52ab']
+    colors6 = [COLOR_MAIN, COLOR_POWER, '#85bb65', '#e8a33d', '#7b52ab', '#c2585d']
+    # Phase 22 item 2 added a 6th candidate (nanocomposite); colors6 must
+    # cover exactly as many entries as `rep` -- checked in
+    # tests/test_plots.py::test_plot_material_family_comparison_color_count_matches_candidates.
+    colors6 = colors6[:len(rep)] if len(rep) <= len(colors6) else (
+        colors6 * (len(rep) // len(colors6) + 1))[:len(rep)]
     qc_vals = [r['1stage_Qc_W'] or 0.0 for r in rep]
     cop_vals = [r['1stage_COP'] or 0.0 for r in rep]
     hatches = ['' if r['in_range'] else '//' for r in rep]
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 5.5))
-    bars0 = axes[0].bar(labels, qc_vals, color=colors5, alpha=0.85, edgecolor='white')
-    bars1 = axes[1].bar(labels, cop_vals, color=colors5, alpha=0.85, edgecolor='white')
+    bars0 = axes[0].bar(labels, qc_vals, color=colors6, alpha=0.85, edgecolor='white')
+    bars1 = axes[1].bar(labels, cop_vals, color=colors6, alpha=0.85, edgecolor='white')
     for bars in (bars0, bars1):
         for bar, hatch in zip(bars, hatches):
             bar.set_hatch(hatch)

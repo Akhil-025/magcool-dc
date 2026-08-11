@@ -96,3 +96,23 @@ def test_full_system_cost_estimate_geometric_applies_multiplier():
     expected = result["materials_bom_total_$"] * NON_MATERIALS_COST_MULTIPLIER
     assert result["full_system_cost_estimate_$"] == pytest.approx(expected, rel=1e-6)
     assert result["non_materials_multiplier"] == NON_MATERIALS_COST_MULTIPLIER
+
+
+def test_amorphous_material_cost_performance_note_is_qualitative_only():
+    """Phase 22 item 3: the amorphous-materials note must be a non-empty
+    qualitative string, and must NOT silently be wired into
+    MCM_COST_PER_KG_BY_FAMILY (no numeric $/kg is sourced for this repo's
+    corpus -- see the note's own text and core/economics.py's section
+    docstring for why)."""
+    from core.economics import (
+        amorphous_material_cost_performance_note, MCM_COST_PER_KG_BY_FAMILY,
+    )
+    note = amorphous_material_cost_performance_note()
+    assert isinstance(note, str) and len(note) > 100
+    assert "amorphous" in note.lower()
+    assert "amorphous" not in " ".join(MCM_COST_PER_KG_BY_FAMILY.keys()).lower()
+
+
+def test_amorphous_material_cost_performance_note_is_stable_across_calls():
+    from core.economics import amorphous_material_cost_performance_note
+    assert amorphous_material_cost_performance_note() == amorphous_material_cost_performance_note()

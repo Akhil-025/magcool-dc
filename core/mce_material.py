@@ -225,6 +225,22 @@ class MagnetocaloricMaterial:
         C = self.total_heat_capacity(T, H_initial)
         return -T * dS / C
 
+    def with_Tc(self, new_Tc):
+        """Returns a new MagnetocaloricMaterial identical to this one except
+        for Tc (and the derived Weiss constant lambda, recomputed by
+        __post_init__ for the new Tc). Every other parameter (J, g, M_molar,
+        theta_D, n_atoms_per_fu) is shared unchanged.
+
+        Added for Phase 22 item 1 (core/inhomogeneous_broadening.py): a
+        polycrystalline/inhomogeneous sample is modeled as an ensemble of
+        grains whose LOCAL Curie temperature is distributed around the
+        bulk-reported Tc (grain-to-grain composition/strain variation), each
+        grain otherwise behaving as the same mean-field material -- so the
+        ensemble only ever needs to vary Tc, never J/g/M_molar/theta_D.
+        """
+        import dataclasses
+        return dataclasses.replace(self, Tc=float(new_Tc))
+
 
 # --- Materials library (parameters from published crystallographic /
 #     magnetic characterization data) ---
