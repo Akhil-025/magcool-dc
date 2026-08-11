@@ -38,7 +38,7 @@ in the repository in one pass, in dependency order, so a single
         diode (core/thermal_diode.py, core/thermal_diode_analysis.py, Phase 18)
     11d. Magnet-geometry (Halbach-cylinder) field-vs-mass cost model
         (core/magnet_geometry.py, Phase 19)
-    12. Figure generation (26 figures) (plots.py -> results/figures/*.png, *.pdf)
+    12. Figure generation (34 figures) (plots.py -> results/figures/*.png, *.pdf)
     13. Design-recommendations synthesis (core/design_recommendations.py) --
         consolidates steps 3c/7b/8d/9b/11's already-computed results into
         one ranked, actionable "how do I raise AMR electrical COP" report
@@ -81,7 +81,7 @@ are not.
 Step 12 runs before the new step 13; step 13 depends only on already
 -computed result objects from earlier stages, not on the figures
 themselves, but runs last so its consolidated report can also mention
-the figure count. plots.py is largely self-contained -- most of its 25
+the figure count. plots.py is largely self-contained -- most of its 34
 figures call straight into core/ and recompute their own data rather
 than reading the CSVs the earlier steps write -- but three figures
 (cascade staging, Curie-graded cascade, NSGA-III Pareto front) also
@@ -713,11 +713,16 @@ def run_first_order_mce_demo():
 
 
 def run_plot_generation(precomputed=None):
-    """Step 12: renders all 26 figures in plots.py (results/figures/*.png
+    """Step 12: renders all 34 figures in plots.py (results/figures/*.png
     and *.pdf) covering material validation, AMR characteristic curves,
     thermal/geometry modelling, loss-model calibration, system/curve
     validation, cascade and Curie-graded staging, Sobol sensitivity, RSM
-    surrogate fitting, NSGA-III optimization, economics, and emissions.
+    surrogate fitting, NSGA-III optimization, economics, emissions, and
+    (figs 27-34) the Phase 16-22 sensitivity studies: Tc-broadening,
+    nanocomposite off-design robustness, thermal-diode actuation cost,
+    magnetocaloric-fluid volume fraction, passive-regenerator alignment,
+    rotary-device cycle-type validation, hysteresis-loss and
+    magnet-geometry Pareto-front sensitivity.
     Most figures still compute their own data directly from core/, but the
     nine figures that duplicate an earlier stage's computation exactly
     (fig08 baseline sweep, fig14 system validation, fig16 Sobol, fig18
@@ -839,8 +844,10 @@ def main():
          "(core/magnet_geometry.py, Phase 19)",
          None),  # handled specially below, result (magnet_geometry_result) captured
                  # for the executive summary
-        ("12. Figure generation: 26 figures covering validation, AMR curves, "
-         "cascade/graded staging, sensitivity, RSM, NSGA-III, economics, emissions (plots.py)",
+        ("12. Figure generation: 34 figures covering validation, AMR curves, "
+         "cascade/graded staging, sensitivity, RSM, NSGA-III, economics, emissions, "
+         "Tc-broadening, nanocomposite robustness, thermal-diode, fluid-MCE, passive "
+         "regenerator, cycle-type, hysteresis and magnet-geometry Pareto sensitivity (plots.py)",
          None),  # handled specially below, reuses steps 7/7b/9/9b/11's results
         ("13. Design-recommendations synthesis (core/design_recommendations.py)",
          None),  # handled specially below, consumes steps 3c/7b/8d/9b/11's results
@@ -995,7 +1002,7 @@ def main():
                      "fluid_mce_analysis.txt (Phase 20), "
                      "passive_regenerator_analysis.txt (Phase 21), "
                      "geometry_optimization_analysis.txt, graded_cascade_comparison.csv, "
-                     "design_recommendations.txt, figures/*.png+*.pdf (26 figures)")
+                     "design_recommendations.txt, figures/*.png+*.pdf (34 figures)")
     logger.info(f"Full run log: {LOG_FILE}")
 
     _print_executive_summary(representative_row, cascade_rows_gd, graded_rows,

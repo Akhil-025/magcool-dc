@@ -13,6 +13,15 @@ GWP/emissions comparisons.
 Run:    python plots.py
 Output: results/figures/  (PNG + PDF, one pair per figure)
 
+Figures 27-34 cover analyses added in Phases 16-22 that previously had no
+figure: Tc-broadening (27), nanocomposite off-design robustness (28),
+thermal-diode actuation cost (29), magnetocaloric-fluid volume-fraction
+sweep (30), passive-regenerator alignment effect (31), rotary-device
+cycle-type validation (32), hysteresis-loss Pareto-front sensitivity (33),
+and Halbach-cylinder magnet-mass Pareto-front sensitivity (34). Figures 33
+and 34 re-run NSGA-III twice each (same as fig18) and fall back to
+pre-computed results/pareto_front_*.csv files if pymoo is unavailable.
+
 Notes
 -----
 Two analyses in this repository (Sobol sensitivity via SALib, NSGA-III
@@ -61,6 +70,13 @@ from core import material_family_comparison
 from core import giguere_validation
 from core import geometry_analysis
 from core import rsm as rsm_mod
+from core import inhomogeneous_broadening
+from core import nanocomposite_material
+from core import thermal_diode_analysis
+from core import fluid_mce_analysis
+from core import passive_regenerator_analysis
+from core import hysteresis_sensitivity
+from core import magnet_geometry
 
 try:
     from core import sensitivity as sensitivity_mod
@@ -1247,11 +1263,290 @@ def plot_material_family_comparison(precomputed=None):
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# FIG 27 — Inhomogeneous/polycrystalline Tc-broadening sensitivity (Phase 22 item 1)
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_inhomogeneous_broadening():
+    broad_rows = inhomogeneous_broadening.run_broadening_sweep(verbose=False)
+    err_rows = inhomogeneous_broadening.run_dankov_error_sensitivity(verbose=False)
+
+    sigmas = sorted(set(r['sigma_Tc_K'] for r in broad_rows))
+    fields = sorted(set(r['mu0H_T'] for r in broad_rows))
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    for B, color in zip(fields, COLOR_CYCLE):
+        fwhm = [r['fwhm_K'] for r in broad_rows if r['mu0H_T'] == B]
+        axes[0].plot(sigmas, fwhm, marker='o', color=color, label=f'{B:.1f} T')
+    axes[0].set_xlabel(r'$\sigma_{Tc}$ [K]  (Gaussian Tc spread)')
+    axes[0].set_ylabel(r'$\Delta T_{ad}(T)$ FWHM [K]')
+    axes[0].set_title('Peak Broadening vs. Tc Inhomogeneity')
+    axes[0].legend(title='Field', fontsize=8)
+
+    worst = {}
+    for r in err_rows:
+        s = r['sigma_Tc_K']
+        worst[s] = max(worst.get(s, 0.0), abs(r['err_pct']))
+    xs = sorted(worst)
+    ys = [worst[s] for s in xs]
+    axes[1].plot(xs, ys, marker='s', color=COLOR_POWER)
+    axes[1].set_xlabel(r'$\sigma_{Tc}$ [K]')
+    axes[1].set_ylabel("Worst-field |error| vs. Dan'kov et al. (1998) [%]")
+    axes[1].set_title('Validation Error vs. Tc-Broadening')
+
+    fig.suptitle('Gaussian Inhomogeneous/Polycrystalline Tc-Broadening Sensitivity\n'
+                 '(Phase 22 item 1 — standard literature broadening treatment, '
+                 'not digitized book content)', fontsize=11)
+    fig.tight_layout()
+    save(fig, 'fig27_inhomogeneous_tc_broadening')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 28 — Nanocomposite off-design robustness check (Phase 22 item 2 follow-up)
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_nanocomposite_robustness():
+    result = nanocomposite_material.run_robustness_check(
+        out_path=str(RESULTS_DIR / 'nanocomposite_robustness.txt'), verbose=False)
+    rows = result['rows']
+    spans = [r['span_K'] for r in rows]
+    nano_qc = [r['nanocomposite_Qc_W'] for r in rows]
+    single_qc = [r['single_phase_Qc_W'] for r in rows]
+    design = [r['is_design_span'] for r in rows]
+
+    fig, ax = plt.subplots(figsize=(8.5, 5.5))
+    x = np.arange(len(spans))
+    w = 0.35
+    ax.bar(x - w / 2, nano_qc, w, label='Nanocomposite (3-phase blend)',
+           color=COLOR_MAIN, alpha=0.85, edgecolor='white')
+    ax.bar(x + w / 2, single_qc, w, label='Single phase (sharply tuned)',
+           color=COLOR_POWER, alpha=0.85, edgecolor='white')
+    labels = [f'{s:.0f}K' + ('\n(design)' if d else '') for s, d in zip(spans, design)]
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.set_xlabel('Evaluated span [K]  (both tuned once at the 10K design span)')
+    ax.set_ylabel('Qc [W]   (0 = infeasible at this span)')
+    ax.set_title('Nanocomposite Off-Design Robustness\n'
+                 'Broad blend keeps Qc>0 where a sharply-tuned single phase collapses')
+    ax.legend()
+    fig.tight_layout()
+    save(fig, 'fig28_nanocomposite_offdesign_robustness')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 29 — Mechanical-contact thermal-diode actuation-cost sensitivity (Phase 18)
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_thermal_diode_sensitivity():
+    rows = thermal_diode_analysis.sweep_frequency_with_and_without_diode(verbose=False)
+    freqs = [r[0] for r in rows]
+    cop_no_diode = [r[1] for r in rows]
+    cop_diode = [r[2] for r in rows]
+    delta_pct = [r[3] for r in rows]
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    axes[0].plot(freqs, cop_no_diode, marker='o', color=COLOR_MAIN, label='No diode')
+    axes[0].plot(freqs, cop_diode, marker='s', color=COLOR_POWER, linestyle='--',
+                 label='Diode-assisted (actuation cost only)')
+    axes[0].set_xlabel('Frequency [Hz]')
+    axes[0].set_ylabel('COP_electrical')
+    axes[0].set_title('COP vs. Frequency, With/Without Diode')
+    axes[0].legend(fontsize=8)
+
+    axes[1].bar([f'{f:.2f}Hz' for f in freqs], delta_pct, color=COLOR_POWER, alpha=0.85,
+                edgecolor='white')
+    axes[1].axhline(0, color='k', linewidth=0.8)
+    axes[1].set_ylabel('COP_electrical change [%]')
+    axes[1].set_title('Diode Actuation-Cost Penalty\n(cost-only accounting, no rectification benefit modeled)')
+
+    fig.suptitle('Mechanical-Contact Active Thermal Diode — Sensitivity Study (Phase 18)',
+                 fontsize=12)
+    fig.tight_layout()
+    save(fig, 'fig29_thermal_diode_sensitivity')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 30 — Magnetocaloric-fluid (ferrofluid/MR suspension) volume-fraction sweep (Phase 20)
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_fluid_mce_sweep():
+    sweep = fluid_mce_analysis.volume_fraction_sweep()
+    rows = sweep['rows']
+    best = sweep['best_row']
+    phi = [r['phi'] for r in rows]
+    cop = [r['COP_electrical'] for r in rows]
+    qc = [r['Qc_W'] for r in rows]
+
+    fig, ax1 = plt.subplots(figsize=(8, 5.5))
+    ax2 = ax1.twinx()
+    ax1.plot(phi, cop, color=COLOR_MAIN, marker='o', label='COP_electrical')
+    ax2.plot(phi, qc, color=COLOR_POWER, marker='s', linestyle='--', label='Qc')
+    ax1.axvline(best['phi'], color=COLOR_MAIN, linestyle=':', linewidth=1)
+    ax1.annotate(f"interior optimum\nphi={best['phi']:.2f}", xy=(best['phi'], best['COP_electrical']),
+                 xytext=(10, 10), textcoords='offset points', fontsize=8, color=COLOR_MAIN,
+                 arrowprops=dict(arrowstyle='->', color=COLOR_MAIN))
+    ax1.set_xlabel('Particle volume fraction $\\phi$')
+    ax1.set_ylabel('COP_electrical', color=COLOR_MAIN)
+    ax2.set_ylabel('Qc [W]  (each $\\phi$ at its own favorable span)', color=COLOR_POWER)
+    ax1.set_title('Ferrofluid/MR-Suspension MCE — Volume-Fraction Trade-off (Phase 20)\n'
+                 'Viscosity-vs-MCE-intensity trade-off produces a genuine interior optimum')
+    fig.tight_layout()
+    save(fig, 'fig30_fluid_mce_volume_fraction')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 31 — Passive/hybrid magnetic-regenerator augmentation alignment effect (Phase 21)
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_passive_regenerator_alignment():
+    base, results = passive_regenerator_analysis.compare_candidate_materials(verbose=False)
+    names = [r.material_name for r in results]
+    delta_eps = [r.delta_eps for r in results]
+    gain_pct = [r.cop_gain_fraction * 100 for r in results]
+
+    span_rows = passive_regenerator_analysis.span_sweep(verbose=False)
+    spans = [r['span_K'] for r in span_rows]
+    best_gain = [r['best_cop_gain_fraction'] * 100 for r in span_rows]
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    axes[0].bar(names, gain_pct, color=COLOR_MAIN, alpha=0.85, edgecolor='white')
+    axes[0].set_ylabel('Augmented COP gain [%]')
+    axes[0].set_title('Candidate-Material Alignment\n(T_cold=291.15K, span=10K)')
+    axes[0].tick_params(axis='x', labelsize=7, rotation=20)
+
+    axes[1].plot(spans, best_gain, marker='o', color=COLOR_POWER)
+    axes[1].set_xlabel('Span [K]')
+    axes[1].set_ylabel('Best-material COP gain [%]')
+    axes[1].set_title('Gain vs. Span\n(alignment window widens/narrows with span)')
+
+    fig.suptitle('Passive Magnetic-Regenerator Augmentation of a Vapor-Compression Cycle '
+                 '(Phase 21)\nIllustrative literature-range ceiling, not a fitted coefficient',
+                 fontsize=11)
+    fig.tight_layout()
+    save(fig, 'fig31_passive_regenerator_alignment')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 32 — Rotary-device cycle-type (Ericsson- vs. Brayton-like) validation (Phase 17)
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_cycle_type_validation():
+    results = validation_system.run_cycle_type_validation(verbose=False, out_path=None)
+    comparable = [r for r in results if 'COP_error_pct_baseline_brayton' in r]
+
+    fig, ax = plt.subplots(figsize=(7.5, 5.5))
+    if comparable:
+        names = [r['device'] for r in comparable]
+        brayton_err = [abs(r['COP_error_pct_baseline_brayton']) for r in comparable]
+        inferred_err = [abs(r['COP_error_pct_cycle_inferred']) for r in comparable]
+        x = np.arange(len(names))
+        w = 0.35
+        ax.bar(x - w / 2, brayton_err, w, label='brayton (default)',
+               color=COLOR_MAIN, alpha=0.85, edgecolor='white')
+        ax.bar(x + w / 2, inferred_err, w, label='ericsson (rotary-inferred)',
+               color=COLOR_POWER, alpha=0.85, edgecolor='white')
+        ax.set_xticks(x)
+        ax.set_xticklabels(names, rotation=15, ha='right', fontsize=8)
+    ax.set_ylabel('|COP error| vs. published value [%]')
+    ax.set_title('Cycle-Topology Sensitivity: Rotary Benchmark Devices\n'
+                 '(naming-convention proxy, not a literature-confirmed classification)')
+    ax.legend()
+    fig.tight_layout()
+    save(fig, 'fig32_cycle_type_validation')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 33 — Hysteresis-loss Pareto-front material-selection sensitivity (Phase 16)
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_hysteresis_sensitivity():
+    if HAVE_PYMOO:
+        result = hysteresis_sensitivity.run_hysteresis_sensitivity(verbose=False)
+        counts_on, counts_off = result['counts_on'], result['counts_off']
+    else:
+        print("  [pymoo unavailable — falling back to pre-computed "
+              "results/pareto_front_hysteresis_{on,off}.csv]")
+        rows_on = _read_csv_rows(RESULTS_DIR / 'pareto_front_hysteresis_on.csv')
+        rows_off = _read_csv_rows(RESULTS_DIR / 'pareto_front_hysteresis_off.csv')
+        counts_on = hysteresis_sensitivity._material_counts(rows_on)
+        counts_off = hysteresis_sensitivity._material_counts(rows_off)
+
+    materials = sorted(set(counts_on) | set(counts_off))
+    n_on = [counts_on.get(m, 0) for m in materials]
+    n_off = [counts_off.get(m, 0) for m in materials]
+
+    fig, ax = plt.subplots(figsize=(8.5, 5.5))
+    x = np.arange(len(materials))
+    w = 0.35
+    ax.bar(x - w / 2, n_off, w, label='Hysteresis OFF (pre-Phase-16)',
+           color=COLOR_MAIN, alpha=0.85, edgecolor='white')
+    ax.bar(x + w / 2, n_on, w, label='Hysteresis ON (literature-placeholder)',
+           color=COLOR_POWER, alpha=0.85, edgecolor='white')
+    ax.set_xticks(x)
+    ax.set_xticklabels([m.replace(' (', '\n(') for m in materials], fontsize=7)
+    ax.set_ylabel('Designs on merged Pareto front')
+    ax.set_title('Thermal-Hysteresis Loss: Material-Selection Sensitivity (Phase 16)\n'
+                 'A/B NSGA-III comparison, identical pop_size/n_gen/seed')
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    save(fig, 'fig33_hysteresis_pareto_sensitivity')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 34 — Halbach-cylinder magnet-mass Pareto-front sensitivity (Phase 19)
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_magnet_geometry_pareto_sensitivity():
+    if HAVE_PYMOO:
+        rows_flat = optimize_mod.run_optimization(
+            out_csv=str(RESULTS_DIR / 'pareto_front_magnet_flat.csv'),
+            per_material_out_dir=None, use_geometric_magnet_mass=False)
+        rows_geom = optimize_mod.run_optimization(
+            out_csv=str(RESULTS_DIR / 'pareto_front_magnet_geometric.csv'),
+            per_material_out_dir=None, use_geometric_magnet_mass=True)
+    else:
+        print("  [pymoo unavailable — falling back to pre-computed "
+              "results/pareto_front_magnet_{flat,geometric}.csv]")
+        rows_flat = _read_csv_rows(RESULTS_DIR / 'pareto_front_magnet_flat.csv')
+        rows_geom = _read_csv_rows(RESULTS_DIR / 'pareto_front_magnet_geometric.csv')
+
+    fields_flat = [r['mu0H_max_T'] for r in rows_flat]
+    fields_geom = [r['mu0H_max_T'] for r in rows_geom]
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    axes[0].hist(fields_flat, bins=8, alpha=0.6, color=COLOR_MAIN, label='FLAT (pre-Phase-19)')
+    axes[0].hist(fields_geom, bins=8, alpha=0.6, color=COLOR_POWER, label='GEOMETRIC (Halbach)')
+    axes[0].set_xlabel('mu0H_max [T]')
+    axes[0].set_ylabel('Designs on merged Pareto front')
+    axes[0].set_title('Field-Strength Distribution\nFLAT vs. GEOMETRIC magnet-mass cost term')
+    axes[0].legend(fontsize=8)
+
+    counts_flat = magnet_geometry._material_counts(rows_flat)
+    counts_geom = magnet_geometry._material_counts(rows_geom)
+    materials = sorted(set(counts_flat) | set(counts_geom))
+    x = np.arange(len(materials))
+    w = 0.35
+    axes[1].bar(x - w / 2, [counts_flat.get(m, 0) for m in materials], w,
+                label='FLAT', color=COLOR_MAIN, alpha=0.85, edgecolor='white')
+    axes[1].bar(x + w / 2, [counts_geom.get(m, 0) for m in materials], w,
+                label='GEOMETRIC', color=COLOR_POWER, alpha=0.85, edgecolor='white')
+    axes[1].set_xticks(x)
+    axes[1].set_xticklabels([m.replace(' (', '\n(') for m in materials], fontsize=7)
+    axes[1].set_ylabel('Designs on merged Pareto front')
+    axes[1].set_title('Material-Selection Sensitivity')
+    axes[1].legend(fontsize=8)
+
+    fig.suptitle('Halbach-Cylinder Magnet-Mass Cost Term: Pareto-Front Sensitivity (Phase 19)',
+                 fontsize=12)
+    fig.tight_layout()
+    save(fig, 'fig34_magnet_geometry_pareto_sensitivity')
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # Generate all figures
 # ══════════════════════════════════════════════════════════════════════════
 
 def run_all(precomputed=None):
-    """Generates all 26 figures.
+    """Generates all 34 figures.
 
     precomputed, if given, is a dict that may carry results already
     computed earlier in the SAME pipeline run (main.py steps 2/4/7/7b/7c/8d/9/9b/11):
@@ -1310,6 +1605,22 @@ def run_all(precomputed=None):
          lambda: plot_astronautics_validation(precomputed)),
         ("26 Material family comparison (Track A2 item)",
          lambda: plot_material_family_comparison(precomputed)),
+        ("27 Inhomogeneous/polycrystalline Tc-broadening sensitivity (Phase 22 item 1)",
+         plot_inhomogeneous_broadening),
+        ("28 Nanocomposite off-design robustness (Phase 22 item 2 follow-up)",
+         plot_nanocomposite_robustness),
+        ("29 Mechanical-contact thermal-diode sensitivity (Phase 18)",
+         plot_thermal_diode_sensitivity),
+        ("30 Magnetocaloric-fluid volume-fraction sweep (Phase 20)",
+         plot_fluid_mce_sweep),
+        ("31 Passive magnetic-regenerator alignment effect (Phase 21)",
+         plot_passive_regenerator_alignment),
+        ("32 Rotary-device cycle-type validation (Phase 17)",
+         plot_cycle_type_validation),
+        ("33 Hysteresis-loss Pareto-front sensitivity (Phase 16)",
+         plot_hysteresis_sensitivity),
+        ("34 Magnet-geometry (Halbach) Pareto-front sensitivity (Phase 19)",
+         plot_magnet_geometry_pareto_sensitivity),
     ]
 
     failures = []

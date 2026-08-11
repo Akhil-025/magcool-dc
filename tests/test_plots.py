@@ -45,6 +45,14 @@ FIGURE_FUNCTIONS = [
     (plots.plot_giant_mce_targeting, "fig24_giant_mce_targeting_comparison"),
     (plots.plot_astronautics_validation, "fig25_astronautics_graded_bed_validation"),
     (plots.plot_material_family_comparison, "fig26_material_family_comparison"),
+    (plots.plot_inhomogeneous_broadening, "fig27_inhomogeneous_tc_broadening"),
+    (plots.plot_nanocomposite_robustness, "fig28_nanocomposite_offdesign_robustness"),
+    (plots.plot_thermal_diode_sensitivity, "fig29_thermal_diode_sensitivity"),
+    (plots.plot_fluid_mce_sweep, "fig30_fluid_mce_volume_fraction"),
+    (plots.plot_passive_regenerator_alignment, "fig31_passive_regenerator_alignment"),
+    (plots.plot_cycle_type_validation, "fig32_cycle_type_validation"),
+    (plots.plot_hysteresis_sensitivity, "fig33_hysteresis_pareto_sensitivity"),
+    (plots.plot_magnet_geometry_pareto_sensitivity, "fig34_magnet_geometry_pareto_sensitivity"),
 ]
 
 
