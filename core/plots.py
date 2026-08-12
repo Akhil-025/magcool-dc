@@ -1458,8 +1458,17 @@ def plot_cycle_type_validation():
 # FIG 33 — Hysteresis-loss Pareto-front material-selection sensitivity (Phase 16)
 # ══════════════════════════════════════════════════════════════════════════
 
-def plot_hysteresis_sensitivity():
-    if HAVE_PYMOO:
+def plot_hysteresis_sensitivity(precomputed=None):
+    """precomputed, if given, may supply 'hysteresis_result' (the dict
+    already returned by step 11b's run_hysteresis_sensitivity() call in
+    main.py) so this figure reuses that ON/OFF A/B comparison instead of
+    re-running the ~9s NSGA-III optimization a second time in the same
+    pipeline invocation."""
+    precomputed = precomputed or {}
+    result = precomputed.get('hysteresis_result')
+    if result is not None:
+        counts_on, counts_off = result['counts_on'], result['counts_off']
+    elif HAVE_PYMOO:
         result = hysteresis_sensitivity.run_hysteresis_sensitivity(verbose=False)
         counts_on, counts_off = result['counts_on'], result['counts_off']
     else:
@@ -1495,8 +1504,18 @@ def plot_hysteresis_sensitivity():
 # FIG 34 — Halbach-cylinder magnet-mass Pareto-front sensitivity (Phase 19)
 # ══════════════════════════════════════════════════════════════════════════
 
-def plot_magnet_geometry_pareto_sensitivity():
-    if HAVE_PYMOO:
+def plot_magnet_geometry_pareto_sensitivity(precomputed=None):
+    """precomputed, if given, may supply 'magnet_geometry_result' (the
+    dict already returned by step 11d's run_geometric_cost_pareto_
+    sensitivity() call in main.py) so this figure reuses that FLAT-vs-
+    GEOMETRIC A/B comparison instead of re-running two full NSGA-III
+    optimizations (~10s) a second time in the same pipeline invocation."""
+    precomputed = precomputed or {}
+    result = precomputed.get('magnet_geometry_result')
+    if result is not None:
+        rows_flat = result['rows_flat']
+        rows_geom = result['rows_geometric']
+    elif HAVE_PYMOO:
         rows_flat = optimize_mod.run_optimization(
             out_csv=str(RESULTS_DIR / 'pareto_front_magnet_flat.csv'),
             per_material_out_dir=None, use_geometric_magnet_mass=False)
@@ -1549,7 +1568,8 @@ def run_all(precomputed=None):
     """Generates all 34 figures.
 
     precomputed, if given, is a dict that may carry results already
-    computed earlier in the SAME pipeline run (main.py steps 2/4/7/7b/7c/8d/9/9b/11):
+    computed earlier in the SAME pipeline run (main.py steps
+    2/4/7/7b/7c/8d/9/9b/11/11b/11d):
       - 'system_validation_results'         (step 2)
       - 'baseline_rows'                     (step 4)
       - 'sobol_const_Si', 'sobol_state_Si'  (step 9 / step 9b)
@@ -1558,13 +1578,17 @@ def run_all(precomputed=None):
       - 'graded_rows'                       (step 7b)
       - 'astro_result'                      (step 7c)
       - 'material_rows'                     (step 8d)
-    Figures 8, 14, 16, 18, 19, 20, 21, 25, and 26 reuse whichever of these
-    are supplied instead of recomputing them, which otherwise adds several
-    minutes of redundant work (mostly fig21's graded-cascade sweep and
-    fig25's Astronautics validation) on top of the identical computation
-    already performed earlier in the same run. When called standalone
-    (`python plots.py`, precomputed=None) every figure still computes its
-    own data fresh from core/, exactly as before.
+      - 'hysteresis_result'                 (step 11b)
+      - 'magnet_geometry_result'            (step 11d)
+    Figures 8, 14, 16, 18, 19, 20, 21, 25, 26, 33, and 34 reuse whichever
+    of these are supplied instead of recomputing them, which otherwise
+    adds several minutes of redundant work (mostly fig21's graded-cascade
+    sweep, fig25's Astronautics validation, and fig33/fig34's NSGA-III
+    A/B comparisons — each a ~9s optimization, with fig34 running it
+    TWICE — on top of the identical computation already performed earlier
+    in the same run). When called standalone (`python plots.py`,
+    precomputed=None) every figure still computes its own data fresh from
+    core/, exactly as before.
     """
     print("Generating all figures...\n")
     precomputed = precomputed or {}
@@ -1618,9 +1642,9 @@ def run_all(precomputed=None):
         ("32 Rotary-device cycle-type validation (Phase 17)",
          plot_cycle_type_validation),
         ("33 Hysteresis-loss Pareto-front sensitivity (Phase 16)",
-         plot_hysteresis_sensitivity),
+         lambda: plot_hysteresis_sensitivity(precomputed)),
         ("34 Magnet-geometry (Halbach) Pareto-front sensitivity (Phase 19)",
-         plot_magnet_geometry_pareto_sensitivity),
+         lambda: plot_magnet_geometry_pareto_sensitivity(precomputed)),
     ]
 
     failures = []

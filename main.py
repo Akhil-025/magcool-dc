@@ -724,12 +724,18 @@ def run_plot_generation(precomputed=None):
     rotary-device cycle-type validation, hysteresis-loss and
     magnet-geometry Pareto-front sensitivity.
     Most figures still compute their own data directly from core/, but the
-    nine figures that duplicate an earlier stage's computation exactly
+    eleven figures that duplicate an earlier stage's computation exactly
     (fig08 baseline sweep, fig14 system validation, fig16 Sobol, fig18
     Pareto, fig19/20 cascade, fig21 graded cascade, fig25 Astronautics
-    validation, fig26 material family comparison) now reuse the results
-    already produced by steps 2/4/7/7b/7c/8d/9/9b/11 via `precomputed`,
-    instead of re-running them from scratch. This still runs last so the
+    validation, fig26 material family comparison, fig33 hysteresis A/B,
+    fig34 magnet-geometry A/B) now reuse the results already produced by
+    steps 2/4/7/7b/7c/8d/9/9b/11/11b/11d via `precomputed`, instead of
+    re-running them from scratch. fig33/fig34 were previously the biggest
+    offenders here — each re-ran a full ~9s NSGA-III optimization
+    (fig34 ran it twice, once per FLAT/GEOMETRIC variant) that step
+    11b/11d had already just computed one stage earlier; reusing
+    `hysteresis_result`/`magnet_geometry_result` removes roughly 25-30s
+    from a full `python main.py` run. This still runs last so the
     CSV-writing figures (cascade, graded cascade, Pareto front) leave
     results/ in a consistent, freshly-regenerated state."""
     plots.run_all(precomputed=precomputed)
@@ -949,6 +955,8 @@ def main():
                         "graded_rows": graded_rows,
                         "astro_result": astro_result,
                         "material_rows": material_rows,
+                        "hysteresis_result": hysteresis_result,
+                        "magnet_geometry_result": magnet_geometry_result,
                     })
                 elif name.startswith("13."):
                     run_design_recommendations_synthesis(

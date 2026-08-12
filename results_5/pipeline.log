@@ -1,0 +1,1106 @@
+2026-08-12 00:56:20 [INFO   ] main: 
+2026-08-12 00:56:20 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:20 [INFO   ] main: # 1. Material-level model validation vs. Dan'kov et al. (1998)
+2026-08-12 00:56:20 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:20 [INFO   ] main: mu0H=1.0 T | literature dTad= 3.20 K | model dTad= 4.76 K | error=+48.9%
+2026-08-12 00:56:20 [INFO   ] main: mu0H=2.0 T | literature dTad= 5.80 K | model dTad= 7.49 K | error=+29.2%
+2026-08-12 00:56:20 [INFO   ] main: mu0H=5.0 T | literature dTad=14.60 K | model dTad=13.51 K | error=-7.5%
+2026-08-12 00:56:20 [INFO   ] main: mu0H=5.0 T | Giguere et al. Gd range=10.5-11.5 K (this paper's high-purity Gd (10.5K) vs. AMES laboratory's independent measurement (11.5K), agreeing within 1K) | model dTad=13.51 K | error vs. midpoint=+22.8% | OUTSIDE range
+2026-08-12 00:56:20 [INFO   ] main: mu0H=7.0 T | Giguere et al. Gd range=12.0-13.0 K (industrial-purity Gd (12K) and high-purity Gd (13K) respectively, both reported to agree well with Brown (1976)'s independently reported 14K at 7T) | model dTad=16.71 K | error vs. midpoint=+33.7% | OUTSIDE range
+2026-08-12 00:56:23 [INFO   ] main: Peak-DeltaT_ad temperature vs. field, 2.0-7.5 T (12 points, bounded-Brent sub-K precision):
+2026-08-12 00:56:23 [INFO   ] main:   mu0H=2.00 T -> peak at T=294.5000 K
+2026-08-12 00:56:23 [INFO   ] main:   mu0H=2.50 T -> peak at T=294.5000 K
+2026-08-12 00:56:23 [INFO   ] main:   mu0H=3.00 T -> peak at T=294.5000 K
+2026-08-12 00:56:23 [INFO   ] main:   mu0H=3.50 T -> peak at T=294.5000 K
+2026-08-12 00:56:23 [INFO   ] main:   mu0H=4.00 T -> peak at T=294.5000 K
+2026-08-12 00:56:23 [INFO   ] main:   mu0H=4.50 T -> peak at T=294.5000 K
+2026-08-12 00:56:23 [INFO   ] main:   mu0H=5.00 T -> peak at T=294.5000 K
+2026-08-12 00:56:23 [INFO   ] main:   mu0H=5.50 T -> peak at T=294.5000 K
+2026-08-12 00:56:23 [INFO   ] main:   mu0H=6.00 T -> peak at T=294.5000 K
+2026-08-12 00:56:23 [INFO   ] main:   mu0H=6.50 T -> peak at T=294.5000 K
+2026-08-12 00:56:23 [INFO   ] main:   mu0H=7.00 T -> peak at T=294.5000 K
+2026-08-12 00:56:23 [INFO   ] main:   mu0H=7.50 T -> peak at T=294.5000 K
+2026-08-12 00:56:23 [INFO   ] main: Fitted shift rate: -0.0000 K/T (Dan'kov et al. 1998 report ~6.0 K/T)
+2026-08-12 00:56:23 [INFO   ] main: Finding: the model's peak temperature does NOT reproduce the reported field-dependent Curie-point shift (see run_curie_shift_check's docstring) -- a genuine mean-field limitation, not a numerical artifact.
+2026-08-12 00:56:23 [INFO   ] main: [stage done in 3.47s]
+2026-08-12 00:56:23 [INFO   ] main: 
+2026-08-12 00:56:23 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:23 [INFO   ] main: # 1b. Inhomogeneous/polycrystalline Tc-broadening sensitivity (core/inhomogeneous_broadening.py, Phase 22 item 1)
+2026-08-12 00:56:23 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:23 [INFO   ] main: ==========================================================================================
+2026-08-12 00:56:23 [INFO   ] main: PHASE 22 ITEM 1: Gaussian inhomogeneous/polycrystalline Tc-broadening
+2026-08-12 00:56:23 [INFO   ] main: sensitivity for the mean-field Gd model (core/mce_material.py)
+2026-08-12 00:56:23 [INFO   ] main: ==========================================================================================
+2026-08-12 00:56:23 [INFO   ] main: HONESTY FLAG: Tishin & Spichkin (2003) Sec. 2.8 (inhomogeneous ferromagnets)
+2026-08-12 00:56:23 [INFO   ] main: is this item's intended primary source per phase_plan.md. Confirmed directly
+2026-08-12 00:56:23 [INFO   ] main: that this project's copy is an image-only PDF (pdfplumber extracts 0
+2026-08-12 00:56:23 [INFO   ] main: characters from every one of its 486 pages sampled) -- same finding already
+2026-08-12 00:56:23 [INFO   ] main: flagged for Tishin Ch.11 in Phase 21's baseline_cooling.py. So Sec. 2.8's
+2026-08-12 00:56:23 [INFO   ] main: specific content could not be digitized; what follows is the standard
+2026-08-12 00:56:23 [INFO   ] main: literature treatment of Tc-distribution broadening (see this module's own
+2026-08-12 00:56:23 [INFO   ] main: docstring), not book content.
+2026-08-12 00:56:23 [INFO   ] main: --- Step 1: peak DeltaT_ad / FWHM vs. sigma_Tc, at Dan'kov et al.'s own three fields ---
+2026-08-12 00:56:23 [INFO   ] main:   sigma_Tc= 0.0K  mu0H= 1.0T  peak_dTad= 6.464K at T=294.50K  FWHM=11.49K
+2026-08-12 00:56:23 [INFO   ] main:   sigma_Tc= 0.0K  mu0H= 2.0T  peak_dTad=10.320K at T=294.50K  FWHM=17.43K
+2026-08-12 00:56:24 [INFO   ] main:   sigma_Tc= 0.0K  mu0H= 5.0T  peak_dTad=18.826K at T=294.50K  FWHM=31.44K
+2026-08-12 00:56:25 [INFO   ] main:   sigma_Tc= 0.5K  mu0H= 1.0T  peak_dTad= 6.024K at T=295.30K  FWHM=14.11K
+2026-08-12 00:56:26 [INFO   ] main:   sigma_Tc= 0.5K  mu0H= 2.0T  peak_dTad= 9.859K at T=295.30K  FWHM=19.96K
+2026-08-12 00:56:27 [INFO   ] main:   sigma_Tc= 0.5K  mu0H= 5.0T  peak_dTad=18.330K at T=295.30K  FWHM=33.84K
+2026-08-12 00:56:28 [INFO   ] main:   sigma_Tc= 1.0K  mu0H= 1.0T  peak_dTad= 5.619K at T=295.60K  FWHM=16.86K
+2026-08-12 00:56:29 [INFO   ] main:   sigma_Tc= 1.0K  mu0H= 2.0T  peak_dTad= 9.418K at T=296.10K  FWHM=22.59K
+2026-08-12 00:56:30 [INFO   ] main:   sigma_Tc= 1.0K  mu0H= 5.0T  peak_dTad=17.857K at T=296.10K  FWHM=35.47K
+2026-08-12 00:56:31 [INFO   ] main:   sigma_Tc= 2.0K  mu0H= 1.0T  peak_dTad= 5.143K at T=296.10K  FWHM=20.76K
+2026-08-12 00:56:32 [INFO   ] main:   sigma_Tc= 2.0K  mu0H= 2.0T  peak_dTad= 8.677K at T=296.10K  FWHM=27.55K
+2026-08-12 00:56:33 [INFO   ] main:   sigma_Tc= 2.0K  mu0H= 5.0T  peak_dTad=17.104K at T=297.70K  FWHM=38.21K
+2026-08-12 00:56:34 [INFO   ] main:   sigma_Tc= 3.0K  mu0H= 1.0T  peak_dTad= 4.781K at T=296.90K  FWHM=24.37K
+2026-08-12 00:56:35 [INFO   ] main:   sigma_Tc= 3.0K  mu0H= 2.0T  peak_dTad= 8.287K at T=296.90K  FWHM=30.62K
+2026-08-12 00:56:37 [INFO   ] main:   sigma_Tc= 3.0K  mu0H= 5.0T  peak_dTad=16.411K at T=299.30K  FWHM=40.93K
+2026-08-12 00:56:38 [INFO   ] main:   sigma_Tc= 5.0K  mu0H= 1.0T  peak_dTad= 4.177K at T=294.50K  FWHM=32.06K
+2026-08-12 00:56:39 [INFO   ] main:   sigma_Tc= 5.0K  mu0H= 2.0T  peak_dTad= 7.573K at T=298.50K  FWHM=37.19K
+2026-08-12 00:56:40 [INFO   ] main:   sigma_Tc= 5.0K  mu0H= 5.0T  peak_dTad=15.387K at T=298.50K  FWHM=45.38K
+2026-08-12 00:56:40 [INFO   ] main: --- Step 2: does broadening narrow the field-dependent error pattern already found
+2026-08-12 00:56:40 [INFO   ] main:     in the pipeline's own Step 1 (core/validation.py's run_validation())? ---
+2026-08-12 00:56:40 [INFO   ] main:   sigma_Tc= 0.0K | mu0H=1.0T | lit= 3.20K | model= 4.764K | error=  +48.9%
+2026-08-12 00:56:40 [INFO   ] main:   sigma_Tc= 0.0K | mu0H=2.0T | lit= 5.80K | model= 7.492K | error=  +29.2%
+2026-08-12 00:56:40 [INFO   ] main:   sigma_Tc= 0.0K | mu0H=5.0T | lit=14.60K | model=13.508K | error=   -7.5%
+2026-08-12 00:56:40 [INFO   ] main:   sigma_Tc= 0.5K | mu0H=1.0T | lit= 3.20K | model= 4.658K | error=  +45.6%
+2026-08-12 00:56:40 [INFO   ] main:   sigma_Tc= 0.5K | mu0H=2.0T | lit= 5.80K | model= 7.386K | error=  +27.3%
+2026-08-12 00:56:40 [INFO   ] main:   sigma_Tc= 0.5K | mu0H=5.0T | lit=14.60K | model=13.404K | error=   -8.2%
+2026-08-12 00:56:40 [INFO   ] main:   sigma_Tc= 1.0K | mu0H=1.0T | lit= 3.20K | model= 4.556K | error=  +42.4%
+2026-08-12 00:56:40 [INFO   ] main:   sigma_Tc= 1.0K | mu0H=2.0T | lit= 5.80K | model= 7.283K | error=  +25.6%
+2026-08-12 00:56:41 [INFO   ] main:   sigma_Tc= 1.0K | mu0H=5.0T | lit=14.60K | model=13.302K | error=   -8.9%
+2026-08-12 00:56:41 [INFO   ] main:   sigma_Tc= 2.0K | mu0H=1.0T | lit= 3.20K | model= 4.362K | error=  +36.3%
+2026-08-12 00:56:41 [INFO   ] main:   sigma_Tc= 2.0K | mu0H=2.0T | lit= 5.80K | model= 7.083K | error=  +22.1%
+2026-08-12 00:56:41 [INFO   ] main:   sigma_Tc= 2.0K | mu0H=5.0T | lit=14.60K | model=13.101K | error=  -10.3%
+2026-08-12 00:56:41 [INFO   ] main:   sigma_Tc= 3.0K | mu0H=1.0T | lit= 3.20K | model= 4.183K | error=  +30.7%
+2026-08-12 00:56:41 [INFO   ] main:   sigma_Tc= 3.0K | mu0H=2.0T | lit= 5.80K | model= 6.893K | error=  +18.8%
+2026-08-12 00:56:41 [INFO   ] main:   sigma_Tc= 3.0K | mu0H=5.0T | lit=14.60K | model=12.905K | error=  -11.6%
+2026-08-12 00:56:41 [INFO   ] main:   sigma_Tc= 5.0K | mu0H=1.0T | lit= 3.20K | model= 3.869K | error=  +20.9%
+2026-08-12 00:56:41 [INFO   ] main:   sigma_Tc= 5.0K | mu0H=2.0T | lit= 5.80K | model= 6.538K | error=  +12.7%
+2026-08-12 00:56:41 [INFO   ] main:   sigma_Tc= 5.0K | mu0H=5.0T | lit=14.60K | model=12.526K | error=  -14.2%
+2026-08-12 00:56:41 [INFO   ] main: Worst-field |error| vs. sigma_Tc:
+2026-08-12 00:56:41 [INFO   ] main:   sigma_Tc= 0.0K   worst-field |error|=  48.9%  <- sharp (pre-existing) model
+2026-08-12 00:56:41 [INFO   ] main:   sigma_Tc= 0.5K   worst-field |error|=  45.6%
+2026-08-12 00:56:41 [INFO   ] main:   sigma_Tc= 1.0K   worst-field |error|=  42.4%
+2026-08-12 00:56:41 [INFO   ] main:   sigma_Tc= 2.0K   worst-field |error|=  36.3%
+2026-08-12 00:56:41 [INFO   ] main:   sigma_Tc= 3.0K   worst-field |error|=  30.7%
+2026-08-12 00:56:41 [INFO   ] main:   sigma_Tc= 5.0K   worst-field |error|=  20.9%  <- minimum
+2026-08-12 00:56:41 [INFO   ] main: At 5T, sigma_Tc=5.0K widens the DeltaT_ad(T) FWHM from 31.44K (sharp) to 45.38K.
+2026-08-12 00:56:41 [INFO   ] main: CONCLUSION: Gaussian Tc-broadening DOES narrow the worst-field |error| against Dan'kov et al.'s three points, from 48.9% (sharp model, sigma_Tc=0) to 20.9% at sigma_Tc=5.0K, driven mainly by the 1T point (+48.9% -> +20.9%). This comes with a real trade-off, not a clean win: the 5T error moves the OTHER direction, from -7.5% (sharp) to -14.2% (broadened) -- broadening lowers the 1-2T overestimate but deepens the 5T underestimate, consistent with a global smoothing of the transition rather than a field-selective fix. NOTE: sigma_Tc=5.0K is the LARGEST value swept here, and the 1T error is still falling monotonically with sigma at that edge ([48.9, 45.6, 42.4, 36.3, 30.7, 20.9] for sigma=[0.0, 0.5, 1.0, 2.0, 3.0, 5.0] respectively) -- so this sweep has NOT located an interior optimum, only shown the direction of the trend within a physically plausible 0-5K range; a wider sweep (and, ideally, a real digitized dTad(T) curve to fit against, which this repo does not have) would be needed before treating any specific sigma_Tc as a calibrated value rather than a sensitivity finding.
+2026-08-12 00:56:41 [INFO   ] main: Wrote results/inhomogeneous_broadening.txt
+2026-08-12 00:56:41 [INFO   ] main: [stage done in 17.98s]
+2026-08-12 00:56:41 [INFO   ] main: 
+2026-08-12 00:56:41 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:41 [INFO   ] main: # 2. System-level validation vs. published AMR prototypes
+2026-08-12 00:56:41 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:41 [INFO   ] main: Astronautics_rotary_2014     span= 11.0K  Qc_lit= 2502.0W  NO CALIBRATION FOUND (reported Qc unreachable within mdot in [1e-6,5] kg/s at this field/mass/frequency)  [La(Fe,Si)13Hy (LAFESIH_FIRST_ORDER, single-Tc approximation of the real 6-layer graded bed)]
+2026-08-12 00:56:41 [INFO   ] main: DTU_Eriksen_MAGGIE_2016      span= 15.5K  Qc_lit=   81.5W  NO CALIBRATION FOUND (reported Qc unreachable within mdot in [1e-6,5] kg/s at this field/mass/frequency)  [Gd (matches device)]
+2026-08-12 00:56:41 [INFO   ] main: Tusek_singlebed_Gd_2010      span=  7.3K  Qc(lit/model)=    5.3/    5.3 W  COP(lit/ideal/elec)= 5.38/20.70/ 1.27  err= -76.4%  implied_parasitic=0.138  [Gd (matches device)]
+2026-08-12 00:56:41 [INFO   ] main: Risoe_DTU_Gd_2011            span= 30.0K  Qc_lit=   35.0W  NO CALIBRATION FOUND (reported Qc unreachable within mdot in [1e-6,5] kg/s at this field/mass/frequency)  [Gd (matches device)]
+2026-08-12 00:56:41 [INFO   ] main: Okamura_Hirano_2013          span=  5.0K  Qc(lit/model)=  200.0/  200.0 W  COP(lit/ideal/elec)= 2.50/30.06/ 3.76  err= +50.2%  implied_parasitic=0.367  [Gd (matches device)]
+2026-08-12 00:56:41 [INFO   ] main: Lozano_POLO_UFSC_2016_r1     span=  7.1K  Qc_lit=   61.6W  NO CALIBRATION FOUND (reported Qc unreachable within mdot in [1e-6,5] kg/s at this field/mass/frequency)  [Gd (matches device)]
+2026-08-12 00:56:41 [INFO   ] main: Lozano_POLO_UFSC_2016_r2     span=  7.9K  Qc_lit=   61.0W  NO CALIBRATION FOUND (reported Qc unreachable within mdot in [1e-6,5] kg/s at this field/mass/frequency)  [Gd (matches device)]
+2026-08-12 00:56:41 [INFO   ] main: Lozano_POLO_UFSC_2016_r3     span=  7.1K  Qc_lit=   80.4W  NO CALIBRATION FOUND (reported Qc unreachable within mdot in [1e-6,5] kg/s at this field/mass/frequency)  [Gd (matches device)]
+2026-08-12 00:56:41 [INFO   ] main: Lozano_POLO_UFSC_2016_r4     span=  6.1K  Qc(lit/model)=   62.5/   62.5 W  COP(lit/ideal/elec)= 0.58/24.64/ 0.66  err= +13.5%  implied_parasitic=1.684  [Gd (matches device)]
+2026-08-12 00:56:42 [INFO   ] main: Lozano_POLO_UFSC_2016_r5     span=  6.5K  Qc_lit=   81.0W  NO CALIBRATION FOUND (reported Qc unreachable within mdot in [1e-6,5] kg/s at this field/mass/frequency)  [Gd (matches device)]
+2026-08-12 00:56:42 [INFO   ] main: Lozano_POLO_UFSC_2016_r6     span=  5.0K  Qc(lit/model)=   81.2/   81.2 W  COP(lit/ideal/elec)= 0.65/30.06/ 0.63  err=  -3.5%  implied_parasitic=1.505  [Gd (matches device)]
+2026-08-12 00:56:42 [INFO   ] main: Lozano_POLO_UFSC_2016_r7     span=  3.7K  Qc(lit/model)=   80.8/   80.8 W  COP(lit/ideal/elec)= 0.76/40.62/ 0.85  err= +11.6%  implied_parasitic=1.291  [Gd (matches device)]
+2026-08-12 00:56:42 [INFO   ] main: Lozano_POLO_UFSC_2016_r8     span=  3.7K  Qc(lit/model)=  120.4/  120.4 W  COP(lit/ideal/elec)= 0.83/40.62/ 0.91  err= +10.2%  implied_parasitic=1.180  [Gd (matches device)]
+2026-08-12 00:56:42 [INFO   ] main: DTU_MagQueen_2018            span= 25.0K  Qc_lit= 1200.0W  NO CALIBRATION FOUND (reported Qc unreachable within mdot in [1e-6,5] kg/s at this field/mass/frequency)  [La(Fe,Si)13Hy (LAFESIH_FIRST_ORDER, single-Tc approximation of the real 6-layer graded bed)]
+2026-08-12 00:56:42 [INFO   ] main: DTU_Eriksen_rotary_Gd_2015   span= 10.2K  Qc(lit/model)=  102.8/  102.8 W  COP(lit/ideal/elec)= 3.10/14.73/ 3.03  err=  -2.1%  implied_parasitic=0.255  [Gd (matches device)]
+2026-08-12 00:56:42 [INFO   ] main: ChubuToshiba_Gd_2016         no calibration found at anchor field=4.0T
+2026-08-12 00:56:42 [INFO   ] main: Tusek_singlebed_Gd_2010_spanceiling span= 19.8K  Qc_lit=    0.0W  calibrated at mdot=0.0000kg/s (no COP reported -- capacity-only check)  [Gd (matches device)]
+2026-08-12 00:56:42 [INFO   ] main: Lozano_POLO_UFSC_2016_maxspan span= 12.0K  Qc_lit=    0.0W  calibrated at mdot=0.0000kg/s (no COP reported -- capacity-only check)  [Gd (matches device)]
+2026-08-12 00:56:42 [INFO   ] main: ChubuToshiba_Gd_2016_4T      span= 26.0K  Qc_lit=  100.0W  NO CALIBRATION FOUND (capacity-only row, no COP to compare -- reports whether the span/Qc pair alone is achievable)  [Gd (matches device)]
+2026-08-12 00:56:42 [INFO   ] main: ChubuToshiba_Gd_2016_2T      span= 24.0K  Qc_lit=   40.0W  NO CALIBRATION FOUND (capacity-only row, no COP to compare -- reports whether the span/Qc pair alone is achievable)  [Gd (matches device)]
+2026-08-12 00:56:42 [INFO   ] main: Cooltech_2013_rotary         span= 42.0K  Qc_lit=  120.0W  NO CALIBRATION FOUND (capacity-only row, no COP to compare -- reports whether the span/Qc pair alone is achievable)  [Gd (matches device)]
+2026-08-12 00:56:42 [INFO   ] main: Tusek AMR(A) V*=0.95  anchor span= 7.26K Qc= 5.27W -> calibrated mdot=0.0074kg/s
+2026-08-12 00:56:42 [INFO   ] main:            predict span=12.23K (intermediate): model= 18.01W  lit=  2.03W  err=+787.0%
+2026-08-12 00:56:42 [INFO   ] main:            predict span=14.75K (shared_endpoint_with_F): model=  0.00W  lit=  0.00W  err=+0.00W (lit=0, undefined %)
+2026-08-12 00:56:42 [INFO   ] main: [stage done in 0.42s]
+2026-08-12 00:56:42 [INFO   ] main: 
+2026-08-12 00:56:42 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:42 [INFO   ] main: # 2b. Cycle-type (Ericsson-like vs. Brayton-like) validation sensitivity (core/validation_system.py, Phase 17)
+2026-08-12 00:56:42 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:42 [INFO   ] main: ==========================================================================================
+2026-08-12 00:56:42 [INFO   ] main: PHASE 17: AMR cycle-topology (Ericsson-like vs. Brayton-like) validation
+2026-08-12 00:56:42 [INFO   ] main: sensitivity -- see core/amr_cycle.py's CYCLE_TYPE_FACTORS docstring for
+2026-08-12 00:56:42 [INFO   ] main: the honesty flag on these multipliers, and this function's own docstring
+2026-08-12 00:56:42 [INFO   ] main: for the rotary-device-name heuristic used to infer cycle_type per row.
+2026-08-12 00:56:42 [INFO   ] main: ==========================================================================================
+2026-08-12 00:56:42 [INFO   ] main: Astronautics_rotary_2014     cycle_type=ericsson  not comparable (one or both did not calibrate)
+2026-08-12 00:56:42 [INFO   ] main: DTU_Eriksen_MAGGIE_2016      cycle_type=brayton (unchanged, not rotary)  COP_err=n/a
+2026-08-12 00:56:42 [INFO   ] main: Tusek_singlebed_Gd_2010      cycle_type=brayton (unchanged, not rotary)  COP_err= -76.4%
+2026-08-12 00:56:42 [INFO   ] main: Risoe_DTU_Gd_2011            cycle_type=brayton (unchanged, not rotary)  COP_err=n/a
+2026-08-12 00:56:42 [INFO   ] main: Okamura_Hirano_2013          cycle_type=brayton (unchanged, not rotary)  COP_err= +50.2%
+2026-08-12 00:56:42 [INFO   ] main: Lozano_POLO_UFSC_2016_r1     cycle_type=brayton (unchanged, not rotary)  COP_err=n/a
+2026-08-12 00:56:42 [INFO   ] main: Lozano_POLO_UFSC_2016_r2     cycle_type=brayton (unchanged, not rotary)  COP_err=n/a
+2026-08-12 00:56:42 [INFO   ] main: Lozano_POLO_UFSC_2016_r3     cycle_type=brayton (unchanged, not rotary)  COP_err=n/a
+2026-08-12 00:56:42 [INFO   ] main: Lozano_POLO_UFSC_2016_r4     cycle_type=brayton (unchanged, not rotary)  COP_err= +13.5%
+2026-08-12 00:56:42 [INFO   ] main: Lozano_POLO_UFSC_2016_r5     cycle_type=brayton (unchanged, not rotary)  COP_err=n/a
+2026-08-12 00:56:42 [INFO   ] main: Lozano_POLO_UFSC_2016_r6     cycle_type=brayton (unchanged, not rotary)  COP_err=  -3.5%
+2026-08-12 00:56:42 [INFO   ] main: Lozano_POLO_UFSC_2016_r7     cycle_type=brayton (unchanged, not rotary)  COP_err= +11.6%
+2026-08-12 00:56:42 [INFO   ] main: Lozano_POLO_UFSC_2016_r8     cycle_type=brayton (unchanged, not rotary)  COP_err= +10.2%
+2026-08-12 00:56:42 [INFO   ] main: DTU_MagQueen_2018            cycle_type=brayton (unchanged, not rotary)  COP_err=n/a
+2026-08-12 00:56:42 [INFO   ] main: DTU_Eriksen_rotary_Gd_2015   cycle_type=ericsson  COP_err(brayton/inferred)=  -2.1%/  +0.6%  [improved]
+2026-08-12 00:56:42 [INFO   ] main: Summary (rotary-device rows re-checked as 'ericsson', comparable subset only): 1 improved, 0 worsened, 0 unchanged, 1 not comparable (did not calibrate under one or both cycle types). Non-rotary rows are left on 'brayton' by construction and are not counted as a 'cycle_type' finding here.
+2026-08-12 00:56:42 [INFO   ] main: CONCLUSION: this is a directional sensitivity check against a small (2-device) rotary subset of the 16-device benchmark set, using a naming-convention proxy for cycle topology rather than a literature- confirmed classification -- see infer_cycle_type_for_device()'s docstring. It should NOT be read as validating the specific CYCLE_TYPE_FACTORS multiplier values themselves (those remain illustrative -- see amr_cycle.py), only as a check that inferring a less-Brayton-like cycle for rotary devices does not make this repo's existing COP predictions worse, and in one case (DTU_Eriksen_rotary_Gd_2015) makes it measurably better.
+2026-08-12 00:56:42 [INFO   ] main: Wrote results/cycle_type_validation.txt
+2026-08-12 00:56:42 [INFO   ] main: [stage done in 0.32s]
+2026-08-12 00:56:42 [INFO   ] main: 
+2026-08-12 00:56:42 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:42 [INFO   ] main: # 3. Loss-model calibration (auto-loaded by AMRSystem's default loss model)
+2026-08-12 00:56:42 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:42 [INFO   ] main: Calibrated loss-model coefficients [CORE (production default)], 3 points, 3 unknowns (exactly-determined, NNLS, residual norm=5.0537):
+2026-08-12 00:56:42 [INFO   ] main:   k_eddy    =  30.519740  W / (Hz^2 * T^2)
+2026-08-12 00:56:42 [INFO   ] main:   k_pump    =  0.000000  W / (kg/s)^2
+2026-08-12 00:56:42 [INFO   ] main:   base_frac =  0.048396  (dimensionless, x Qc)
+2026-08-12 00:56:42 [INFO   ] main:   Fit residuals (predicted - required W_parasitic):
+2026-08-12 00:56:42 [INFO   ] main:     Astronautics_rotary_2014     true= 1133.70W  fit= 1133.66W  resid=  -0.04W
+2026-08-12 00:56:42 [INFO   ] main:     DTU_Eriksen_rotary_Gd_2015   true=   26.18W  fit=   26.90W  resid=  +0.72W
+2026-08-12 00:56:42 [INFO   ] main:     Tusek_singlebed_Gd_2010      true=    0.76W  fit=    5.76W  resid=  +5.00W
+2026-08-12 00:56:42 [INFO   ] main:   NOTE: k_pump pinned to 0 by the non-negativity constraint (the unconstrained optimum was negative here).
+2026-08-12 00:56:42 [INFO   ] main: ==========================================================================================
+2026-08-12 00:56:42 [INFO   ] main: DIAGNOSTIC: adding Okamura & Hirano (2013) as a fourth calibration point
+2026-08-12 00:56:42 [INFO   ] main: ==========================================================================================
+2026-08-12 00:56:42 [INFO   ] main: Calibrated loss-model coefficients [EXTENDED (4pt, diagnostic only, NNLS)], 4 points, 3 unknowns (over-determined, NNLS, residual norm=12.1329):
+2026-08-12 00:56:42 [INFO   ] main:   k_eddy    =  15.087819  W / (Hz^2 * T^2)
+2026-08-12 00:56:42 [INFO   ] main:   k_pump    =  0.000000  W / (kg/s)^2
+2026-08-12 00:56:42 [INFO   ] main:   base_frac =  0.253013  (dimensionless, x Qc)
+2026-08-12 00:56:42 [INFO   ] main:   Fit residuals (predicted - required W_parasitic):
+2026-08-12 00:56:42 [INFO   ] main:     Astronautics_rotary_2014     true= 1133.70W  fit= 1133.62W  resid=  -0.08W
+2026-08-12 00:56:42 [INFO   ] main:     DTU_Eriksen_rotary_Gd_2015   true=   26.18W  fit=   36.85W  resid= +10.67W
+2026-08-12 00:56:42 [INFO   ] main:     Tusek_singlebed_Gd_2010      true=    0.76W  fit=    4.34W  resid=  +3.58W
+2026-08-12 00:56:42 [INFO   ] main:     Okamura_Hirano_2013          true=   73.40W  fit=   68.86W  resid=  -4.54W
+2026-08-12 00:56:42 [INFO   ] main:   NOTE: k_pump pinned to 0 by the non-negativity constraint (the unconstrained optimum was negative here).
+2026-08-12 00:56:42 [INFO   ] main:   Leave-one-out cross-validation on the EXTENDED set (NNLS per fold):
+2026-08-12 00:56:42 [INFO   ] main:   held out Astronautics_rotary_2014     W_parasitic true= 1133.70W  predicted=  859.03W  error=  -24.2%
+2026-08-12 00:56:42 [INFO   ] main:   held out DTU_Eriksen_rotary_Gd_2015   W_parasitic true=   26.18W  predicted=   76.81W  error= +193.4%
+2026-08-12 00:56:42 [INFO   ] main:   held out Tusek_singlebed_Gd_2010      W_parasitic true=    0.76W  predicted=    4.35W  error= +472.4%
+2026-08-12 00:56:42 [INFO   ] main:   held out Okamura_Hirano_2013          W_parasitic true=   73.40W  predicted=   46.61W  error=  -36.5%
+2026-08-12 00:56:42 [INFO   ] main:   CONCLUSION: switching from unconstrained lstsq to NNLS removes the negative (unphysical) coefficients Phase 6 found, and improves the worst leave-one-out error from +1639% to +472% (held-out device: Tusek_singlebed_Gd_2010) -- but that is still an order-of-magnitude miss. A better-behaved solver alone does not make a single linear model generalize across devices spanning 6.5W to 2502W of cooling capacity. The CORE 3-point fit remains the production default.
+2026-08-12 00:56:42 [INFO   ] main:   Testing the natural next hypothesis -- that this is a simple device-size effect:
+2026-08-12 00:56:42 [INFO   ] main: Parasitic fraction (W_parasitic / Qc) sorted by device scale:
+2026-08-12 00:56:42 [INFO   ] main:     Tusek_singlebed_Gd_2010      Qc=     6.5 W   fraction=0.117
+2026-08-12 00:56:42 [INFO   ] main:     DTU_Eriksen_rotary_Gd_2015   Qc=   102.8 W   fraction=0.255
+2026-08-12 00:56:42 [INFO   ] main:     Okamura_Hirano_2013          Qc=   200.0 W   fraction=0.367
+2026-08-12 00:56:42 [INFO   ] main:     Astronautics_rotary_2014     Qc=  2502.0 W   fraction=0.453
+2026-08-12 00:56:42 [INFO   ] main:   Monotonic in device scale? True
+2026-08-12 00:56:42 [INFO   ] main:   NOTE (Paper-Mining Pass Part 6): with the DTU point corrected from its old fabricated 818W/0.171 figure to the verified 102.8W/0.255 figure, this 4-point EXTENDED set is now monotonically INCREASING with Qc -- the opposite direction from a fixed-overhead/economies-of-scale story (which predicts fraction falling as Qc grows), not confirmation of one. See this module's docstring for the full discussion; a size/scale term is still not adopted as a result.
+2026-08-12 00:56:42 [INFO   ] main: [stage done in 0.01s]
+2026-08-12 00:56:42 [INFO   ] main: 
+2026-08-12 00:56:42 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:42 [INFO   ] main: # 3b. Regenerator thermal-effectiveness demo (core/thermal.py, reached transitively otherwise)
+2026-08-12 00:56:42 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:42 [INFO   ] main: Regenerator effectiveness sweep vs. mass_regenerator (f=1Hz, mdot=0.08kg/s)
+2026-08-12 00:56:42 [INFO   ] main:   mass=  0.5kg  NTU= 41.34  U= 1.419  eps=0.668
+2026-08-12 00:56:42 [INFO   ] main:   mass=  1.0kg  NTU= 82.68  U= 0.709  eps=0.769
+2026-08-12 00:56:42 [INFO   ] main:   mass=  2.0kg  NTU=165.37  U= 0.355  eps=0.883
+2026-08-12 00:56:42 [INFO   ] main:   mass=  5.0kg  NTU=413.42  U= 0.142  eps=0.953
+2026-08-12 00:56:42 [INFO   ] main:   mass= 10.0kg  NTU=826.84  U= 0.071  eps=0.970
+2026-08-12 00:56:42 [INFO   ] main:   mass= 15.0kg  NTU=1240.25  U= 0.047  eps=0.970
+2026-08-12 00:56:42 [INFO   ] main: Regenerator effectiveness sweep vs. frequency (mass=2kg, mdot=0.08kg/s)
+2026-08-12 00:56:42 [INFO   ] main:   f= 0.25Hz  NTU=165.37  U= 1.419  eps=0.692
+2026-08-12 00:56:42 [INFO   ] main:   f= 0.50Hz  NTU=165.37  U= 0.709  eps=0.778
+2026-08-12 00:56:42 [INFO   ] main:   f= 1.00Hz  NTU=165.37  U= 0.355  eps=0.883
+2026-08-12 00:56:42 [INFO   ] main:   f= 2.00Hz  NTU=165.37  U= 0.177  eps=0.935
+2026-08-12 00:56:42 [INFO   ] main:   f= 4.00Hz  NTU=165.37  U= 0.089  eps=0.962
+2026-08-12 00:56:42 [INFO   ] main: [stage done in 0.00s]
+2026-08-12 00:56:42 [INFO   ] main: 
+2026-08-12 00:56:42 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:42 [INFO   ] main: # 3c. Geometry-dependent pumping power: packed-bed + parallel-plate (core/geometry_analysis.py)
+2026-08-12 00:56:42 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:42 [INFO   ] main: ==========================================================================================
+2026-08-12 00:56:42 [INFO   ] main: PHASE 7: geometry-dependent pumping power, motivated by Tusek, Kitanovski,
+2026-08-12 00:56:42 [INFO   ] main: Poredos (2013), 'Geometrical optimization of packed-bed and parallel-plate
+2026-08-12 00:56:42 [INFO   ] main: active magnetic regenerators', Int. J. Refrig. 36, 1456-1464
+2026-08-12 00:56:42 [INFO   ] main: ==========================================================================================
+2026-08-12 00:56:42 [INFO   ] main: --- Step 1: confirm the pre-Phase-7 gap (no geometry optimum was even possible) ---
+2026-08-12 00:56:42 [INFO   ] main: Diagnostic: pre-Phase-7 eps(particle_diameter) at fixed mdot=0.08kg/s:
+2026-08-12 00:56:42 [INFO   ] main:     d_p=  2.000mm  eps=0.8190
+2026-08-12 00:56:42 [INFO   ] main:     d_p=  1.000mm  eps=0.8647
+2026-08-12 00:56:42 [INFO   ] main:     d_p=  0.500mm  eps=0.8829
+2026-08-12 00:56:42 [INFO   ] main:     d_p=  0.250mm  eps=0.8898
+2026-08-12 00:56:42 [INFO   ] main:     d_p=  0.170mm  eps=0.8915
+2026-08-12 00:56:42 [INFO   ] main:     d_p=  0.100mm  eps=0.8926
+2026-08-12 00:56:42 [INFO   ] main:     d_p=  0.070mm  eps=0.8930
+2026-08-12 00:56:42 [INFO   ] main:     d_p=  0.050mm  eps=0.8933
+2026-08-12 00:56:42 [INFO   ] main:     d_p=  0.025mm  eps=0.8935
+2026-08-12 00:56:42 [INFO   ] main:     d_p=  0.010mm  eps=0.8936
+2026-08-12 00:56:42 [INFO   ] main:     d_p=  0.001mm  eps=0.8936
+2026-08-12 00:56:42 [INFO   ] main:   Monotonically non-decreasing as d_p shrinks? True (no optimum possible without a geometry-coupled pumping-power term)
+2026-08-12 00:56:42 [INFO   ] main: --- Step 2: check whether mdot can simply be re-optimized per geometry, as the paper does ---
+2026-08-12 00:56:42 [INFO   ] main: Diagnostic: ideal COP (no pumping) vs. mdot at fixed d_p=0.5mm:
+2026-08-12 00:56:42 [INFO   ] main:     mdot= 0.5000kg/s  COP_ideal=14.149
+2026-08-12 00:56:42 [INFO   ] main:     mdot= 0.1000kg/s  COP_ideal=15.164
+2026-08-12 00:56:42 [INFO   ] main:     mdot= 0.0200kg/s  COP_ideal=15.817
+2026-08-12 00:56:42 [INFO   ] main:     mdot= 0.0050kg/s  COP_ideal=15.830
+2026-08-12 00:56:42 [INFO   ] main:     mdot= 0.0020kg/s  COP_ideal=15.830
+2026-08-12 00:56:42 [INFO   ] main:     mdot= 0.0005kg/s  COP_ideal=15.830
+2026-08-12 00:56:42 [INFO   ] main:   Monotonically non-decreasing as mdot falls (i.e. best at mdot->0)? True
+2026-08-12 00:56:42 [INFO   ] main:   CONCLUSION: single-objective COP maximization is degenerate in this repo's 2nd-law work model (drives mdot, and Qc with it, toward zero). This module therefore sweeps geometry at a FIXED representative mdot (0.08 kg/s) rather than re-optimizing mdot per geometry the way the paper's own dynamic model does -- a real methodological difference from the paper, stated here rather than hidden.
+2026-08-12 00:56:42 [INFO   ] main: --- Step 3: packed-bed sphere-diameter sweep at fixed mdot=0.08kg/s ---
+2026-08-12 00:56:42 [INFO   ] main:   d_p= 2.000mm   Qc=  761.91W   COP_aug=14.9459
+2026-08-12 00:56:42 [INFO   ] main:   d_p= 1.000mm   Qc=  804.41W   COP_aug=15.1998
+2026-08-12 00:56:42 [INFO   ] main:   d_p= 0.500mm   Qc=  821.37W   COP_aug=15.2681
+2026-08-12 00:56:42 [INFO   ] main:   d_p= 0.250mm   Qc=  827.75W   COP_aug=15.1889
+2026-08-12 00:56:42 [INFO   ] main:   d_p= 0.170mm   Qc=  829.32W   COP_aug=15.0443
+2026-08-12 00:56:42 [INFO   ] main:   d_p= 0.100mm   Qc=  830.43W   COP_aug=14.6054
+2026-08-12 00:56:42 [INFO   ] main:   d_p= 0.070mm   Qc=  830.81W   COP_aug=14.0318
+2026-08-12 00:56:42 [INFO   ] main:   d_p= 0.050mm   Qc=  831.01W   COP_aug=13.1608
+2026-08-12 00:56:42 [INFO   ] main:   d_p= 0.025mm   Qc=  831.21W   COP_aug=10.0033
+2026-08-12 00:56:42 [INFO   ] main:   At fixed mdot=0.08kg/s:
+2026-08-12 00:56:42 [INFO   ] main:     diameter maximizing Qc (of those swept):  0.025 mm (within the swept range Qc keeps rising toward smaller diameters, since eps has not yet saturated at this mdot)
+2026-08-12 00:56:42 [INFO   ] main:     diameter maximizing COP_aug:              0.5 mm (a genuine INTERIOR optimum: smaller diameters raise eps only marginally further while pumping power keeps growing)
+2026-08-12 00:56:42 [INFO   ] main:   Paper's Table 3 (own operating point, own per-geometry mdot): 0.07 mm (Qc) / 0.17 mm (COP).
+2026-08-12 00:56:42 [INFO   ] main: --- Step 4: parallel-plate spacing sweep at fixed mdot=0.08kg/s ---
+2026-08-12 00:56:42 [INFO   ] main:   spacing= 1.000mm   Qc=  726.51W   COP_aug=14.7284
+2026-08-12 00:56:42 [INFO   ] main:   spacing= 0.500mm   Qc=  775.27W   COP_aug=15.0313
+2026-08-12 00:56:42 [INFO   ] main:   spacing= 0.250mm   Qc=  802.28W   COP_aug=15.1941
+2026-08-12 00:56:42 [INFO   ] main:   spacing= 0.100mm   Qc=  819.44W   COP_aug=15.2680
+2026-08-12 00:56:42 [INFO   ] main:   spacing= 0.075mm   Qc=  822.37W   COP_aug=15.2582
+2026-08-12 00:56:42 [INFO   ] main:   spacing= 0.050mm   Qc=  825.33W   COP_aug=15.2006
+2026-08-12 00:56:42 [INFO   ] main:   spacing= 0.035mm   Qc=  827.11W   COP_aug=15.0759
+2026-08-12 00:56:42 [INFO   ] main:   spacing= 0.020mm   Qc=  828.90W   COP_aug=14.5765
+2026-08-12 00:56:42 [INFO   ] main:   spacing= 0.010mm   Qc=  830.10W   COP_aug=12.7131
+2026-08-12 00:56:42 [INFO   ] main:   At fixed mdot=0.08kg/s, plate thickness 0.25mm:
+2026-08-12 00:56:42 [INFO   ] main:     spacing maximizing Qc (of those swept):  0.01 mm
+2026-08-12 00:56:42 [INFO   ] main:     spacing maximizing COP_aug:               0.1 mm
+2026-08-12 00:56:42 [INFO   ] main:   Paper's Table 3 (own operating point): 0.035 mm (Qc) / 0.075 mm (COP), regardless of plate thickness.
+2026-08-12 00:56:42 [INFO   ] main: --- Conclusion ---
+2026-08-12 00:56:42 [INFO   ] main: Coupling the NTU effectiveness gain to the new geometry-explicit hydraulic
+2026-08-12 00:56:42 [INFO   ] main: pumping-power term (Tusek et al. 2013 Eqs. 5-7) DOES reproduce a genuine
+2026-08-12 00:56:42 [INFO   ] main: interior COP optimum vs. packed-bed sphere diameter and parallel-plate
+2026-08-12 00:56:42 [INFO   ] main: spacing in this repo's own model (Step 3-4) -- confirming the paper's
+2026-08-12 00:56:42 [INFO   ] main: qualitative finding, which the pre-Phase-7 model structure could not show
+2026-08-12 00:56:42 [INFO   ] main: even in principle (Step 1). Doing this required fixing mdot at a
+2026-08-12 00:56:42 [INFO   ] main: representative value rather than re-optimizing it per geometry as the paper
+2026-08-12 00:56:42 [INFO   ] main: does, because Step 2 found that free COP-only optimization is itself
+2026-08-12 00:56:42 [INFO   ] main: degenerate in this repo's 2nd-law magnetic-work model (pushes mdot, and Qc
+2026-08-12 00:56:42 [INFO   ] main: with it, toward zero) -- a genuine, separate limitation, stated rather than
+2026-08-12 00:56:42 [INFO   ] main: papered over.
+2026-08-12 00:56:42 [INFO   ] main: The specific optimum found here (packed-bed COP-optimal: 0.5mm;
+2026-08-12 00:56:42 [INFO   ] main: parallel-plate COP-optimal: 0.1mm) should NOT be expected to match
+2026-08-12 00:56:42 [INFO   ] main: the paper's Table 3 (0.17mm packed-bed / 0.075mm parallel-plate) exactly:
+2026-08-12 00:56:42 [INFO   ] main: this repo's operating point (291K/10K span, 2kg, 1Hz, 1.5T, fixed
+2026-08-12 00:56:42 [INFO   ] main: mdot=0.08kg/s) differs from the paper's own fixed conditions (278-293K/15K
+2026-08-12 00:56:42 [INFO   ] main: span, 40x10xL mm outer dims, 0.5/3Hz, per-geometry-optimized mdot), and the
+2026-08-12 00:56:42 [INFO   ] main: pumping power used here is idealized hydraulic power with no pump/motor
+2026-08-12 00:56:42 [INFO   ] main: efficiency, unlike a real device. The value of this exercise is the
+2026-08-12 00:56:42 [INFO   ] main: qualitative confirmation that a genuine geometry optimum now exists in the
+2026-08-12 00:56:42 [INFO   ] main: model where none could before -- not a numerical reproduction of the
+2026-08-12 00:56:42 [INFO   ] main: paper's own operating point.
+2026-08-12 00:56:42 [INFO   ] main: [stage done in 0.30s]
+2026-08-12 00:56:42 [INFO   ] main: 
+2026-08-12 00:56:42 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:42 [INFO   ] main: # 3d. Hypereg parallel-hydraulic pumping-power analysis (core/hypereg_analysis.py, Phase 15 item 3)
+2026-08-12 00:56:42 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:43 [INFO   ] main: ==========================================================================================
+2026-08-12 00:56:43 [INFO   ] main: PHASE 15: Hypereg parallel-hydraulic pumping-power reduction, motivated by
+2026-08-12 00:56:43 [INFO   ] main: Klinar et al. (2024), Adv. Energy Mater. 14, 2401739, Figs. 18-21.
+2026-08-12 00:56:43 [INFO   ] main: See results/hypereg_findings.md for the full literature findings note.
+2026-08-12 00:56:43 [INFO   ] main: ==========================================================================================
+2026-08-12 00:56:43 [INFO   ] main: Operating point: T_cold=291.0K, span=10.0K, mu0H=1.5T, mass=5.0kg, mdot=0.08kg/s, d_p=0.5mm
+2026-08-12 00:56:43 [INFO   ] main: --- Step 1: sweep n_parallel_subregenerators at f=1.0Hz (n=1 == conventional series flow) ---
+2026-08-12 00:56:43 [INFO   ] main:   n_parallel=  1   Qc=  886.42W   COP_electrical= 5.2636   W_parasitic= 112.05W
+2026-08-12 00:56:43 [INFO   ] main:   n_parallel=  2   Qc=  886.42W   COP_electrical= 5.2712   W_parasitic= 111.81W
+2026-08-12 00:56:43 [INFO   ] main:   n_parallel=  4   Qc=  886.42W   COP_electrical= 5.2750   W_parasitic= 111.69W
+2026-08-12 00:56:43 [INFO   ] main:   n_parallel=  8   Qc=  886.42W   COP_electrical= 5.2769   W_parasitic= 111.63W
+2026-08-12 00:56:43 [INFO   ] main:   n_parallel= 16   Qc=  886.42W   COP_electrical= 5.2779   W_parasitic= 111.60W
+2026-08-12 00:56:43 [INFO   ] main: --- Step 2: pumping-power saving vs. frequency at a fixed n=4 (the paper's own illustrative example) ---
+2026-08-12 00:56:43 [INFO   ] main:   f= 0.50Hz   COP_conventional= 7.4727   COP_hypereg(n=4)= 7.4968   W_parasitic saving=  0.6%
+2026-08-12 00:56:43 [INFO   ] main:   f= 1.00Hz   COP_conventional= 5.2636   COP_hypereg(n=4)= 5.2750   W_parasitic saving=  0.3%
+2026-08-12 00:56:43 [INFO   ] main:   f= 2.00Hz   COP_conventional= 2.4010   COP_hypereg(n=4)= 2.4033   W_parasitic saving=  0.1%
+2026-08-12 00:56:43 [INFO   ] main:   f= 4.00Hz   COP_conventional= 0.7521   COP_hypereg(n=4)= 0.7523   W_parasitic saving=  0.0%
+2026-08-12 00:56:43 [INFO   ] main:   f= 8.00Hz   COP_conventional= 0.2007   COP_hypereg(n=4)= 0.2007   W_parasitic saving=  0.0%
+2026-08-12 00:56:43 [INFO   ] main: --- Step 3: does the benefit become non-negligible at a higher mdot (0.3kg/s vs. the 0.08kg/s baseline above)? (ROADMAP.md Phase 16 open candidate) ---
+2026-08-12 00:56:43 [INFO   ] main:   n_parallel=  1   Qc= 2906.01W   COP_electrical= 7.0336   W_parasitic= 219.85W
+2026-08-12 00:56:43 [INFO   ] main:   n_parallel=  2   Qc= 2906.01W   COP_electrical= 7.1245   W_parasitic= 214.58W
+2026-08-12 00:56:43 [INFO   ] main:   n_parallel=  4   Qc= 2906.01W   COP_electrical= 7.1709   W_parasitic= 211.94W
+2026-08-12 00:56:43 [INFO   ] main:   n_parallel=  8   Qc= 2906.01W   COP_electrical= 7.1943   W_parasitic= 210.63W
+2026-08-12 00:56:43 [INFO   ] main:   n_parallel= 16   Qc= 2906.01W   COP_electrical= 7.2060   W_parasitic= 209.97W
+2026-08-12 00:56:43 [INFO   ] main: --- Conclusion ---
+2026-08-12 00:56:43 [INFO   ] main: At this repo's own representative operating point, splitting the regenerator into n=16 parallel sub-beds raises COP_electrical from 5.264 (conventional, n=1) to 5.278 -- a real but modest benefit in THIS model, because pumping power (W_pump) is only one of three loss channels (k_eddy*f^2*H^2 + k_pump*mdot^2 + base_frac*Qc) and is not the dominant one at this lab-scale operating point. The benefit saturates quickly with n (diminishing returns are visible in Step 1) since the other two loss channels are untouched by parallelization. This confirms the qualitative mechanism the paper describes (reduced pumping power from parallel vs. series hydraulic flow) is real and representable in this repo's own model, WITHOUT claiming a validated optimum n or a device-level performance prediction for an as-yet-unbuilt concept -- see results/hypereg_findings.md's honesty flags.
+2026-08-12 00:56:43 [INFO   ] main: Step 3 finding: at mdot=0.3kg/s, the SAME n=16 split raises COP_electrical from 7.034 (n=1) to 7.206 -- a 2.45% relative gain, vs. 0.27% at the 0.08kg/s baseline. This IS meaningfully larger, consistent with pumping power's mdot-driven scaling (thermal.pumping_power_packed_bed()'s Darcy-flow dP~mdot term) making the pumping-loss channel a bigger share of W_parasitic at higher flow -- worth extending this sweep further if a specific higher-mdot design point is ever targeted.
+2026-08-12 00:56:43 [INFO   ] main: [stage done in 0.14s]
+2026-08-12 00:56:43 [INFO   ] main: 
+2026-08-12 00:56:43 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:43 [INFO   ] main: # 4. Baseline comparison sweep: AMR vs VCC vs liquid cooling vs Carnot
+2026-08-12 00:56:43 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:43 [INFO   ] main:  span(K)  AMR elec COP  stages   VCC COP  Liquid COP   Carnot Elasto ref
+2026-08-12 00:56:43 [INFO   ] main:        5          5.46       1     24.46       24.78    58.23       4.63
+2026-08-12 00:56:43 [INFO   ] main:        6          5.27       1     20.38       23.15    48.52       4.63
+2026-08-12 00:56:43 [INFO   ] main:        7           5.1       1     17.47       21.99    41.59       4.63
+2026-08-12 00:56:43 [INFO   ] main:        8          4.93       1     15.29       21.11    36.39       4.63
+2026-08-12 00:56:43 [INFO   ] main:        9          4.77       1     13.59       20.43    32.35       4.63
+2026-08-12 00:56:43 [INFO   ] main:       10          4.63       1     12.23       19.89    29.12       4.63
+2026-08-12 00:56:43 [INFO   ] main:       11          4.49       1     11.12       19.45    26.47       4.63
+2026-08-12 00:56:43 [INFO   ] main:       12          4.36       1     10.19       19.08    24.26       4.63
+2026-08-12 00:56:43 [INFO   ] main:       13          4.24       1      9.41       18.76     22.4       4.63
+2026-08-12 00:56:43 [INFO   ] main:       14          4.12       1      8.73       18.49     20.8       4.63
+2026-08-12 00:56:43 [INFO   ] main:       15          4.01       1      8.15       18.26    19.41       4.63
+2026-08-12 00:56:43 [INFO   ] main:       16          3.91       1      7.64       18.06     18.2       4.63
+2026-08-12 00:56:43 [INFO   ] main:       17          2.43       2      7.19       17.88    17.13       4.63
+2026-08-12 00:56:43 [INFO   ] main:       18           2.4       2      6.79       17.72    16.17       4.63
+2026-08-12 00:56:43 [INFO   ] main:       19          2.36       2      6.44       17.57    15.32       4.63
+2026-08-12 00:56:43 [INFO   ] main:       20          2.33       2      6.11       17.45    14.56       4.63
+2026-08-12 00:56:43 [INFO   ] main: Elastocaloric reference COP=4.63 (range 3.7-5.8), a flat literature anchor repeated across every span -- NOT a span-dependent simulation. Source: External literature (NOT this repo's two source books -- see core/baseline_cooling.py's Phase 23 honesty flag): Qian et al. (2023) Science 380, 722-727 (simulated steady-state system COP=5.8, up to a 22.5K span) and Wu et al. (2023) Nat. Commun. 14, 7982 (measured system COP=3.7, at a much narrower ~1K span). A single static reference point, not a span-dependent simulation.
+2026-08-12 00:56:43 [INFO   ] main: Wrote results/comparison_table.csv
+2026-08-12 00:56:43 [INFO   ] main: Note: AMR_COP_electrical includes estimated parasitic losses and is the appropriate quantity for comparison with vapor-compression and liquid-cooling COP values, which are also reported on an electrical basis. AMR_COP_ideal represents the thermodynamic cycle alone and is provided for reference. AMR_n_stages=1 rows are the plain single-stage cycle; AMR_n_stages>1 rows (span >16K here) used the automatic cascade fallback in core.cascade.staged_baseline_result() because a single stage's own no-load DeltaT_ad could not cover that span -- see that function's docstring.
+2026-08-12 00:56:43 [INFO   ] main: [stage done in 0.19s]
+2026-08-12 00:56:43 [INFO   ] main: 
+2026-08-12 00:56:43 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:43 [INFO   ] main: # 5. Economics / TCO at the representative operating point
+2026-08-12 00:56:43 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:43 [INFO   ] main: Sizing basis: capacity=1.29 kW, span=10.0K (from the baseline sweep computed in step 4)
+2026-08-12 00:56:43 [INFO   ] main: technology                           CAPEX ($)   annual OPEX ($)
+2026-08-12 00:56:43 [INFO   ] main: Magnetic (AMR)                           2,833                95
+2026-08-12 00:56:43 [INFO   ] main: Vapor-compression CRAC/CRAH                451               221
+2026-08-12 00:56:43 [INFO   ] main: Direct liquid cooling                      708               118
+2026-08-12 00:56:43 [INFO   ] main: Note: AMR CAPEX/OPEX per kW are pre-commercial placeholders (see economics.py notes); material_cost() gives a materials-only cost floor for a specific design instead.
+2026-08-12 00:56:43 [INFO   ] main: 
+2026-08-12 00:56:43 [INFO   ] main: Phase 15: full-system BOM cost model, same design point (H=2.0T, mass=5.0kg Gd) as above:
+2026-08-12 00:56:43 [INFO   ] main:   Materials BOM: magnet $1200 (30.00kg) + MCM $100 + SMM yoke $75 (15.00kg) = $1375 total
+2026-08-12 00:56:43 [INFO   ] main:   Full-system cost ESTIMATE (materials BOM x 10x, order-of-magnitude only -- see economics.py's Phase 15 section docstring for the Russek & Zimm (2006) vapor-compression-AC benchmark this multiplier comes from): $13,750
+2026-08-12 00:56:43 [INFO   ] main:   Levelized cost of cooling (CRF-based, Silva et al. 2017 methodology, 15yr life, 6% discount rate): $0.0341/kWh_cooling ($0.0126 capital + $0.0216 electricity, materials-only capital basis -- see levelized_cost_of_cooling()'s docstring)
+2026-08-12 00:56:43 [INFO   ] main: [stage done in 0.00s]
+2026-08-12 00:56:43 [INFO   ] main: 
+2026-08-12 00:56:43 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:43 [INFO   ] main: # 5b. Full-system cost estimate by material family (core/economics.py, Phase 15 item 5) + amorphous-material cost/performance note (Phase 22 item 3)
+2026-08-12 00:56:43 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:46 [INFO   ] main: _material_candidates: (Mn,Fe)2(P,Si) needs Tc=283.5K to hit T_mid=296.0K, outside its documented window [295.3, 331.2]K -- dropped from this operating point's candidate set (not substituted with a duplicate Gd row).
+2026-08-12 00:56:46 [INFO   ] main:   Gd                                       materials BOM=$   1,375   full-system estimate=$    13,750
+2026-08-12 00:56:46 [INFO   ] main:   Gd5(SixGe1-x)4(-Ga) (tuned, Tc=285.3K)   materials BOM=$   1,375   full-system estimate=$    13,750
+2026-08-12 00:56:46 [INFO   ] main:   La(Fe,Si)13Hy (tuned, Tc=285.3K)         materials BOM=$   1,315   full-system estimate=$    13,150
+2026-08-12 00:56:46 [INFO   ] main: 
+2026-08-12 00:56:46 [INFO   ] main: Phase 22 item 3 note (qualitative only, no candidate priced above uses amorphous MCM data -- see core/economics.py's own section docstring):
+2026-08-12 00:56:46 [INFO   ] main:   Amorphous (melt-spun ribbon / metallic-glass) MCM candidates trade LOWER manufacturing cost (melt-spinning is a single continuous step, skipping the slow single-crystal-growth/annealing this repo's priced crystalline families need) for LOWER peak DeltaS_M/DeltaT_ad -- structural disorder that makes them cheap to produce also broadens and shallows the magnetic transition, the same qualitative peak-vs-width trade-off Phase 22 items 1-2 already quantify for random grain-to-grain Tc inhomogeneity and deliberate multi-phase blending respectively. No amorphous-MCM $/kg figure or DeltaS_M value is digitized anywhere in this repo's corpus (Tishin Ch. 9, the natural source, is an image-only PDF here -- see this section's own honesty flag above), so this is recorded as a qualitative note only, NOT wired into MCM_COST_PER_KG_BY_FAMILY or any cost/performance calculation -- adding a numeric placeholder here, unlike the already-sourced entries in that dict, would be inventing a number this repo has no basis for, which core/economics.py's existing MNFEPSI_FAMILY/GD_FAMILY entries already deliberately avoid doing for their own missing figures (see MCM_COST_PER_KG_BY_FAMILY's own comment above).
+2026-08-12 00:56:46 [INFO   ] main: [stage done in 3.18s]
+2026-08-12 00:56:46 [INFO   ] main: 
+2026-08-12 00:56:46 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:46 [INFO   ] main: # 6. Emissions comparison at the representative operating point
+2026-08-12 00:56:46 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:46 [INFO   ] main: Basis: capacity=1.29 kW, AMR_COP=4.63, VCC_COP=12.23, Liquid_COP=19.89 (all from step 4, span=10.0K)
+2026-08-12 00:56:46 [INFO   ] main: Magnetic (AMR) - no refrigerant  refrigerant=   0.00 tCO2e/yr  operational=    1.21 tCO2e/yr  total=    1.21 tCO2e/yr
+2026-08-12 00:56:46 [INFO   ] main: Vapor-compression                refrigerant=   0.04 tCO2e/yr  operational=    0.46 tCO2e/yr  total=    0.50 tCO2e/yr
+2026-08-12 00:56:46 [INFO   ] main: Liquid cooling                   refrigerant=   0.03 tCO2e/yr  operational=    0.28 tCO2e/yr  total=    0.31 tCO2e/yr
+2026-08-12 00:56:46 [INFO   ] main: [stage done in 0.00s]
+2026-08-12 00:56:46 [INFO   ] main: 
+2026-08-12 00:56:46 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:46 [INFO   ] main: # 7. Cascade staging comparison (1-4 stage AMR, Gd and Gd5Si2Ge2)
+2026-08-12 00:56:46 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:46 [INFO   ] main: Material: Gd (baseline)
+2026-08-12 00:56:47 [INFO   ] main: Wrote results/cascade_comparison.csv (16 rows)
+2026-08-12 00:56:47 [INFO   ] main: Material: Gd5Si2Ge2 (giant MCE, first-order Landau model)
+2026-08-12 00:56:47 [INFO   ] main: Wrote results/cascade_comparison_giant_mce.csv (16 rows)
+2026-08-12 00:56:47 [INFO   ] main: [stage done in 1.34s]
+2026-08-12 00:56:47 [INFO   ] main: 
+2026-08-12 00:56:47 [INFO   ] main: ####################################################################################################
+2026-08-12 00:56:47 [INFO   ] main: # 7b. Curie-graded cascade (composition-tuned per stage, ROADMAP.md Phase 7 item)
+2026-08-12 00:56:47 [INFO   ] main: ####################################################################################################
+2026-08-12 00:57:13 [INFO   ] main: Wrote results/graded_cascade_comparison.csv (16 rows): 38/64 span/stage-count cells fully within the documented 20-290K giant-MCE composition range, 25 with partial fallback to plain Gd (see cascade.py __main__ for the full breakdown and honest caveats).
+2026-08-12 00:57:13 [INFO   ] main: At 10K span, 3 stages: Graded Qc=2388.1W, COP=2.443  vs. plain-Gd Qc=1258.0W, COP=2.415
+2026-08-12 00:57:13 [INFO   ] main: [stage done in 26.09s]
+2026-08-12 00:57:13 [INFO   ] main: 
+2026-08-12 00:57:13 [INFO   ] main: ####################################################################################################
+2026-08-12 00:57:13 [INFO   ] main: # 7c. Does a 6-layer Curie-graded La(Fe,Si)13Hy bed reproduce Astronautics_rotary_2014? (ROADMAP.md Phase 9 addendum)
+2026-08-12 00:57:13 [INFO   ] main: ####################################################################################################
+2026-08-12 00:57:37 [INFO   ] main:     stage 1: T_mid=305.9K, needed composition Tc=294.8K -> La(Fe,Si)13Hy-type, composition-tuned to Tc=294.8K
+2026-08-12 00:57:37 [INFO   ] main:     stage 2: T_mid=307.8K, needed composition Tc=296.6K -> La(Fe,Si)13Hy-type, composition-tuned to Tc=296.6K
+2026-08-12 00:57:37 [INFO   ] main:     stage 3: T_mid=309.6K, needed composition Tc=298.3K -> La(Fe,Si)13Hy-type, composition-tuned to Tc=298.3K
+2026-08-12 00:57:37 [INFO   ] main:     stage 4: T_mid=311.4K, needed composition Tc=300.1K -> La(Fe,Si)13Hy-type, composition-tuned to Tc=300.1K
+2026-08-12 00:57:37 [INFO   ] main:     stage 5: T_mid=313.2K, needed composition Tc=301.9K -> La(Fe,Si)13Hy-type, composition-tuned to Tc=301.9K
+2026-08-12 00:57:37 [INFO   ] main:     stage 6: T_mid=315.1K, needed composition Tc=303.6K -> La(Fe,Si)13Hy-type, composition-tuned to Tc=303.6K
+2026-08-12 00:57:37 [INFO   ] main: mdot calibrated to reproduce reported Qc=2502.0W: 0.03478 kg/s
+2026-08-12 00:57:37 [INFO   ] main: Predicted COP=0.359  vs.  reported COP=1.9 (-81.1% error) -- vs. the flat 'no calibration found' the single-layer material in step 2 gave this same device.
+2026-08-12 00:58:01 [INFO   ] main: Phase 17 follow-up: same graded bed under cycle_type='ericsson' (rotary-device naming-convention proxy, see validation_system.infer_cycle_type_for_device()): COP=0.36 (-81.1% error) vs. brayton's -81.1% -- ericsson does NOT narrow the error here, unlike DTU_Eriksen_rotary_Gd_2015's step 2b result -- the remaining gap is dominated by other documented issues (single-Tc-vs-6-real-layers approximation, the ~2.4x DeltaT_ad overestimate in giguere_validation.py), not by cycle topology.
+2026-08-12 00:58:01 [INFO   ] main: [stage done in 47.54s]
+2026-08-12 00:58:01 [INFO   ] main: 
+2026-08-12 00:58:01 [INFO   ] main: ####################################################################################################
+2026-08-12 00:58:01 [INFO   ] main: # 8. Giant-MCE materials analysis (Gd vs Gd5Si2Ge2)
+2026-08-12 00:58:01 [INFO   ] main: ####################################################################################################
+2026-08-12 00:58:01 [INFO   ] main: Giant-MCE (Gd5Si2Ge2, first-order Landau model) vs. Gd, at their
+2026-08-12 00:58:01 [INFO   ] main: own favorable operating points vs. the ASHRAE 18-27C (291-300K) range
+2026-08-12 00:58:01 [INFO   ] main: ==========================================================================================
+2026-08-12 00:58:01 [INFO   ] main: Gd peak-effect temperature: 294.5 K (21.4 C) -- INSIDE the ASHRAE recommended supply range
+2026-08-12 00:58:01 [INFO   ] main: Gd5Si2Ge2 peak-effect temperature: 286.4 K (13.2 C) -- BELOW the ASHRAE range by ~4.6 K
+2026-08-12 00:58:01 [INFO   ] main: Landau-model Tc-vs-peak-effect offset at 2.0T: peak sits +10.4 K above the nominal Tc=276.0K parameter -- a real, stable property of this extended Landau formulation (see landau_peak_offset_K() docstring), independently confirmed to within ~1K by the Astronautics graded-bed cascade check (+11.1 to +11.5K offset across all 6 stages vs. Jacobs et al. 2014 Table 1's actual layer Curie temperatures).
+2026-08-12 00:58:01 [INFO   ] main: Test 1: BOTH materials at the ASHRAE operating point (T_cold=291K, span=10.0K)
+2026-08-12 00:58:01 [INFO   ] main:   Gd:         Qc=  1466.1 W   COP_elec=5.12
+2026-08-12 00:58:01 [INFO   ] main:   Gd5Si2Ge2:  Qc=     0.0 W   COP_elec=0.00   <- collapses to ~0: 10.0K span is centered ~9.6K from its own peak
+2026-08-12 00:58:01 [INFO   ] main: Test 2: Gd5Si2Ge2 at ITS OWN favorable point (T_cold=281.4K = 8.2C, span=10.0K, straddling its 286.4K peak)
+2026-08-12 00:58:01 [INFO   ] main:   Gd5Si2Ge2:  Qc=  5319.3 W   COP_elec=6.92   <- strong performance when correctly targeted
+2026-08-12 00:58:01 [INFO   ] main:   Gd (same point): Qc=     0.0 W   COP_elec=0.00   <- Gd fails here (point is far from Gd's own 294.5K)
+2026-08-12 00:58:01 [INFO   ] main: CONCLUSION:
+2026-08-12 00:58:01 [INFO   ] main: The giant-MCE effect is real and large when the material is operated within
+2026-08-12 00:58:01 [INFO   ] main: its own narrow first-order transition window -- but Gd5Si2Ge2's window sits
+2026-08-12 00:58:01 [INFO   ] main: ~5K below the ASHRAE data-center range, so it is not directly
+2026-08-12 00:58:01 [INFO   ] main: usable for this application as-is. This does not overturn the
+2026-08-12 00:58:01 [INFO   ] main: conclusion (Gd trails vapor-compression/liquid cooling on COP within the
+2026-08-12 00:58:01 [INFO   ] main: ASHRAE range). What it DOES support: literature confirms the Gd5(SixGe1-x)4
+2026-08-12 00:58:01 [INFO   ] main: family has composition-tunable ordering temperature (Pecharsky & Gschneidner,
+2026-08-12 00:58:01 [INFO   ] main: Appl. Phys. Lett. 70, 3299 (1997), report tunability from ~30K to ~276K by
+2026-08-12 00:58:01 [INFO   ] main: Si:Ge ratio, with Gd5Si4 itself ordering at ~335K) -- so a composition between
+2026-08-12 00:58:01 [INFO   ] main: Gd5Si2Ge2 and Gd5Si4 tuned to ~291-300K, IF it retains first-order/giant
+2026-08-12 00:58:01 [INFO   ] main: character at that composition, is the genuinely promising untested direction
+2026-08-12 00:58:01 [INFO   ] main: for closing the COP gap. This is a materials-synthesis question outside what
+2026-08-12 00:58:01 [INFO   ] main: a simulation study alone can answer and remains an open materials
+2026-08-12 00:58:01 [INFO   ] main: research question rather than a result established here.
+2026-08-12 00:58:01 [INFO   ] main: For reference, baselines at this operating point: VCC COP=12.22, Liquid COP=19.89
+2026-08-12 00:58:01 [INFO   ] main: Note also: even correctly targeted, Gd5Si2Ge2's COP_electrical (6.92) is close to Gd's own COP_electrical at its matched point (5.12), not dramatically higher, despite ~4x the cooling capacity (Qc). This is consistent with the Sobol sensitivity analysis: COP_electrical is driven mainly by frequency/flow/field-dependent losses (loss_model.py), not by which material is loaded into the regenerator -- a bigger MCE mostly buys more Qc per kg, not a better COP.
+2026-08-12 00:58:01 [INFO   ] main: Wrote results/giant_mce_analysis.txt
+2026-08-12 00:58:01 [INFO   ] main: [stage done in 0.52s]
+2026-08-12 00:58:01 [INFO   ] main: 
+2026-08-12 00:58:01 [INFO   ] main: ####################################################################################################
+2026-08-12 00:58:01 [INFO   ] main: # 8d. Six-way material family comparison (Gd, Gd5Si2Ge2-fixed, GD/LAFESIH/MNFEPSI-tuned, LAFESIH-nanocomposite; Track A2 item + Phase 22 item 2)
+2026-08-12 00:58:01 [INFO   ] main: ####################################################################################################
+2026-08-12 00:58:20 [INFO   ] main: Six-way material family comparison at the ASHRAE operating point (Phase 22 item 2 adds the nanocomposite candidate)
+2026-08-12 00:58:20 [INFO   ] main: (T_cold=18C=291.15K, spans=[5.0, 10.0, 15.0, 20.0]K, mu0H=2.0T, 5kg/stage, 1-4 stage cascade)
+2026-08-12 00:58:20 [INFO   ] main: ====================================================================================================
+2026-08-12 00:58:20 [INFO   ] main: Tunable families (GD_FAMILY, LAFESIH_FAMILY, MNFEPSI_FAMILY) are re-tuned per span
+2026-08-12 00:58:20 [INFO   ] main: so their OWN peak lands at that span's T_mid = T_cold + span/2 (see module docstring
+2026-08-12 00:58:20 [INFO   ] main: for the +10-11K peak-vs-Tc offset this accounts for). Falls back to plain Gd where
+2026-08-12 00:58:20 [INFO   ] main: the required Tc sits outside the family's documented tunability window.
+2026-08-12 00:58:20 [INFO   ] main: candidate                      span_K  T_mid_K  Tc_used_K  tc_window           in_range  1stg_COP  1stg_Qc_W
+2026-08-12 00:58:20 [INFO   ] main: Gd (fixed)                          5    293.6      294.0  n/a (not tunable)       True     5.415     1168.0
+2026-08-12 00:58:20 [INFO   ] main: Gd5Si2Ge2 (fixed comp.)             5    293.6      276.0  n/a (not tunable)       True        --         --
+2026-08-12 00:58:20 [INFO   ] main: Gd5(SixGe1-x)4(-Ga) (tuned)         5    293.6      283.0  20.0-290.0K             True     6.396     2127.6
+2026-08-12 00:58:20 [INFO   ] main: La(Fe,Si)13Hy (tuned)               5    293.6      283.0  190.0-340.0K            True     8.922     5752.7
+2026-08-12 00:58:20 [INFO   ] main: (Mn,Fe)2(P,Si) (tuned)              5    293.6      281.2  295.3-331.2K           False     5.415     1168.0
+2026-08-12 00:58:20 [INFO   ] main: Nanocomposite (LAFESIH 3-phase blend) (tuned)      5    293.6      283.0  194.0-336.0K            True     6.542     2525.5
+2026-08-12 00:58:20 [INFO   ] main: Gd (fixed)                         10    296.1      294.0  n/a (not tunable)       True     5.089     1443.4
+2026-08-12 00:58:20 [INFO   ] main: Gd5Si2Ge2 (fixed comp.)            10    296.1      276.0  n/a (not tunable)       True        --         --
+2026-08-12 00:58:20 [INFO   ] main: Gd5(SixGe1-x)4(-Ga) (tuned)        10    296.1      285.4  20.0-290.0K             True     4.314     1352.3
+2026-08-12 00:58:20 [INFO   ] main: La(Fe,Si)13Hy (tuned)              10    296.1      285.4  190.0-340.0K            True     6.724     4989.1
+2026-08-12 00:58:20 [INFO   ] main: (Mn,Fe)2(P,Si) (tuned)             10    296.1      283.7  295.3-331.2K           False     5.089     1443.4
+2026-08-12 00:58:20 [INFO   ] main: Nanocomposite (LAFESIH 3-phase blend) (tuned)     10    296.1      285.4  194.0-336.0K            True     4.616     1753.7
+2026-08-12 00:58:20 [INFO   ] main: Gd (fixed)                         15    298.6      294.0  n/a (not tunable)       True     1.727      280.5
+2026-08-12 00:58:20 [INFO   ] main: Gd5Si2Ge2 (fixed comp.)            15    298.6      276.0  n/a (not tunable)       True        --         --
+2026-08-12 00:58:20 [INFO   ] main: Gd5(SixGe1-x)4(-Ga) (tuned)        15    298.6      287.8  20.0-290.0K             True     2.367      581.3
+2026-08-12 00:58:20 [INFO   ] main: La(Fe,Si)13Hy (tuned)              15    298.6      287.8  190.0-340.0K            True     5.348     4241.0
+2026-08-12 00:58:20 [INFO   ] main: (Mn,Fe)2(P,Si) (tuned)             15    298.6      286.2  295.3-331.2K           False     1.727      280.5
+2026-08-12 00:58:20 [INFO   ] main: Nanocomposite (LAFESIH 3-phase blend) (tuned)     15    298.6      287.8  194.0-336.0K            True     3.029      984.4
+2026-08-12 00:58:20 [INFO   ] main: Gd (fixed)                         20    301.1      294.0  n/a (not tunable)       True        --         --
+2026-08-12 00:58:20 [INFO   ] main: Gd5Si2Ge2 (fixed comp.)            20    301.1      276.0  n/a (not tunable)       True        --         --
+2026-08-12 00:58:20 [INFO   ] main: Gd5(SixGe1-x)4(-Ga) (tuned)        20    301.1      290.8  20.0-290.0K            False        --         --
+2026-08-12 00:58:20 [INFO   ] main: La(Fe,Si)13Hy (tuned)              20    301.1      290.2  190.0-340.0K            True     4.387     3499.4
+2026-08-12 00:58:20 [INFO   ] main: (Mn,Fe)2(P,Si) (tuned)             20    301.1      288.7  295.3-331.2K           False        --         --
+2026-08-12 00:58:20 [INFO   ] main: Nanocomposite (LAFESIH 3-phase blend) (tuned)     20    301.1      290.2  194.0-336.0K            True     0.932      204.6
+2026-08-12 00:58:20 [INFO   ] main: RANKED (1-stage COP_electrical, at representative span=10K):
+2026-08-12 00:58:20 [INFO   ] main:   1. La(Fe,Si)13Hy (tuned)      COP=6.72  Qc=4989.1W
+2026-08-12 00:58:20 [INFO   ] main:   2. Gd (fixed)                 COP=5.09  Qc=1443.4W
+2026-08-12 00:58:20 [INFO   ] main:   3. Nanocomposite (LAFESIH 3-phase blend) (tuned) COP=4.62  Qc=1753.7W
+2026-08-12 00:58:20 [INFO   ] main:   4. Gd5(SixGe1-x)4(-Ga) (tuned) COP=4.31  Qc=1352.3W
+2026-08-12 00:58:20 [INFO   ] main:   --  Gd5Si2Ge2 (fixed comp.)    INFEASIBLE at this span
+2026-08-12 00:58:20 [INFO   ] main:   Not independently ranked (Tc window doesn't cover this point -> fell back
+2026-08-12 00:58:20 [INFO   ] main:   to plain Gd, so these are identical to the Gd row above, not a distinct result):
+2026-08-12 00:58:20 [INFO   ] main:       (Mn,Fe)2(P,Si) (tuned)     == Gd (fixed) at this span
+2026-08-12 00:58:20 [INFO   ] main: For reference, baselines at this operating point: VCC COP=12.23, Liquid COP=19.89
+2026-08-12 00:58:20 [INFO   ] main: CONCLUSION:
+2026-08-12 00:58:20 [INFO   ] main: Best-performing AMR candidate at the representative point: La(Fe,Si)13Hy (tuned) (1-stage COP_electrical=6.72, Qc=4989.1W).
+2026-08-12 00:58:20 [INFO   ] main: This does not by itself establish that any AMR candidate beats vapor-compression or
+2026-08-12 00:58:20 [INFO   ] main: liquid cooling on COP -- see the baselines above and comparison_table.csv/step 4 for
+2026-08-12 00:58:20 [INFO   ] main: that separate, already-established conclusion. What this table adds is a fair,
+2026-08-12 00:58:20 [INFO   ] main: apples-to-apples ranking AMONG the giant-MCE material options themselves, including
+2026-08-12 00:58:20 [INFO   ] main: whether each family's documented tunability window can even reach the ASHRAE point.
+2026-08-12 00:58:20 [INFO   ] main: Wrote results/material_family_comparison.csv
+2026-08-12 00:58:20 [INFO   ] main: Wrote results/material_family_comparison.txt
+2026-08-12 00:58:20 [INFO   ] main: [stage done in 18.89s]
+2026-08-12 00:58:20 [INFO   ] main: 
+2026-08-12 00:58:20 [INFO   ] main: ####################################################################################################
+2026-08-12 00:58:20 [INFO   ] main: # 8e. Nanocomposite off-design robustness check (core/nanocomposite_material.py, Phase 22 item 2 follow-up)
+2026-08-12 00:58:20 [INFO   ] main: ####################################################################################################
+2026-08-12 00:58:22 [INFO   ] main: ==========================================================================================
+2026-08-12 00:58:22 [INFO   ] main: PHASE 22 ITEM 2 (follow-up): does the nanocomposite blend's breadth pay off
+2026-08-12 00:58:22 [INFO   ] main: when the FIXED, already-built composition operates away from its design span?
+2026-08-12 00:58:22 [INFO   ] main: ==========================================================================================
+2026-08-12 00:58:22 [INFO   ] main: Both candidates tuned ONCE at design_span_K=10.0K's own T_mid=296.15K (Tc_design=285.40K), then evaluated WITHOUT retuning at every span below:
+2026-08-12 00:58:22 [INFO   ] main:  span_K  nanocomp_COP  nanocomp_Qc_W  single_COP  single_Qc_W
+2026-08-12 00:58:22 [INFO   ] main:     5.0         3.417          863.9       0.000          0.0
+2026-08-12 00:58:22 [INFO   ] main:    10.0         4.616         1753.7       6.726       4995.8  <- design span
+2026-08-12 00:58:22 [INFO   ] main:    15.0         0.000            0.0       0.000          0.0
+2026-08-12 00:58:22 [INFO   ] main:    20.0         0.000            0.0       0.000          0.0
+2026-08-12 00:58:22 [INFO   ] main: Off-design feasibility (Qc>0): nanocomposite feasible at 1/3 off-design span(s); single phase feasible at 0/3.
+2026-08-12 00:58:22 [INFO   ] main: At 1 off-design span(s) ([5.0]), the single phase collapses to Qc=0 (span_fraction feasibility cutoff, core/amr_cycle.py) while the nanocomposite still delivers positive Qc -- its broader working range covers a span the sharply-tuned single phase cannot.
+2026-08-12 00:58:22 [INFO   ] main: CONCLUSION: The nanocomposite's breadth DOES pay off in one specific, checkable way: at 1 off-design span(s) narrower than the design span, the sharply-tuned single phase collapses to Qc=0 (its no-load DeltaT_ad no longer covers a mismatched span) while the nanocomposite -- whose working range is deliberately spread -- still delivers positive Qc. No off-design span in this set left both candidates feasible simultaneously, so no raw Qc/COP comparison could be made there; the design span itself (where the single phase is optimally tuned and wins outright) is the only point where both are feasible. So the genuine finding here is ROBUSTNESS TO NARROWING (avoiding a catastrophic Qc=0 failure), not raw performance, and this is a first-pass finding at ONE spread value and ONE design/off-design span set, not a general claim.
+2026-08-12 00:58:22 [INFO   ] main: Wrote results/nanocomposite_robustness.txt
+2026-08-12 00:58:22 [INFO   ] main: [stage done in 2.14s]
+2026-08-12 00:58:22 [INFO   ] main: 
+2026-08-12 00:58:22 [INFO   ] main: ####################################################################################################
+2026-08-12 00:58:22 [INFO   ] main: # 8b. First-order Landau model calibration check (core/first_order_mce.py, reached transitively otherwise)
+2026-08-12 00:58:22 [INFO   ] main: ####################################################################################################
+2026-08-12 00:58:22 [INFO   ] main: First-order Landau model calibration check, Gd5Si2Ge2, T=Tc=276K
+2026-08-12 00:58:22 [INFO   ] main:   1T: dS=-0.25 J/(kg K)   dTad=0.31 K
+2026-08-12 00:58:22 [INFO   ] main:   2T: dS=-0.49 J/(kg K)   dTad=0.61 K
+2026-08-12 00:58:22 [INFO   ] main:   5T: dS=-1.17 J/(kg K)   dTad=1.46 K
+2026-08-12 00:58:22 [INFO   ] main: Target: dS ~ -18 J/(kg K) at 5T (Pecharsky & Gschneidner 1997 review value)
+2026-08-12 00:58:22 [INFO   ] main: [stage done in 0.00s]
+2026-08-12 00:58:22 [INFO   ] main: 
+2026-08-12 00:58:22 [INFO   ] main: ####################################################################################################
+2026-08-12 00:58:22 [INFO   ] main: # 8c. Giguere et al. (1999) direct-measurement cross-check (core/giguere_validation.py)
+2026-08-12 00:58:22 [INFO   ] main: ####################################################################################################
+2026-08-12 00:58:23 [INFO   ] main: First-order Landau model (first_order_mce.py) vs. Giguere et al. (1999)
+2026-08-12 00:58:23 [INFO   ] main: DIRECT adiabatic temperature change measurement, Gd5Si2Ge2, 7 T
+2026-08-12 00:58:23 [INFO   ] main: ==============================================================================
+2026-08-12 00:58:23 [INFO   ] main: Model peak DeltaT_ad at 7 T: 24.17 K (at T=286.4 K)
+2026-08-12 00:58:23 [INFO   ] main: Giguere et al. DIRECT measurement at 7 T: 10.0 K (Clausius-Clapeyron cross-check: 9.9 K)
+2026-08-12 00:58:23 [INFO   ] main: Giguere et al. INDIRECT (Maxwell-relation, 'giant') value at 7 T: 14.9 K
+2026-08-12 00:58:23 [INFO   ] main: Model error vs. DIRECT measurement:   +142%  (model overestimates by 2.42x)
+2026-08-12 00:58:23 [INFO   ] main: Model error vs. INDIRECT (Maxwell):    +62%  (model overestimates by 1.62x)
+2026-08-12 00:58:23 [INFO   ] main: For reference, Giguere et al.'s OWN indirect-vs-direct overestimate: 1.49x (14.9 K / 10.0 K)
+2026-08-12 00:58:23 [INFO   ] main: CONCLUSION: the model, calibrated to the widely-quoted 'giant' peak DeltaS_M
+2026-08-12 00:58:23 [INFO   ] main: (~18 J/(kg K) at 5T, itself a Maxwell-relation/indirect literature value),
+2026-08-12 00:58:23 [INFO   ] main: overestimates Giguere et al.'s DIRECTLY measured DeltaT_ad by a wider margin
+2026-08-12 00:58:23 [INFO   ] main: (2.42x) than the paper's own indirect-vs-direct gap
+2026-08-12 00:58:23 [INFO   ] main: (1.49x). This is NOT a contradiction of the paper --
+2026-08-12 00:58:23 [INFO   ] main: it is additive: Giguere et al.'s finding is that Maxwell-relation DeltaS_M
+2026-08-12 00:58:23 [INFO   ] main: overestimates DeltaT_ad for a first-order transition; honesty flag #1 in
+2026-08-12 00:58:23 [INFO   ] main: first_order_mce.py separately notes this model's lattice-only C_lattice
+2026-08-12 00:58:23 [INFO   ] main: denominator (no latent-heat correction) is inappropriate for a first-order
+2026-08-12 00:58:23 [INFO   ] main: transition. Both effects point the same way and appear to compound here.
+2026-08-12 00:58:23 [INFO   ] main: This model should NOT be refit to match Giguere's direct DeltaT_ad instead --
+2026-08-12 00:58:23 [INFO   ] main: doing so would abandon its documented calibration to the peak DeltaS_M literature
+2026-08-12 00:58:23 [INFO   ] main: value, and this 0-D lattice-only-C_p framework cannot simultaneously match both
+2026-08-12 00:58:23 [INFO   ] main: (that would require resolving the transition's latent heat, which honesty flag #1
+2026-08-12 00:58:23 [INFO   ] main: already flags as out of scope for this model). Instead: DeltaT_ad predictions from
+2026-08-12 00:58:23 [INFO   ] main: this module should be treated as upper-bound-ish, roughly 2-2.5x optimistic vs. a
+2026-08-12 00:58:23 [INFO   ] main: direct measurement at the one field/composition point checked here, and any
+2026-08-12 00:58:23 [INFO   ] main: downstream design conclusion (e.g. cascade.py's graded-cascade capacity/COP numbers)
+2026-08-12 00:58:23 [INFO   ] main: that depends on this module's DeltaT_ad should be read with that correction in mind
+2026-08-12 00:58:23 [INFO   ] main: (see core.first_order_mce.composition_tuned_material's apply_giguere_correction flag).
+2026-08-12 00:58:23 [INFO   ] main: Wrote results/giguere_validation.txt
+2026-08-12 00:58:23 [INFO   ] main: 2T: Gd5Si2Ge2 peak dTad raw=21.71K  corrected= 8.98K  |  Gd peak dTad=10.32K  |  ratio raw=2.10  corrected=0.87  (Pecharsky & Gschneidner 1997: ~1.30)
+2026-08-12 00:58:24 [INFO   ] main: 5T: Gd5Si2Ge2 peak dTad raw=23.28K  corrected= 9.63K  |  Gd peak dTad=18.83K  |  ratio raw=1.24  corrected=0.51  (Pecharsky & Gschneidner 1997: ~1.30)
+2026-08-12 00:58:24 [INFO   ] main: Finding: the RAW model's ratio is closer to Pecharsky & Gschneidner's ~1.30 than the Giguere-corrected model's ratio is -- applying the single-field (7T) DTAD_CORRECTION_FACTOR at 2T/5T overcorrects to the point of predicting Gd5Si2Ge2 underperforms Gd (ratio < 1), contradicting the 'giant' MCE premise. See this function's docstring.
+2026-08-12 00:58:24 [INFO   ] main: [stage done in 1.11s]
+2026-08-12 00:58:24 [INFO   ] main: 
+2026-08-12 00:58:24 [INFO   ] main: ####################################################################################################
+2026-08-12 00:58:24 [INFO   ] main: # 9. Sobol global sensitivity analysis (constant-loss model)
+2026-08-12 00:58:24 [INFO   ] main: ####################################################################################################
+2026-08-12 00:58:27 [INFO   ] main: Sobol sensitivity analysis: AMR electrical COP at T_cold=291.0K, span=10.0K -- Constant parasitic-loss model
+2026-08-12 00:58:27 [INFO   ] main: Samples: 768 (Saltelli, N_base=64)
+2026-08-12 00:58:27 [INFO   ] main: parameter                     S1   S1_conf        ST   ST_conf
+2026-08-12 00:58:27 [INFO   ] main: mu0H_max_T               -0.0000    0.0000    0.0000    0.0000
+2026-08-12 00:58:27 [INFO   ] main: frequency_Hz              0.0000    0.0000    0.0000    0.0000
+2026-08-12 00:58:27 [INFO   ] main: fluid_mdot_kgs            0.0000    0.0000    0.0000    0.0000
+2026-08-12 00:58:27 [INFO   ] main: regen_effectiveness       0.0043    0.0131    0.0017    0.0008
+2026-08-12 00:58:27 [INFO   ] main: parasitic_fraction        1.0172    0.2821    1.0052    0.2518
+2026-08-12 00:58:27 [INFO   ] main: Ranked by total-order sensitivity (ST):
+2026-08-12 00:58:27 [INFO   ] main:   parasitic_fraction     ST=1.0052
+2026-08-12 00:58:27 [INFO   ] main:   regen_effectiveness    ST=0.0017
+2026-08-12 00:58:27 [INFO   ] main:   mu0H_max_T             ST=0.0000
+2026-08-12 00:58:27 [INFO   ] main:   fluid_mdot_kgs         ST=0.0000
+2026-08-12 00:58:27 [INFO   ] main:   frequency_Hz           ST=0.0000
+2026-08-12 00:58:27 [INFO   ] main: Interpretation:
+2026-08-12 00:58:27 [INFO   ] main: mu0H_max, frequency and fluid_mdot show ~0 sensitivity because the
+2026-08-12 00:58:27 [INFO   ] main: current amr_cycle.py model structure makes COP_electrical algebraically
+2026-08-12 00:58:27 [INFO   ] main: independent of Qc: COP_electrical = 1 / [(Th/Tc-1)/eta_2nd_law(eps) +
+2026-08-12 00:58:27 [INFO   ] main: parasitic_fraction], since both W_mag and W_parasitic scale linearly
+2026-08-12 00:58:27 [INFO   ] main: with Qc and cancel. Field/frequency/flow rate DO change how much cooling
+2026-08-12 00:58:27 [INFO   ] main: you get (Qc, via dTad) but NOT, in this model, how efficiently you get it.
+2026-08-12 00:58:27 [INFO   ] main: Real AMR systems don't have this decoupling -- eddy-current losses scale
+2026-08-12 00:58:27 [INFO   ] main: with frequency^2, viscous dissipation with mdot^2, and magnet support/
+2026-08-12 00:58:27 [INFO   ] main: motor sizing with field -- so eta_2nd_law and parasitic_fraction should
+2026-08-12 00:58:27 [INFO   ] main: be state-dependent functions rather than constants. The
+2026-08-12 00:58:27 [INFO   ] main: state-dependent formulation implemented in loss_model.py
+2026-08-12 00:58:27 [INFO   ] main: addresses this limitation.
+2026-08-12 00:58:27 [INFO   ] main: Wrote results/sobol_results_phase2_constant.txt
+2026-08-12 00:58:27 [INFO   ] main: [stage done in 3.85s]
+2026-08-12 00:58:27 [INFO   ] main: 
+2026-08-12 00:58:27 [INFO   ] main: ####################################################################################################
+2026-08-12 00:58:27 [INFO   ] main: # 9b. Sobol global sensitivity analysis (state-dependent loss model)
+2026-08-12 00:58:27 [INFO   ] main: ####################################################################################################
+2026-08-12 00:58:31 [INFO   ] main: Sobol sensitivity analysis: AMR electrical COP at T_cold=291.0K, span=10.0K -- State-dependent loss model
+2026-08-12 00:58:31 [INFO   ] main: Samples: 768 (Saltelli, N_base=64)
+2026-08-12 00:58:31 [INFO   ] main: parameter                     S1   S1_conf        ST   ST_conf
+2026-08-12 00:58:31 [INFO   ] main: mu0H_max_T                0.0139    0.0348    0.0061    0.0026
+2026-08-12 00:58:31 [INFO   ] main: frequency_Hz              0.9067    0.2984    0.8772    0.2847
+2026-08-12 00:58:31 [INFO   ] main: fluid_mdot_kgs            0.1585    0.1154    0.1346    0.0576
+2026-08-12 00:58:31 [INFO   ] main: regen_effectiveness       0.0260    0.0493    0.0118    0.0062
+2026-08-12 00:58:31 [INFO   ] main: parasitic_fraction        0.0000    0.0000    0.0000    0.0000
+2026-08-12 00:58:31 [INFO   ] main: Ranked by total-order sensitivity (ST):
+2026-08-12 00:58:31 [INFO   ] main:   frequency_Hz           ST=0.8772
+2026-08-12 00:58:31 [INFO   ] main:   fluid_mdot_kgs         ST=0.1346
+2026-08-12 00:58:31 [INFO   ] main:   regen_effectiveness    ST=0.0118
+2026-08-12 00:58:31 [INFO   ] main:   mu0H_max_T             ST=0.0061
+2026-08-12 00:58:31 [INFO   ] main:   parasitic_fraction     ST=0.0000
+2026-08-12 00:58:31 [INFO   ] main: Interpretation: with the state-dependent loss model (eddy ~ f²H²,
+2026-08-12 00:58:31 [INFO   ] main: pump ~ mdot^2, base overhead ~ Qc) in place of the constant
+2026-08-12 00:58:31 [INFO   ] main: parasitic_fraction, mu0H_max/frequency/fluid_mdot now carry real
+2026-08-12 00:58:31 [INFO   ] main: sensitivity in COP_electrical, because raising frequency or field no
+2026-08-12 00:58:31 [INFO   ] main: longer only raises Qc for free -- it also raises the eddy-current loss
+2026-08-12 00:58:31 [INFO   ] main: term, producing a genuine efficiency-versus-capacity trade-off
+2026-08-12 00:58:31 [INFO   ] main: that can be explored during multi-objective optimization.
+2026-08-12 00:58:31 [INFO   ] main: Caveat: the loss coefficients are calibrated from a small set of
+2026-08-12 00:58:31 [INFO   ] main: experimental systems (see loss_model.py). The qualitative trends
+2026-08-12 00:58:31 [INFO   ] main: are physically motivated, while the exact sensitivity magnitudes
+2026-08-12 00:58:31 [INFO   ] main: should be interpreted in light of the available calibration data.
+2026-08-12 00:58:31 [INFO   ] main: Wrote results/sobol_results.txt
+2026-08-12 00:58:31 [INFO   ] main: [stage done in 3.90s]
+2026-08-12 00:58:31 [INFO   ] main: 
+2026-08-12 00:58:31 [INFO   ] main: ####################################################################################################
+2026-08-12 00:58:31 [INFO   ] main: # 10. Response-surface (RSM) surrogate fit
+2026-08-12 00:58:31 [INFO   ] main: ####################################################################################################
+2026-08-12 00:58:34 [INFO   ] main: Quadratic RSM surrogate for AMR cooling capacity Qc (W)
+2026-08-12 00:58:34 [INFO   ] main: Design variables: ['mu0H_max_T', 'frequency_Hz', 'fluid_mdot_kgs', 'regen_eff', 'span_K']
+2026-08-12 00:58:34 [INFO   ] main: Bounds: [[1.0, 3.0], [0.5, 5.0], [0.02, 0.2], [0.6, 0.95], [3.0, 18.0]]
+2026-08-12 00:58:34 [INFO   ] main: Train samples: 300, Held-out test samples: 100
+2026-08-12 00:58:34 [INFO   ] main: Held-out R^2 = 0.8620, RMSE = 390.07 W
+2026-08-12 00:58:34 [INFO   ] main: intercept                     366.222667
+2026-08-12 00:58:34 [INFO   ] main: mu0H_max_T                   -964.111464
+2026-08-12 00:58:34 [INFO   ] main: frequency_Hz                 -56.358977
+2026-08-12 00:58:34 [INFO   ] main: fluid_mdot_kgs               -6211.819430
+2026-08-12 00:58:34 [INFO   ] main: regen_eff                    -4057.319326
+2026-08-12 00:58:34 [INFO   ] main: span_K                        495.537860
+2026-08-12 00:58:34 [INFO   ] main: mu0H_max_T^2                 -38.580098
+2026-08-12 00:58:34 [INFO   ] main: frequency_Hz^2               -19.166251
+2026-08-12 00:58:34 [INFO   ] main: fluid_mdot_kgs^2              4867.570781
+2026-08-12 00:58:34 [INFO   ] main: regen_eff^2                   1110.897683
+2026-08-12 00:58:34 [INFO   ] main: span_K^2                     -17.870614
+2026-08-12 00:58:34 [INFO   ] main: mu0H_max_T*frequency_Hz       28.957902
+2026-08-12 00:58:34 [INFO   ] main: mu0H_max_T*fluid_mdot_kgs     8969.092657
+2026-08-12 00:58:34 [INFO   ] main: mu0H_max_T*regen_eff          1492.789454
+2026-08-12 00:58:34 [INFO   ] main: mu0H_max_T*span_K            -15.346615
+2026-08-12 00:58:34 [INFO   ] main: frequency_Hz*fluid_mdot_kgs   182.644711
+2026-08-12 00:58:34 [INFO   ] main: frequency_Hz*regen_eff        155.790944
+2026-08-12 00:58:34 [INFO   ] main: frequency_Hz*span_K          -1.754455
+2026-08-12 00:58:34 [INFO   ] main: fluid_mdot_kgs*regen_eff      12027.916210
+2026-08-12 00:58:34 [INFO   ] main: fluid_mdot_kgs*span_K        -1138.856624
+2026-08-12 00:58:34 [INFO   ] main: regen_eff*span_K             -91.909222
+2026-08-12 00:58:34 [INFO   ] main: Wrote results/rsm_coefficients.txt
+2026-08-12 00:58:34 [INFO   ] main: [stage done in 2.29s]
+2026-08-12 00:58:34 [INFO   ] main: 
+2026-08-12 00:58:34 [INFO   ] main: ####################################################################################################
+2026-08-12 00:58:34 [INFO   ] main: # 11. NSGA-III multi-objective design optimization (material + geometry co-optimization, Phase 15 item 2)
+2026-08-12 00:58:34 [INFO   ] main: ####################################################################################################
+2026-08-12 00:58:36 [INFO   ] main: _material_candidates: (Mn,Fe)2(P,Si) needs Tc=283.5K to hit T_mid=296.0K, outside its documented window [295.3, 331.2]K -- dropped from this operating point's candidate set (not substituted with a duplicate Gd row).
+2026-08-12 00:58:36 [INFO   ] main: Phase 15 material co-optimization: 3 candidate(s) -- Gd, Gd5(SixGe1-x)4(-Ga) (tuned, Tc=285.3K), La(Fe,Si)13Hy (tuned, Tc=285.3K)
+2026-08-12 00:58:42 [INFO   ] main:   Gd                                       22 Pareto-optimal design(s) found -> results/pareto_front_by_material\Gd.csv
+2026-08-12 00:58:43 [INFO   ] main:   Gd5(SixGe1-x)4(-Ga) (tuned, Tc=285.3K)   22 Pareto-optimal design(s) found -> results/pareto_front_by_material\Gd5_SixGe1_x_4__Ga___tuned__Tc_285_3K_.csv
+2026-08-12 00:58:43 [INFO   ] main:   La(Fe,Si)13Hy (tuned, Tc=285.3K)         21 Pareto-optimal design(s) found -> results/pareto_front_by_material\La_Fe_Si_13Hy__tuned__Tc_285_3K_.csv
+2026-08-12 00:58:43 [INFO   ] main: Merged across 3 material candidate(s): 65 total designs -> 21 globally non-dominated design(s) after cross-material Pareto filtering.
+2026-08-12 00:58:43 [INFO   ] main: Wrote results/pareto_front.csv
+2026-08-12 00:58:43 [INFO   ] main: Best electrical COP      material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=1.138T  f=0.423Hz  mdot=0.4835kg/s  mass=1.15kg  d_p=0.6309mm  bf=0.414  -> COP_elec=9.528, Qc=25480.78W, cost=$175.9
+2026-08-12 00:58:43 [INFO   ] main: Best cooling capacity    material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=2.73T  f=2.559Hz  mdot=0.4943kg/s  mass=10.5kg  d_p=0.1332mm  bf=0.42  -> COP_elec=6.211, Qc=39282.46W, cost=$3738.8
+2026-08-12 00:58:43 [INFO   ] main: Lowest cost              material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=1.138T  f=0.423Hz  mdot=0.4835kg/s  mass=1.15kg  d_p=0.6309mm  bf=0.414  -> COP_elec=9.528, Qc=25480.78W, cost=$175.9
+2026-08-12 00:58:43 [INFO   ] main: Knee point (balanced)    material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=1.056T  f=2.47Hz  mdot=0.4985kg/s  mass=6.31kg  d_p=0.3416mm  bf=0.409  -> COP_elec=8.908, Qc=36287.31W, cost=$900.4
+2026-08-12 00:58:43 [INFO   ] main: Material representation in the merged, globally non-dominated front:
+2026-08-12 00:58:43 [INFO   ] main:   La(Fe,Si)13Hy (tuned, Tc=285.3K)         21 design(s) (100%)
+2026-08-12 00:58:43 [INFO   ] main: particle_diameter spans 0.056-1.835 mm across the merged front -- the geometry-explicit pumping-power/effectiveness trade-off (see core/geometry_analysis.py, core/amr_cycle.py's Phase 15 wiring) is a real, active dimension of this search, not degenerate at either bound.
+2026-08-12 00:58:43 [INFO   ] main: Regenerator mass spans 1.15-15.00 kg across the merged front. The NTU thermal model captures the expected trade-off between additional regenerator material, cooling capacity, and material cost.
+2026-08-12 00:58:43 [INFO   ] main: [stage done in 9.87s]
+2026-08-12 00:58:43 [INFO   ] main: 
+2026-08-12 00:58:43 [INFO   ] main: ####################################################################################################
+2026-08-12 00:58:43 [INFO   ] main: # 11b. Hysteresis sensitivity: does Phase 16's thermal-hysteresis loss change the Phase 15 material-selection result? (core/hysteresis_sensitivity.py, Phase 16)
+2026-08-12 00:58:43 [INFO   ] main: ####################################################################################################
+2026-08-12 00:58:43 [INFO   ] main: ======================================================================
+2026-08-12 00:58:43 [INFO   ] main: Phase 16 hysteresis sensitivity: run 1/2 -- hysteresis ON (current literature-placeholder values) [seed=1]
+2026-08-12 00:58:43 [INFO   ] main: ======================================================================
+2026-08-12 00:58:46 [INFO   ] main: _material_candidates: (Mn,Fe)2(P,Si) needs Tc=283.5K to hit T_mid=296.0K, outside its documented window [295.3, 331.2]K -- dropped from this operating point's candidate set (not substituted with a duplicate Gd row).
+2026-08-12 00:58:46 [INFO   ] main: Phase 15 material co-optimization: 3 candidate(s) -- Gd, Gd5(SixGe1-x)4(-Ga) (tuned, Tc=285.3K), La(Fe,Si)13Hy (tuned, Tc=285.3K)
+2026-08-12 00:58:49 [INFO   ] main:   Gd                                       15 Pareto-optimal design(s) found
+2026-08-12 00:58:49 [INFO   ] main:   Gd5(SixGe1-x)4(-Ga) (tuned, Tc=285.3K)   21 Pareto-optimal design(s) found
+2026-08-12 00:58:50 [INFO   ] main:   La(Fe,Si)13Hy (tuned, Tc=285.3K)         21 Pareto-optimal design(s) found
+2026-08-12 00:58:50 [INFO   ] main: Merged across 3 material candidate(s): 57 total designs -> 21 globally non-dominated design(s) after cross-material Pareto filtering.
+2026-08-12 00:58:50 [INFO   ] main: Wrote results/pareto_front_hysteresis_on.csv
+2026-08-12 00:58:50 [INFO   ] main: Best electrical COP      material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=1.799T  f=0.465Hz  mdot=0.4998kg/s  mass=13.66kg  d_p=1.7477mm  bf=0.421  -> COP_elec=9.502, Qc=31520.33W, cost=$3241.5
+2026-08-12 00:58:50 [INFO   ] main: Best cooling capacity    material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=1.553T  f=3.956Hz  mdot=0.4971kg/s  mass=14.9kg  d_p=0.9417mm  bf=0.421  -> COP_elec=6.812, Qc=39072.04W, cost=$3069.7
+2026-08-12 00:58:50 [INFO   ] main: Lowest cost              material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=1.077T  f=2.607Hz  mdot=0.4855kg/s  mass=1.27kg  d_p=0.9412mm  bf=0.427  -> COP_elec=8.579, Qc=24537.0W, cost=$184.1
+2026-08-12 00:58:50 [INFO   ] main: Knee point (balanced)    material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=1.308T  f=1.508Hz  mdot=0.4856kg/s  mass=8.1kg  d_p=0.9289mm  bf=0.427  -> COP_elec=9.255, Qc=34346.75W, cost=$1415.6
+2026-08-12 00:58:50 [INFO   ] main: Material representation in the merged, globally non-dominated front:
+2026-08-12 00:58:50 [INFO   ] main:   La(Fe,Si)13Hy (tuned, Tc=285.3K)         21 design(s) (100%)
+2026-08-12 00:58:50 [INFO   ] main: particle_diameter spans 0.551-1.786 mm across the merged front -- the geometry-explicit pumping-power/effectiveness trade-off (see core/geometry_analysis.py, core/amr_cycle.py's Phase 15 wiring) is a real, active dimension of this search, not degenerate at either bound.
+2026-08-12 00:58:50 [INFO   ] main: Regenerator mass spans 1.25-14.90 kg across the merged front. The NTU thermal model captures the expected trade-off between additional regenerator material, cooling capacity, and material cost.
+2026-08-12 00:58:50 [INFO   ] main: ======================================================================
+2026-08-12 00:58:50 [INFO   ] main: Phase 16 hysteresis sensitivity: run 2/2 -- hysteresis OFF (forced to 0.0, reproducing pre-Phase-16 behavior) [seed=1]
+2026-08-12 00:58:50 [INFO   ] main: ======================================================================
+2026-08-12 00:58:53 [INFO   ] main: _material_candidates: (Mn,Fe)2(P,Si) needs Tc=283.5K to hit T_mid=296.0K, outside its documented window [295.3, 331.2]K -- dropped from this operating point's candidate set (not substituted with a duplicate Gd row).
+2026-08-12 00:58:53 [INFO   ] main: Phase 15 material co-optimization: 3 candidate(s) -- Gd, Gd5(SixGe1-x)4(-Ga) (tuned, Tc=285.3K), La(Fe,Si)13Hy (tuned, Tc=285.3K)
+2026-08-12 00:58:55 [INFO   ] main:   Gd                                       15 Pareto-optimal design(s) found
+2026-08-12 00:58:55 [INFO   ] main:   Gd5(SixGe1-x)4(-Ga) (tuned, Tc=285.3K)   18 Pareto-optimal design(s) found
+2026-08-12 00:58:56 [INFO   ] main:   La(Fe,Si)13Hy (tuned, Tc=285.3K)         21 Pareto-optimal design(s) found
+2026-08-12 00:58:56 [INFO   ] main: Merged across 3 material candidate(s): 54 total designs -> 24 globally non-dominated design(s) after cross-material Pareto filtering.
+2026-08-12 00:58:56 [INFO   ] main: Wrote results/pareto_front_hysteresis_off.csv
+2026-08-12 00:58:56 [INFO   ] main: Best electrical COP      material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=1.105T  f=1.197Hz  mdot=0.4131kg/s  mass=14.82kg  d_p=1.6991mm  bf=0.41  -> COP_elec=9.919, Qc=30444.49W, cost=$2206.0
+2026-08-12 00:58:56 [INFO   ] main: Best cooling capacity    material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=2.855T  f=3.535Hz  mdot=0.4916kg/s  mass=14.46kg  d_p=0.1883mm  bf=0.409  -> COP_elec=5.317, Qc=39950.78W, cost=$5378.8
+2026-08-12 00:58:56 [INFO   ] main: Lowest cost              material=Gd5(SixGe1-x)4(-Ga) (tuned, Tc=285.3K) H=1.239T  f=1.454Hz  mdot=0.3569kg/s  mass=1.7kg  d_p=1.0393mm  bf=0.387  -> COP_elec=7.881, Qc=4801.84W, cost=$302.9
+2026-08-12 00:58:56 [INFO   ] main: Knee point (balanced)    material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=1.247T  f=1.552Hz  mdot=0.4886kg/s  mass=8.11kg  d_p=1.9722mm  bf=0.401  -> COP_elec=9.624, Qc=33461.74W, cost=$1354.7
+2026-08-12 00:58:56 [INFO   ] main: Material representation in the merged, globally non-dominated front:
+2026-08-12 00:58:56 [INFO   ] main:   La(Fe,Si)13Hy (tuned, Tc=285.3K)         21 design(s) (88%)
+2026-08-12 00:58:56 [INFO   ] main:   Gd5(SixGe1-x)4(-Ga) (tuned, Tc=285.3K)   2 design(s) (8%)
+2026-08-12 00:58:56 [INFO   ] main:   Gd                                       1 design(s) (4%)
+2026-08-12 00:58:56 [INFO   ] main: particle_diameter spans 0.188-1.972 mm across the merged front -- the geometry-explicit pumping-power/effectiveness trade-off (see core/geometry_analysis.py, core/amr_cycle.py's Phase 15 wiring) is a real, active dimension of this search, not degenerate at either bound.
+2026-08-12 00:58:56 [INFO   ] main: Regenerator mass spans 1.70-14.91 kg across the merged front. The NTU thermal model captures the expected trade-off between additional regenerator material, cooling capacity, and material cost.
+2026-08-12 00:58:56 [INFO   ] main: Phase 16 hysteresis sensitivity: material composition of the merged,
+2026-08-12 00:58:56 [INFO   ] main: globally non-dominated Pareto front, hysteresis ON vs OFF.
+2026-08-12 00:58:56 [INFO   ] main: (pop_size=32, n_gen=15, seed=1 -- see module
+2026-08-12 00:58:56 [INFO   ] main:  docstring honesty flag #1 on why this is smaller than
+2026-08-12 00:58:56 [INFO   ] main:  run_optimization()'s own 40/25 production default.)
+2026-08-12 00:58:56 [INFO   ] main: Hysteresis literature-placeholder values used in the ON run:
+2026-08-12 00:58:56 [INFO   ] main:   Gd5Si2Ge2        8.0 J/kg  (see core/first_order_mce.py for provenance/caveats)
+2026-08-12 00:58:56 [INFO   ] main:   La(Fe,Si)13Hy    12.3 J/kg  (see core/first_order_mce.py for provenance/caveats)
+2026-08-12 00:58:56 [INFO   ] main:   Mn-Fe-P-Si       25.0 J/kg  (see core/first_order_mce.py for provenance/caveats)
+2026-08-12 00:58:56 [INFO   ] main: Material                                   OFF (pre-Ph16)    ON (Ph16)    Delta
+2026-08-12 00:58:56 [INFO   ] main: ------------------------------------------------------------------------------
+2026-08-12 00:58:56 [INFO   ] main: Gd                                                      1            0       -1
+2026-08-12 00:58:56 [INFO   ] main: Gd5(SixGe1-x)4(-Ga) (tuned, Tc=285.3K)                  2            0       -2
+2026-08-12 00:58:56 [INFO   ] main: La(Fe,Si)13Hy (tuned, Tc=285.3K)                       21           21       +0
+2026-08-12 00:58:56 [INFO   ] main: ------------------------------------------------------------------------------
+2026-08-12 00:58:56 [INFO   ] main: TOTAL front size                                       24           21       -3
+2026-08-12 00:58:56 [INFO   ] main: La(Fe,Si)13Hy share of merged front: 88% (OFF) -> 100% (ON)
+2026-08-12 00:58:56 [INFO   ] main: See this module's docstring (honesty flags 1-3) before treating the
+2026-08-12 00:58:56 [INFO   ] main: above as a settled, publication-quality answer rather than a
+2026-08-12 00:58:56 [INFO   ] main: directional sensitivity check.
+2026-08-12 00:58:56 [INFO   ] main: Wrote results/hysteresis_sensitivity.txt
+2026-08-12 00:58:56 [INFO   ] main: [stage done in 12.42s]
+2026-08-12 00:58:56 [INFO   ] main: 
+2026-08-12 00:58:56 [INFO   ] main: ####################################################################################################
+2026-08-12 00:58:56 [INFO   ] main: # 11c. Thermal-diode sensitivity study: mechanical-contact active thermal diode (core/thermal_diode.py, core/thermal_diode_analysis.py, Phase 18)
+2026-08-12 00:58:56 [INFO   ] main: ####################################################################################################
+2026-08-12 00:58:56 [INFO   ] main: ==========================================================================================
+2026-08-12 00:58:56 [INFO   ] main: PHASE 18: mechanical-contact active thermal diode -- scoped-down
+2026-08-12 00:58:56 [INFO   ] main: sensitivity study, motivated by Kitanovski et al. (2015) Ch. 6.
+2026-08-12 00:58:56 [INFO   ] main: See core/thermal_diode.py's module docstring for the full honesty flag
+2026-08-12 00:58:56 [INFO   ] main: (this project's copy of the book does not include Ch. 6, pp. 211-268).
+2026-08-12 00:58:56 [INFO   ] main: ==========================================================================================
+2026-08-12 00:58:56 [INFO   ] main: --- Step 1: does this repo's model have a mechanical-switching frequency ceiling for a diode to relax? ---
+2026-08-12 00:58:56 [INFO   ] main: core/optimize.py's NSGA-III search-space frequency upper bound is 5.0 Hz.
+2026-08-12 00:58:56 [INFO   ] main: AMRSystem itself (core/amr_cycle.py) has NO internal frequency ceiling: frequency only ever enters W_eddy~f^2 and W_hys~f (both monotonic, uncapped parasitic-loss terms), never a hard cutoff on cooling_capacity() or magnetic_work().
+2026-08-12 00:58:56 [INFO   ] main: No comment, docstring, or ROADMAP.md entry ties the 5.0 Hz optimize.py bound to a mechanical-valve-switching limit specifically -- it is an unexplained round-number search-space bound, not a physical constraint this module can relax.
+2026-08-12 00:58:56 [INFO   ] main: --- Step 2: COP_electrical impact of the (illustrative) diode actuation cost across frequency, at T_cold=291.0K, span=10.0K, mu0H=1.5T, mass=5.0kg, mdot=0.08kg/s ---
+2026-08-12 00:58:56 [INFO   ] main:   f= 0.50Hz   COP_no_diode= 7.5048   COP_diode_assisted= 7.5032   delta= -0.02%
+2026-08-12 00:58:56 [INFO   ] main:   f= 1.00Hz   COP_no_diode= 5.2788   COP_diode_assisted= 5.2773   delta= -0.03%
+2026-08-12 00:58:56 [INFO   ] main:   f= 2.00Hz   COP_no_diode= 2.4041   COP_diode_assisted= 2.4035   delta= -0.03%
+2026-08-12 00:58:56 [INFO   ] main:   f= 4.00Hz   COP_no_diode= 0.7524   COP_diode_assisted= 0.7523   delta= -0.02%
+2026-08-12 00:58:56 [INFO   ] main:   f= 8.00Hz   COP_no_diode= 0.2007   COP_diode_assisted= 0.2007   delta= -0.01%
+2026-08-12 00:58:56 [INFO   ] main: --- Step 3: cycle_time_reduction_factor() illustrative worked example ---
+2026-08-12 00:58:56 [INFO   ] main:   Illustrative example only (NOT a literature value -- see docstring): conventional valve switch time=0.5s, diode switch time=0.05s -> 90% dead-time reduction per half-cycle IF these numbers were real.
+2026-08-12 00:58:56 [INFO   ] main: --- Conclusion ---
+2026-08-12 00:58:56 [INFO   ] main: The (illustrative, unbenchmarked) actuation switching-power cost in DEFAULT_MECHANICAL_CONTACT_DIODE reduces COP_electrical by at most 0.03% across the frequencies swept here -- a small effect relative to the eddy-current/base-overhead losses that already dominate W_parasitic at this operating point, because the illustrative actuation_energy_J_per_cycle=0.05J is small. This module deliberately does NOT model any offsetting heat-transfer benefit from the diode's rectification_ratio (no closed-form relation for how rectification ratio would improve AMR cycle performance was available to digitize -- see honesty flag), so net COP_electrical is <= the no-diode baseline by construction here; this is a documented cost-only accounting, not a claim that real mechanical-contact thermal diodes are a net negative for AMR performance. Step 1 additionally found that this repo's model has NO internal mechanical-switching frequency ceiling for a diode-assisted design to relax in the first place -- the only frequency bound anywhere (optimize.py's NSGA-III search bound) is an unexplained round number, not a physical constraint. No benchmark device in this repo's corpus uses thermal diodes, so none of this is validated against real hardware -- treat this module as a design-exploration tool, exactly the disposition the Phase 18 plan itself recommended for this item, not a validated feature.
+2026-08-12 00:58:56 [INFO   ] main: [stage done in 0.06s]
+2026-08-12 00:58:56 [INFO   ] main: 
+2026-08-12 00:58:56 [INFO   ] main: ####################################################################################################
+2026-08-12 00:58:56 [INFO   ] main: # 11d. Magnet-geometry (Halbach-cylinder) field-vs-mass cost model (core/magnet_geometry.py, Phase 19)
+2026-08-12 00:58:56 [INFO   ] main: ####################################################################################################
+2026-08-12 00:58:56 [INFO   ] main: ==========================================================================================
+2026-08-12 00:58:56 [INFO   ] main: PHASE 19: Halbach-cylinder field-vs-magnet-mass geometry model
+2026-08-12 00:58:56 [INFO   ] main: See core/magnet_geometry.py's module docstring (HONESTY FLAGS 1-2) for
+2026-08-12 00:58:56 [INFO   ] main: what this project's copy of Kitanovski et al. (2015) does and does not
+2026-08-12 00:58:56 [INFO   ] main: cover, and for a citation correction found while doing this pass.
+2026-08-12 00:58:56 [INFO   ] main: ==========================================================================================
+2026-08-12 00:58:56 [INFO   ] main: Representative air-gap volume: mass_regenerator=5.0kg Gd, porosity=0.365 -> V_bed=0.997 L (bed_cross_section_area=0.002 m^2)
+2026-08-12 00:58:56 [INFO   ] main:   mu0H (T)   magnet mass (kg)   magnet $      MCM $    total $   dTad (K)          $/K
+2026-08-12 00:58:56 [INFO   ] main:        0.5             8.2041     328.16     157.48     485.64      3.998       121.46
+2026-08-12 00:58:56 [INFO   ] main:        1.0            25.4121    1016.48     157.48    1173.96      6.464       181.61
+2026-08-12 00:58:56 [INFO   ] main:        1.5            61.5056    2460.23     157.48    2617.71      8.510       307.59
+2026-08-12 00:58:56 [INFO   ] main:        2.0           137.2115    5488.46     157.48    5645.94     10.320       547.10
+2026-08-12 00:58:56 [INFO   ] main:        2.5           296.0036   11840.14     157.48   11997.62     11.969      1002.42
+2026-08-12 00:58:56 [INFO   ] main:        3.0           629.0683   25162.73     157.48   25320.21     13.498      1875.83
+2026-08-12 00:58:56 [INFO   ] main:        3.5          1327.6676   53106.70     157.48   53264.18     14.934      3566.70
+2026-08-12 00:58:56 [INFO   ] main:        4.0          2792.9718  111718.87     157.48  111876.35     16.293      6866.73
+2026-08-12 00:58:56 [INFO   ] main: Best field under this proxy: 0.5 T
+2026-08-12 00:58:56 [INFO   ] main: cost_per_K_$ minimized at 0.5 T under this fixed-MCM-mass, dollars-per-Kelvin-of-Gd's-own-peak-dTad proxy -- does NOT reproduce the qualitative ~2 T claim under this specific proxy (see run_magnet_geometry_analysis()'s own printed discussion of why: holding MCM mass fixed while only sweeping field ignores the system-level cooling-power/device-size tradeoffs a real design would also be making, which is plausibly the actual driver behind Bjørk's own reported optimum).
+2026-08-12 00:58:56 [INFO   ] main: ------------------------------------------------------------------------------------------
+2026-08-12 00:58:56 [INFO   ] main: Geometric vs. flat-ratio magnet-mass comparison across core/optimize.py's own [1.0, 3.0] T search bounds:
+2026-08-12 00:58:56 [INFO   ] main:   mu0H=1.0T  geometric=   25.412kg  flat-ratio=   15.000kg  ratio(geom/flat)=  1.69x
+2026-08-12 00:58:56 [INFO   ] main:   mu0H=1.5T  geometric=   61.506kg  flat-ratio=   22.500kg  ratio(geom/flat)=  2.73x
+2026-08-12 00:58:56 [INFO   ] main:   mu0H=2.0T  geometric=  137.211kg  flat-ratio=   30.000kg  ratio(geom/flat)=  4.57x
+2026-08-12 00:58:56 [INFO   ] main:   mu0H=2.5T  geometric=  296.004kg  flat-ratio=   37.500kg  ratio(geom/flat)=  7.89x
+2026-08-12 00:58:56 [INFO   ] main:   mu0H=3.0T  geometric=  629.068kg  flat-ratio=   45.000kg  ratio(geom/flat)= 13.98x
+2026-08-12 00:58:56 [INFO   ] main: The ratio growing with field (rather than staying constant) is exactly the missing super-linear-in-field nonlinearity ROADMAP.md's Phase 19 plan identified as absent from the pre-Phase-19 flat-ratio proxy -- confirmed directly here, not merely asserted from the closed-form algebra above.
+2026-08-12 00:58:56 [INFO   ] main: CONCLUSION: this module adds a genuinely nonlinear (super-linear-in-field) magnet-mass-vs-field relation, grounded in standard closed-form Halbach cylinder physics rather than a fitted ratio -- but the ~2 T 'sweet spot' claim (as paraphrased in Literature_Review.md) is NOT independently reproduced by this pass's own simple fixed-MCM-mass dollars-per-Kelvin proxy above; that specific numeric claim remains sourced only to the (uncorrected, see HONESTY FLAG #2) Literature_Review.md citation, not re-derived here. See core/economics.py's `bom_cost_geometric()`/`cost_index_geometric` additions and this module's own tests for how the nonlinear relation is actually wired into the rest of this repo.
+2026-08-12 00:58:56 [INFO   ] main: Wrote results/magnet_geometry_analysis.txt
+2026-08-12 00:58:56 [INFO   ] main: ======================================================================
+2026-08-12 00:58:56 [INFO   ] main: Phase 19 magnet-geometry cost sensitivity: run 1/2 -- FLAT per-Tesla magnet-mass ratio (pre-Phase-19 behavior) [seed=1]
+2026-08-12 00:58:56 [INFO   ] main: ======================================================================
+2026-08-12 00:58:59 [INFO   ] main: _material_candidates: (Mn,Fe)2(P,Si) needs Tc=283.5K to hit T_mid=296.0K, outside its documented window [295.3, 331.2]K -- dropped from this operating point's candidate set (not substituted with a duplicate Gd row).
+2026-08-12 00:58:59 [INFO   ] main: Phase 15 material co-optimization: 3 candidate(s) -- Gd, Gd5(SixGe1-x)4(-Ga) (tuned, Tc=285.3K), La(Fe,Si)13Hy (tuned, Tc=285.3K)
+2026-08-12 00:59:01 [INFO   ] main:   Gd                                       15 Pareto-optimal design(s) found
+2026-08-12 00:59:02 [INFO   ] main:   Gd5(SixGe1-x)4(-Ga) (tuned, Tc=285.3K)   21 Pareto-optimal design(s) found
+2026-08-12 00:59:02 [INFO   ] main:   La(Fe,Si)13Hy (tuned, Tc=285.3K)         21 Pareto-optimal design(s) found
+2026-08-12 00:59:02 [INFO   ] main: Merged across 3 material candidate(s): 57 total designs -> 21 globally non-dominated design(s) after cross-material Pareto filtering.
+2026-08-12 00:59:02 [INFO   ] main: Wrote results/pareto_front_magnet_flat.csv
+2026-08-12 00:59:02 [INFO   ] main: Best electrical COP      material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=1.799T  f=0.465Hz  mdot=0.4998kg/s  mass=13.66kg  d_p=1.7477mm  bf=0.421  -> COP_elec=9.502, Qc=31520.33W, cost=$3241.5
+2026-08-12 00:59:02 [INFO   ] main: Best cooling capacity    material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=1.553T  f=3.956Hz  mdot=0.4971kg/s  mass=14.9kg  d_p=0.9417mm  bf=0.421  -> COP_elec=6.812, Qc=39072.04W, cost=$3069.7
+2026-08-12 00:59:02 [INFO   ] main: Lowest cost              material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=1.077T  f=2.607Hz  mdot=0.4855kg/s  mass=1.27kg  d_p=0.9412mm  bf=0.427  -> COP_elec=8.579, Qc=24537.0W, cost=$184.1
+2026-08-12 00:59:02 [INFO   ] main: Knee point (balanced)    material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=1.308T  f=1.508Hz  mdot=0.4856kg/s  mass=8.1kg  d_p=0.9289mm  bf=0.427  -> COP_elec=9.255, Qc=34346.75W, cost=$1415.6
+2026-08-12 00:59:02 [INFO   ] main: Material representation in the merged, globally non-dominated front:
+2026-08-12 00:59:02 [INFO   ] main:   La(Fe,Si)13Hy (tuned, Tc=285.3K)         21 design(s) (100%)
+2026-08-12 00:59:02 [INFO   ] main: particle_diameter spans 0.551-1.786 mm across the merged front -- the geometry-explicit pumping-power/effectiveness trade-off (see core/geometry_analysis.py, core/amr_cycle.py's Phase 15 wiring) is a real, active dimension of this search, not degenerate at either bound.
+2026-08-12 00:59:02 [INFO   ] main: Regenerator mass spans 1.25-14.90 kg across the merged front. The NTU thermal model captures the expected trade-off between additional regenerator material, cooling capacity, and material cost.
+2026-08-12 00:59:02 [INFO   ] main: ======================================================================
+2026-08-12 00:59:02 [INFO   ] main: Phase 19 magnet-geometry cost sensitivity: run 2/2 -- GEOMETRIC Halbach-cylinder magnet-mass relation [seed=1]
+2026-08-12 00:59:02 [INFO   ] main: ======================================================================
+2026-08-12 00:59:05 [INFO   ] main: _material_candidates: (Mn,Fe)2(P,Si) needs Tc=283.5K to hit T_mid=296.0K, outside its documented window [295.3, 331.2]K -- dropped from this operating point's candidate set (not substituted with a duplicate Gd row).
+2026-08-12 00:59:05 [INFO   ] main: Phase 15 material co-optimization: 3 candidate(s) -- Gd, Gd5(SixGe1-x)4(-Ga) (tuned, Tc=285.3K), La(Fe,Si)13Hy (tuned, Tc=285.3K)
+2026-08-12 00:59:07 [INFO   ] main:   Gd                                       20 Pareto-optimal design(s) found
+2026-08-12 00:59:08 [INFO   ] main:   Gd5(SixGe1-x)4(-Ga) (tuned, Tc=285.3K)   18 Pareto-optimal design(s) found
+2026-08-12 00:59:08 [INFO   ] main:   La(Fe,Si)13Hy (tuned, Tc=285.3K)         13 Pareto-optimal design(s) found
+2026-08-12 00:59:08 [INFO   ] main: Merged across 3 material candidate(s): 51 total designs -> 14 globally non-dominated design(s) after cross-material Pareto filtering.
+2026-08-12 00:59:08 [INFO   ] main: Wrote results/pareto_front_magnet_geometric.csv
+2026-08-12 00:59:08 [INFO   ] main: Best electrical COP      material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=1.024T  f=0.481Hz  mdot=0.4924kg/s  mass=2.86kg  d_p=0.647mm  bf=0.416  -> COP_elec=9.52, Qc=26833.21W, cost=$669.0
+2026-08-12 00:59:08 [INFO   ] main: Best cooling capacity    material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=2.884T  f=4.748Hz  mdot=0.4931kg/s  mass=13.89kg  d_p=0.752mm  bf=0.421  -> COP_elec=3.819, Qc=40133.81W, cost=$62565.5
+2026-08-12 00:59:08 [INFO   ] main: Lowest cost              material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=1.022T  f=2.911Hz  mdot=0.4931kg/s  mass=2.44kg  d_p=0.7076mm  bf=0.42  -> COP_elec=8.831, Qc=30991.69W, cost=$568.1
+2026-08-12 00:59:08 [INFO   ] main: Knee point (balanced)    material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=1.024T  f=1.26Hz  mdot=0.4926kg/s  mass=14.56kg  d_p=0.6641mm  bf=0.407  -> COP_elec=9.252, Qc=36297.84W, cost=$3407.1
+2026-08-12 00:59:08 [INFO   ] main: Material representation in the merged, globally non-dominated front:
+2026-08-12 00:59:08 [INFO   ] main:   La(Fe,Si)13Hy (tuned, Tc=285.3K)         13 design(s) (93%)
+2026-08-12 00:59:08 [INFO   ] main:   Gd5(SixGe1-x)4(-Ga) (tuned, Tc=285.3K)   1 design(s) (7%)
+2026-08-12 00:59:08 [INFO   ] main: particle_diameter spans 0.561-1.483 mm across the merged front -- the geometry-explicit pumping-power/effectiveness trade-off (see core/geometry_analysis.py, core/amr_cycle.py's Phase 15 wiring) is a real, active dimension of this search, not degenerate at either bound.
+2026-08-12 00:59:08 [INFO   ] main: Regenerator mass spans 2.43-14.57 kg across the merged front. The NTU thermal model captures the expected trade-off between additional regenerator material, cooling capacity, and material cost.
+2026-08-12 00:59:08 [INFO   ] main: Phase 19 magnet-geometry cost sensitivity: merged, globally
+2026-08-12 00:59:08 [INFO   ] main: non-dominated Pareto front, FLAT vs. GEOMETRIC magnet-mass cost term.
+2026-08-12 00:59:08 [INFO   ] main: (pop_size=32, n_gen=15, seed=1 -- see module
+2026-08-12 00:59:08 [INFO   ] main:  docstring honesty flag on why this is smaller than
+2026-08-12 00:59:08 [INFO   ] main:  run_optimization()'s own 40/25 production default.)
+2026-08-12 00:59:08 [INFO   ] main: Material                                       FLAT    GEOMETRIC    Delta
+2026-08-12 00:59:08 [INFO   ] main: --------------------------------------------------------------------------
+2026-08-12 00:59:08 [INFO   ] main: Gd5(SixGe1-x)4(-Ga) (tuned, Tc=285.3K)            0            1       +1
+2026-08-12 00:59:08 [INFO   ] main: La(Fe,Si)13Hy (tuned, Tc=285.3K)                 21           13       -8
+2026-08-12 00:59:08 [INFO   ] main: --------------------------------------------------------------------------
+2026-08-12 00:59:08 [INFO   ] main: TOTAL front size                                 21           14       -7
+2026-08-12 00:59:08 [INFO   ] main: mu0H_max_T range: FLAT 1.06-1.80 T (mean 1.31 T)  |  GEOMETRIC 1.01-2.88 T (mean 1.54 T)
+2026-08-12 00:59:08 [INFO   ] main: A GEOMETRIC mean field noticeably below the FLAT mean field would be
+2026-08-12 00:59:08 [INFO   ] main: the expected direction if the nonlinear magnet-mass cost is actually
+2026-08-12 00:59:08 [INFO   ] main: discouraging the optimizer from choosing very high fields -- reported
+2026-08-12 00:59:08 [INFO   ] main: directly above rather than asserted; see the printed conclusion below
+2026-08-12 00:59:08 [INFO   ] main: for whether that expectation held in this specific run.
+2026-08-12 00:59:08 [INFO   ] main: FINDING: the geometric cost term does NOT pull the merged front's mean mu0H_max_T down relative to the flat-ratio baseline in this run -- stated plainly rather than assumed; possible reasons include NSGA-III search noise at this reduced pop_size/n_gen (see honesty flag above) or the field/COP/Qc trade-off already favoring moderate fields for other reasons (e.g. eddy-current loss ~f^2*H^2) even before the geometric cost term is added.
+2026-08-12 00:59:08 [INFO   ] main: Wrote results/pareto_front_magnet_flat.csv (21 rows, FLAT magnet-mass cost term)
+2026-08-12 00:59:08 [INFO   ] main: Wrote results/pareto_front_magnet_geometric.csv (14 rows, GEOMETRIC magnet-mass cost term)
+2026-08-12 00:59:08 [INFO   ] main: Wrote results/magnet_geometry_pareto_sensitivity.txt
+2026-08-12 00:59:08 [INFO   ] main: [stage done in 12.31s]
+2026-08-12 00:59:08 [INFO   ] main: 
+2026-08-12 00:59:08 [INFO   ] main: ####################################################################################################
+2026-08-12 00:59:08 [INFO   ] main: # 12. Figure generation: 26 figures covering validation, AMR curves, cascade/graded staging, sensitivity, RSM, NSGA-III, economics, emissions (plots.py)
+2026-08-12 00:59:08 [INFO   ] main: ####################################################################################################
+2026-08-12 00:59:08 [INFO   ] main: Generating all figures...
+2026-08-12 00:59:08 [INFO   ] main: [01 Gd MCE validation vs. Dan'kov et al. (1998)]
+2026-08-12 00:59:10 [INFO   ] main:   Saved -> results\figures\fig01_gd_mce_validation.png / .pdf
+2026-08-12 00:59:10 [INFO   ] main: [02 Gd entropy change & DeltaT_ad vs. T]
+2026-08-12 00:59:11 [INFO   ] main:   Saved -> results\figures\fig02_gd_entropy_and_dTad_vs_T.png / .pdf
+2026-08-12 00:59:11 [INFO   ] main: [03 Gd5Si2Ge2 Landau model calibration]
+2026-08-12 00:59:13 [INFO   ] main:   Saved -> results\figures\fig03_landau_giant_mce_calibration.png / .pdf
+2026-08-12 00:59:13 [INFO   ] main: [04 Giguere et al. (1999) direct-measurement cross-check]
+2026-08-12 00:59:14 [INFO   ] main:   Saved -> results\figures\fig04_giguere_direct_vs_indirect_validation.png / .pdf
+2026-08-12 00:59:14 [INFO   ] main: [05 Material comparison (Gd / Gd5Si2Ge2 / La(Fe,Si)13Hy)]
+2026-08-12 00:59:15 [INFO   ] main:   Saved -> results\figures\fig05_material_comparison_dTad.png / .pdf
+2026-08-12 00:59:15 [INFO   ] main: [06 AMR characteristic curve]
+2026-08-12 00:59:16 [INFO   ] main:   Saved -> results\figures\fig06_amr_characteristic_curve.png / .pdf
+2026-08-12 00:59:16 [INFO   ] main: [07 AMR energy balance vs. span]
+2026-08-12 00:59:16 [INFO   ] main:   Saved -> results\figures\fig07_amr_energy_balance_vs_span.png / .pdf
+2026-08-12 00:59:16 [INFO   ] main: [08 AMR vs. baselines COP comparison]
+2026-08-12 00:59:18 [INFO   ] main:   Saved -> results\figures\fig08_amr_vs_baselines_cop.png / .pdf
+2026-08-12 00:59:18 [INFO   ] main: [09 NTU regenerator effectiveness]
+2026-08-12 00:59:18 [INFO   ] main:   Saved -> results\figures\fig09_regenerator_effectiveness_ntu.png / .pdf
+2026-08-12 00:59:18 [INFO   ] main: [10 Geometry trade-off — packed bed]
+2026-08-12 00:59:19 [INFO   ] main:   Saved -> results\figures\fig10_geometry_optimum_packed_bed.png / .pdf
+2026-08-12 00:59:19 [INFO   ] main: [11 Geometry trade-off — parallel plate]
+2026-08-12 00:59:20 [INFO   ] main:   Saved -> results\figures\fig11_geometry_optimum_parallel_plate.png / .pdf
+2026-08-12 00:59:20 [INFO   ] main: [12 Loss-model calibration + leave-one-out CV]
+2026-08-12 00:59:21 [INFO   ] main:   Saved -> results\figures\fig12_loss_model_calibration_fit.png / .pdf
+2026-08-12 00:59:21 [INFO   ] main: [13 Parasitic-fraction scaling with device size]
+2026-08-12 00:59:22 [INFO   ] main:   Saved -> results\figures\fig13_parasitic_fraction_scaling.png / .pdf
+2026-08-12 00:59:22 [INFO   ] main: [14 System-level validation vs. published prototypes]
+2026-08-12 00:59:24 [INFO   ] main:   Saved -> results\figures\fig14_system_validation_scatter.png / .pdf
+2026-08-12 00:59:24 [INFO   ] main: [15 Curve-level (2-point) Qc(span) validation]
+2026-08-12 00:59:24 [INFO   ] main: Astronautics_rotary_2014     no calibration found at anchor point (span=11.0K) -- consistent with the Phase 2/6 finding that this device doesn't calibrate; skipped, not silently dropped
+2026-08-12 00:59:24 [INFO   ] main: Tusek_singlebed_Gd_2010      anchor span=  7.3K -> predict Qc at companion span= 19.8K: model=    0.0W  lit=    0.0W  err=+0.0W (lit=0, undefined %)
+2026-08-12 00:59:24 [INFO   ] main: Risoe_DTU_Gd_2011            no calibration found at anchor point (span=30.0K) -- consistent with the Phase 2/6 finding that this device doesn't calibrate; skipped, not silently dropped
+2026-08-12 00:59:24 [INFO   ] main: Lozano_POLO_UFSC_2016        8 independent multi-point rows (own frequency/flow per row) -- validated by run_system_validation() instead, skipped here
+2026-08-12 00:59:24 [INFO   ] main:   Saved -> results\figures\fig15_curve_validation_companion.png / .pdf
+2026-08-12 00:59:24 [INFO   ] main: [16 Sobol global sensitivity analysis]
+2026-08-12 00:59:25 [INFO   ] main:   Saved -> results\figures\fig16_sobol_sensitivity_comparison.png / .pdf
+2026-08-12 00:59:25 [INFO   ] main: [17 RSM surrogate parity + coefficients]
+2026-08-12 00:59:29 [INFO   ] main:   Saved -> results\figures\fig17_rsm_surrogate_parity.png / .pdf
+2026-08-12 00:59:29 [INFO   ] main: [18 NSGA-III Pareto front]
+2026-08-12 00:59:29 [INFO   ] main:   Saved -> results\figures\fig18_nsga3_pareto_front.png / .pdf
+2026-08-12 00:59:29 [INFO   ] main: [19 Cascade staging vs. baselines (Gd)]
+2026-08-12 00:59:30 [INFO   ] main:   Saved -> results\figures\fig19_cascade_staging_gd.png / .pdf
+2026-08-12 00:59:30 [INFO   ] main: [20 Cascade: Gd vs. Gd5Si2Ge2]
+2026-08-12 00:59:45 [INFO   ] main:   Saved -> results\figures\fig20_cascade_giant_mce_vs_gd.png / .pdf
+2026-08-12 00:59:45 [INFO   ] main: [21 Curie-graded cascade performance]
+2026-08-12 00:59:46 [INFO   ] main:   Saved -> results\figures\fig21_graded_cascade_performance.png / .pdf
+2026-08-12 00:59:46 [INFO   ] main: [22 Economics: TCO and lifetime cost]
+2026-08-12 00:59:47 [INFO   ] main:   Saved -> results\figures\fig22_economics_tco_comparison.png / .pdf
+2026-08-12 00:59:47 [INFO   ] main: [23 Emissions comparison]
+2026-08-12 00:59:48 [INFO   ] main:   Saved -> results\figures\fig23_emissions_comparison.png / .pdf
+2026-08-12 00:59:48 [INFO   ] main: [24 Giant-MCE targeting comparison]
+2026-08-12 00:59:51 [INFO   ] main:   Saved -> results\figures\fig24_giant_mce_targeting_comparison.png / .pdf
+2026-08-12 00:59:51 [INFO   ] main: [25 Astronautics graded-bed validation]
+2026-08-12 00:59:52 [INFO   ] main:   Saved -> results\figures\fig25_astronautics_graded_bed_validation.png / .pdf
+2026-08-12 00:59:52 [INFO   ] main: [26 Material family comparison (Track A2 item)]
+2026-08-12 00:59:53 [INFO   ] main:   Saved -> results\figures\fig26_material_family_comparison.png / .pdf
+2026-08-12 00:59:53 [INFO   ] main: All figures written to: C:\Users\pilla\Documents\SPCE\ASHRAE\magcool-dc\results\figures
+2026-08-12 00:59:53 [INFO   ] main: Generated 26 figure(s) (PNG + PDF) in results/figures/
+2026-08-12 00:59:53 [INFO   ] main: [stage done in 44.87s]
+2026-08-12 00:59:53 [INFO   ] main: 
+2026-08-12 00:59:53 [INFO   ] main: ####################################################################################################
+2026-08-12 00:59:53 [INFO   ] main: # 13. Design-recommendations synthesis (core/design_recommendations.py)
+2026-08-12 00:59:53 [INFO   ] main: ####################################################################################################
+2026-08-12 00:59:53 [INFO   ] main: ====================================================================================================
+2026-08-12 00:59:53 [INFO   ] main: AMR ELECTRICAL-COP DESIGN RECOMMENDATIONS -- consolidated from all analyses above
+2026-08-12 00:59:53 [INFO   ] main: ====================================================================================================
+2026-08-12 00:59:53 [INFO   ] main: Every figure below was computed by an earlier pipeline stage in this same run; this report only re-organizes those results by design lever, ranked by the demonstrated Sobol sensitivity of electrical COP to each lever (sensitivity.py).
+2026-08-12 00:59:53 [INFO   ] main: 1. OPERATING FREQUENCY -- the dominant lever
+2026-08-12 00:59:53 [INFO   ] main:    Sobol total-order sensitivity (state-dependent loss model): ST(frequency) = 0.877
+2026-08-12 00:59:53 [INFO   ] main:    NSGA-III best-electrical-COP design:  f=0.423 Hz  -> COP_elec=9.53, Qc=25481 W
+2026-08-12 00:59:53 [INFO   ] main:    NSGA-III best-cooling-capacity design: f=2.559 Hz  -> COP_elec=6.21, Qc=39282 W
+2026-08-12 00:59:53 [INFO   ] main:    Action: reduce cycle frequency toward the low-speed end of the design space when electrical COP is the priority; raise it toward the high end only when cooling capacity is the priority and higher parasitic loss is acceptable. This is a genuine Pareto trade-off in this repo's model, not a free win in either direction.
+2026-08-12 00:59:53 [INFO   ] main: 2. MCE MATERIAL / COMPOSITION CHOICE
+2026-08-12 00:59:53 [INFO   ] main:    Best candidate at 10K span (ASHRAE point): La(Fe,Si)13Hy (tuned)  COP_elec=6.72, Qc=4989 W
+2026-08-12 00:59:53 [INFO   ] main:    vs. plain Gd: COP_elec=5.09 (+32% relative to Gd)
+2026-08-12 00:59:53 [INFO   ] main:    Action: prefer a composition-tuned giant-MCE family (e.g. La(Fe,Si)13Hy-type) whose documented Tc window covers the target operating point, over a fixed-composition material whose peak may sit off-target -- see material_family_comparison.py for the full span-by-span ranking and which families actually cover which spans.
+2026-08-12 00:59:53 [INFO   ] main: 3. CURIE-TEMPERATURE GRADING (layered/graded regenerator beds)
+2026-08-12 00:59:53 [INFO   ] main:    3-stage cascade at this span: graded COP=2.443, Qc=2388.1 W   vs.  plain-Gd COP=2.415, Qc=1258.0 W
+2026-08-12 00:59:53 [INFO   ] main:    Action: grade each stage's composition so its local peak MCE temperature tracks the fluid temperature at that point in the bed, rather than using one uniform material across the whole span -- see cascade.py's compare_graded_cascade() for the per-span/stage-count feasibility breakdown (not every span/stage-count combination stays within the documented composition-tunability window; some stages fall back to plain Gd, which is reported explicitly rather than silently).
+2026-08-12 00:59:53 [INFO   ] main: 4. REGENERATOR GEOMETRY (packed-bed vs. parallel-plate)
+2026-08-12 00:59:53 [INFO   ] main:    Packed-bed sphere diameter maximizing COP (interior optimum): 0.5 mm  (Qc=821 W, COP_aug=15.27)
+2026-08-12 00:59:53 [INFO   ] main:    Parallel-plate channel spacing maximizing COP (interior optimum): 0.1 mm  (Qc=819 W, COP_aug=15.27)
+2026-08-12 00:59:53 [INFO   ] main:    Action: target these interior optima rather than minimizing particle/channel size without bound -- shrinking geometry indefinitely raises thermal effectiveness only marginally further while hydraulic pumping power keeps growing, which is what produces the interior optimum in the first place (Tusek, Kitanovski & Poredos 2013).
+2026-08-12 00:59:53 [INFO   ] main: 5. FIELD STRENGTH / FLOW RATE BALANCE (now co-optimized with material and geometry)
+2026-08-12 00:59:53 [INFO   ] main:    Knee-point (balanced) Pareto design: H=1.056 T, f=2.47 Hz, mdot=0.4985 kg/s, mass=6.31 kg, eps=0.881, d_p=0.3416 mm, material=La(Fe,Si)13Hy (tuned, Tc=285.3K)  -> COP_elec=8.908, Qc=36287.31 W, cost=$900.4
+2026-08-12 00:59:53 [INFO   ] main:    Action: operate near this balanced point rather than at either objective's own extreme (max-COP alone drives frequency and Qc very low; max-Qc alone raises parasitic loss and cuts COP roughly 3x in this repo's Pareto front) -- see results/pareto_front.csv for the full 21-design front and the other extreme points. As of phase 15 this knee point already reflects the best-performing material and regenerator geometry found jointly with field/frequency/flow, not just the best fixed-Gd, fixed-geometry point -- levers 2 and 4 above remain useful as focused single-lever sweeps for understanding WHY a given material/geometry wins, but are no longer this repo's only way to explore those two choices.
+2026-08-12 00:59:53 [INFO   ] main: ----------------------------------------------------------------------------------------------------
+2026-08-12 00:59:53 [INFO   ] main: RECOMMENDED STARTING DESIGN POINT (NSGA-III knee point, this run):
+2026-08-12 00:59:53 [INFO   ] main:   mu0H_max = 1.056 T,  frequency = 2.47 Hz,  fluid_mdot = 0.4985 kg/s,  mass_regenerator = 6.31 kg,  regen_effectiveness = 0.881
+2026-08-12 00:59:53 [INFO   ] main:   -> Predicted COP_electrical = 8.908, Qc = 36287.31 W, cost_index = $900.4, particle_diameter = 0.3416 mm, material = La(Fe,Si)13Hy (tuned, Tc=285.3K)
+2026-08-12 00:59:53 [INFO   ] main: This is a starting point, not a final specification, but as of phase 15 the geometry (lever 4) and material (lever 2) choices above ARE co-optimized with the NSGA-III field/frequency/flow search (see core/optimize.py's module docstring for how material is handled -- per-family NSGA-III passes merged into one global Pareto front, since material family is categorical). geometry_analysis.py and material_family_comparison.py remain independently useful as focused single-lever sweeps for understanding WHY a given choice wins, but optimize.py's own Pareto front is now this repo's most complete answer to the joint design question.
+2026-08-12 00:59:53 [INFO   ] main: ----------------------------------------------------------------------------------------------------
+2026-08-12 00:59:53 [INFO   ] main: [stage done in 0.01s]
+2026-08-12 00:59:53 [INFO   ] main: 
+2026-08-12 00:59:53 [INFO   ] main: ####################################################################################################
+2026-08-12 00:59:53 [INFO   ] main: # 14. Magnetocaloric fluids (ferrofluid/MR suspension) as an alternative working-body class (core/fluid_mce_cycle.py, core/fluid_mce_analysis.py, Phase 20)
+2026-08-12 00:59:53 [INFO   ] main: ####################################################################################################
+2026-08-12 00:59:54 [INFO   ] main: ==========================================================================================
+2026-08-12 00:59:54 [INFO   ] main: PHASE 20: magnetocaloric fluids (ferrofluid/MR suspension) as an alternative
+2026-08-12 00:59:54 [INFO   ] main: working-body class. See core/fluid_mce_cycle.py's module docstring (HONESTY
+2026-08-12 00:59:54 [INFO   ] main: FLAGS 1-2) for book-access limitations and benchmark availability.
+2026-08-12 00:59:54 [INFO   ] main: ==========================================================================================
+2026-08-12 00:59:54 [INFO   ] main: --- Volume-fraction sweep (T_cold=291.0K, mu0H=1.5T, mdot=0.05kg/s, each phi evaluated at its OWN favorable span = 0.9*dTad_suspension) ---
+2026-08-12 00:59:54 [INFO   ] main:    phi   dTad (K)   span (K)   visc (mPa.s)     Qc (W)    W_par (W)   COP_elec
+2026-08-12 00:59:54 [INFO   ] main:   0.01     0.0363     0.0327         0.9127     0.7283      0.03246    22.1537
+2026-08-12 00:59:54 [INFO   ] main:   0.02     0.0728     0.0655         0.9364     1.4009      0.03019    44.0953
+2026-08-12 00:59:54 [INFO   ] main:   0.05     0.1832     0.1649         1.0138     3.1428      0.02472    93.4620
+2026-08-12 00:59:54 [INFO   ] main:   0.10     0.3705     0.3335         1.1685     5.3712      0.01860   108.7696
+2026-08-12 00:59:54 [INFO   ] main:   0.15     0.5621     0.5059         1.3658     7.0388      0.01468    92.7711
+2026-08-12 00:59:54 [INFO   ] main:   0.20     0.7582     0.6824         1.6242     8.3380      0.01204    75.9405
+2026-08-12 00:59:54 [INFO   ] main:   0.25     0.9589     0.8630         1.9733     9.3825      0.01018    62.8428
+2026-08-12 00:59:54 [INFO   ] main:   0.30     1.1643     1.0479         2.4643    10.2437      0.00886    52.9973
+2026-08-12 00:59:54 [INFO   ] main:   0.35     1.3747     1.2372         3.1921    10.9688      0.00537    45.9829
+2026-08-12 00:59:54 [INFO   ] main:   0.40     1.5902     1.4312         4.3514    11.5901      0.00622    39.7975
+2026-08-12 00:59:54 [INFO   ] main: Best COP_electrical at phi=0.10 (COP_electrical=108.7696)
+2026-08-12 00:59:54 [INFO   ] main: FINDING: a genuine INTERIOR optimum exists in phi within the swept range -- the viscosity-vs-phi and MCE-intensity-vs-phi tradeoff the Phase 20 plan named DOES produce a real tradeoff in this model, not a monotonic result at either boundary.
+2026-08-12 00:59:54 [INFO   ] main: --- Comparison at the fluid system's own favorable span, vs. solid AMR and vs. core/baseline_cooling.py's liquid-cooling/vapor-compression references ---
+2026-08-12 00:59:54 [INFO   ] main: At span=0.682K, phi=0.20:
+2026-08-12 00:59:54 [INFO   ] main:   Ferrofluid MCE (this module):  Qc=8.338W   COP_electrical=75.941
+2026-08-12 00:59:54 [INFO   ] main:   Solid AMR (Gd, same field/flow): Qc=723.004W   COP_electrical=6.472
+2026-08-12 00:59:54 [INFO   ] main:   Liquid cooling (baseline_cooling.py): COP=86.643
+2026-08-12 00:59:54 [INFO   ] main:   Vapor compression (baseline_cooling.py): COP=179.108
+2026-08-12 00:59:54 [INFO   ] main: CONCLUSION: at realistic particle loadings (phi swept up to 0.63, the random-close-packing ceiling), the mixture-heat-capacity dilution model (core/fluid_mce_cycle.py physics item 1) combined with this architecture's lack of regeneration (physics item 3) collapses the usable span to a few Kelvin (0.68K at phi=0.20 in this specific comparison) -- dramatically less than solid AMR achieves at the same field/flow, whose regenerator bed amplifies achievable span well beyond a single stage's own dTad (see core/amr_cycle.py's own characteristic-curve discussion). Notably, the ferrofluid system's own COP_electrical (75.9) is actually HIGHER than the solid AMR's (6.5) at this shared, ultra-narrow span -- because W_parasitic (Darcy-Weisbach pipe flow) is small relative to W_mag at this flow rate, and both systems' COP formulas have Qc largely cancel out of the ratio -- but BOTH trail the liquid-cooling and vapor-compression baselines at this span (see the numbers above). This COP comparison should not be read as 'ferrofluid MCE beats solid AMR' in general: it holds only at the ferrofluid system's own tiny achievable span, which the solid AMR could trivially also hit (and does, with far more Qc); the real headline result is the SPAN, not this specific COP comparison. This is a genuine, unforced finding from this pass's own model, not assumed going in. As HONESTY FLAG #2 in core/fluid_mce_cycle.py states, this is a design-exploration/comparison tool, not a validated result -- no benchmark magnetocaloric-fluid-as-working-body refrigeration device was found in this project's corpus or this pass's own literature search.
+2026-08-12 00:59:54 [INFO   ] main: Wrote results/fluid_mce_analysis.txt
+2026-08-12 00:59:54 [INFO   ] main: [stage done in 0.39s]
+2026-08-12 00:59:54 [INFO   ] main: 
+2026-08-12 00:59:54 [INFO   ] main: ####################################################################################################
+2026-08-12 00:59:54 [INFO   ] main: # 15. Passive/hybrid magnetic regenerator augmentation of a conventional gas cycle (core/baseline_cooling.py, core/passive_regenerator_analysis.py, Phase 21)
+2026-08-12 00:59:54 [INFO   ] main: ####################################################################################################
+2026-08-12 00:59:54 [INFO   ] main: ==========================================================================================
+2026-08-12 00:59:54 [INFO   ] main: PHASE 21: passive/hybrid magnetic regenerator augmentation of a
+2026-08-12 00:59:54 [INFO   ] main: conventional (vapor-compression) gas cycle -- see
+2026-08-12 00:59:54 [INFO   ] main: core/baseline_cooling.py's own Phase 21 docstring block for the honesty
+2026-08-12 00:59:54 [INFO   ] main: flag (Tishin Ch.11 not digitizable -- image-only PDF, no text layer)
+2026-08-12 00:59:54 [INFO   ] main: and for why the effectiveness-to-COP mapping is an illustrative,
+2026-08-12 00:59:54 [INFO   ] main: literature-range-anchored ceiling rather than a fitted coefficient.
+2026-08-12 00:59:54 [INFO   ] main: ==========================================================================================
+2026-08-12 00:59:54 [INFO   ] main: --- Candidate-material comparison at the representative ASHRAE point (T_cold=291.15K, span=10.0K) ---
+2026-08-12 00:59:54 [INFO   ] main: Base vapor-compression COP at Tc=291.15K, Th=301.15K (span=10.0K): 12.2283 (Carnot=29.1150, eta_2nd_law=0.420)
+2026-08-12 00:59:54 [INFO   ] main:   Gd (polycrystalline)              Tc_material= 294.0K  eps: 0.829 -> 0.860  (delta=+0.031)   COP: 12.2283 -> 12.2582  (+0.24%)
+2026-08-12 00:59:54 [INFO   ] main:   Gd5Si2Ge2 (giant MCE)             Tc_material= 276.0K  eps: 0.876 -> 0.876  (delta=+0.000)   COP: 12.2283 -> 12.2283  (+0.00%)
+2026-08-12 00:59:54 [INFO   ] main:   La0.7Ca0.3MnO3 (perovskite manganite)  Tc_material= 267.0K  eps: 0.943 -> 0.943  (delta=+0.000)   COP: 12.2283 -> 12.2283  (+0.00%)
+2026-08-12 00:59:54 [INFO   ] main: --- Span sweep at fixed T_cold=291.15K (does the alignment effect move as expected as the window widens?) ---
+2026-08-12 00:59:54 [INFO   ] main:   span=  5.0K  base_COP=24.4566  best=Gd (polycrystalline)              delta_eps=+0.050  augmented_COP=24.5550 (+0.40%)
+2026-08-12 00:59:54 [INFO   ] main:   span= 10.0K  base_COP=12.2283  best=Gd (polycrystalline)              delta_eps=+0.031  augmented_COP=12.2582 (+0.24%)
+2026-08-12 00:59:54 [INFO   ] main:   span= 15.0K  base_COP=8.1522  best=Gd (polycrystalline)              delta_eps=+0.023  augmented_COP=8.1669 (+0.18%)
+2026-08-12 00:59:54 [INFO   ] main:   span= 20.0K  base_COP=6.1141  best=Gd (polycrystalline)              delta_eps=+0.018  augmented_COP=6.1229 (+0.14%)
+2026-08-12 00:59:54 [INFO   ] main: --- Conclusion ---
+2026-08-12 00:59:54 [INFO   ] main: At the representative operating point, Gd (polycrystalline) (its own Curie temperature sits inside [291.1, 301.1]K) gives the largest passive-regenerator boost: eps 0.829 -> 0.860, COP 12.2283 -> 12.2582 (+0.24%), while La0.7Ca0.3MnO3 (perovskite manganite) (Curie temperature far outside this window) gives +0.00% -- confirming, in this repo's own model, the plan's own framing that the benefit is an alignment effect, not a fixed per-material bonus. Every reported gain is capped by construction at 8% (the illustrative full-effectiveness ceiling -- see the honesty flag above), so these numbers should be read as 'this mechanism could plausibly be worth up to X%, IF the underlying literature-range ceiling holds for a magnetically-augmented regenerator specifically, which has not been separately confirmed' -- not as a validated device-level COP prediction.
+2026-08-12 00:59:54 [INFO   ] main: [stage done in 0.13s]
+2026-08-12 00:59:54 [INFO   ] main: 
+2026-08-12 00:59:54 [INFO   ] main: ####################################################################################################
+2026-08-12 00:59:54 [INFO   ] main: # PIPELINE SUMMARY
+2026-08-12 00:59:54 [INFO   ] main: ####################################################################################################
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]   3.47s  1. Material-level model validation vs. Dan'kov et al. (1998)
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]  17.98s  1b. Inhomogeneous/polycrystalline Tc-broadening sensitivity (core/inhomogeneous_broadening.py, Phase 22 item 1)
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]   0.42s  2. System-level validation vs. published AMR prototypes
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]   0.32s  2b. Cycle-type (Ericsson-like vs. Brayton-like) validation sensitivity (core/validation_system.py, Phase 17)
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]   0.01s  3. Loss-model calibration (auto-loaded by AMRSystem's default loss model)
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]   0.00s  3b. Regenerator thermal-effectiveness demo (core/thermal.py, reached transitively otherwise)
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]   0.30s  3c. Geometry-dependent pumping power: packed-bed + parallel-plate (core/geometry_analysis.py)
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]   0.14s  3d. Hypereg parallel-hydraulic pumping-power analysis (core/hypereg_analysis.py, Phase 15 item 3)
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]   0.19s  4. Baseline comparison sweep: AMR vs VCC vs liquid cooling vs Carnot
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]   0.00s  5. Economics / TCO at the representative operating point
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]   3.18s  5b. Full-system cost estimate by material family (core/economics.py, Phase 15 item 5) + amorphous-material cost/performance note (Phase 22 item 3)
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]   0.00s  6. Emissions comparison at the representative operating point
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]   1.34s  7. Cascade staging comparison (1-4 stage AMR, Gd and Gd5Si2Ge2)
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]  26.09s  7b. Curie-graded cascade (composition-tuned per stage, ROADMAP.md Phase 7 item)
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]  47.54s  7c. Does a 6-layer Curie-graded La(Fe,Si)13Hy bed reproduce Astronautics_rotary_2014? (ROADMAP.md Phase 9 addendum)
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]   0.52s  8. Giant-MCE materials analysis (Gd vs Gd5Si2Ge2)
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]  18.89s  8d. Six-way material family comparison (Gd, Gd5Si2Ge2-fixed, GD/LAFESIH/MNFEPSI-tuned, LAFESIH-nanocomposite; Track A2 item + Phase 22 item 2)
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]   2.14s  8e. Nanocomposite off-design robustness check (core/nanocomposite_material.py, Phase 22 item 2 follow-up)
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]   0.00s  8b. First-order Landau model calibration check (core/first_order_mce.py, reached transitively otherwise)
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]   1.11s  8c. Giguere et al. (1999) direct-measurement cross-check (core/giguere_validation.py)
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]   3.85s  9. Sobol global sensitivity analysis (constant-loss model)
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]   3.90s  9b. Sobol global sensitivity analysis (state-dependent loss model)
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]   2.29s  10. Response-surface (RSM) surrogate fit
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]   9.87s  11. NSGA-III multi-objective design optimization (material + geometry co-optimization, Phase 15 item 2)
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]  12.42s  11b. Hysteresis sensitivity: does Phase 16's thermal-hysteresis loss change the Phase 15 material-selection result? (core/hysteresis_sensitivity.py, Phase 16)
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]   0.06s  11c. Thermal-diode sensitivity study: mechanical-contact active thermal diode (core/thermal_diode.py, core/thermal_diode_analysis.py, Phase 18)
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]  12.31s  11d. Magnet-geometry (Halbach-cylinder) field-vs-mass cost model (core/magnet_geometry.py, Phase 19)
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]  44.87s  12. Figure generation: 26 figures covering validation, AMR curves, cascade/graded staging, sensitivity, RSM, NSGA-III, economics, emissions (plots.py)
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]   0.01s  13. Design-recommendations synthesis (core/design_recommendations.py)
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]   0.39s  14. Magnetocaloric fluids (ferrofluid/MR suspension) as an alternative working-body class (core/fluid_mce_cycle.py, core/fluid_mce_analysis.py, Phase 20)
+2026-08-12 00:59:54 [INFO   ] main:   [ok    ]   0.13s  15. Passive/hybrid magnetic regenerator augmentation of a conventional gas cycle (core/baseline_cooling.py, core/passive_regenerator_analysis.py, Phase 21)
+2026-08-12 00:59:54 [INFO   ] main: Total wall time: 213.8s
+2026-08-12 00:59:54 [INFO   ] main: All stages completed. Files written to results/:
+2026-08-12 00:59:54 [INFO   ] main:   comparison_table.csv, cascade_comparison.csv, cascade_comparison_giant_mce.csv, giant_mce_analysis.txt, material_family_comparison.csv, material_family_comparison.txt, sobol_results.txt, sobol_results_phase2_constant.txt, rsm_coefficients.txt, pareto_front.csv, pareto_front_by_material/*.csv (Phase 15), hypereg_analysis.txt (Phase 15), hysteresis_sensitivity.txt (Phase 16), cycle_type_validation.txt (Phase 17), thermal_diode_analysis.txt (Phase 18), magnet_geometry_analysis.txt, magnet_geometry_pareto_sensitivity.txt, pareto_front_magnet_flat.csv, pareto_front_magnet_geometric.csv (Phase 19), fluid_mce_analysis.txt (Phase 20), passive_regenerator_analysis.txt (Phase 21), geometry_optimization_analysis.txt, graded_cascade_comparison.csv, design_recommendations.txt, figures/*.png+*.pdf (26 figures)
+2026-08-12 00:59:54 [INFO   ] main: Full run log: results\pipeline.log
+2026-08-12 00:59:54 [INFO   ] main: 
+2026-08-12 00:59:54 [INFO   ] main: ####################################################################################################
+2026-08-12 00:59:54 [INFO   ] main: # EXECUTIVE SUMMARY -- implemented features, analyses, and headline metrics
+2026-08-12 00:59:54 [INFO   ] main: ####################################################################################################
+2026-08-12 00:59:54 [INFO   ] main: Validation
+2026-08-12 00:59:54 [INFO   ] main:   - Material-level: mean-field Gd model vs. Dan'kov et al. (1998), Giguere et al. (1999) direct-measurement cross-check, Curie-shift limitation check
+2026-08-12 00:59:54 [INFO   ] main:   - System-level: calibrated against 16 published AMR prototype/benchmark rows (data/amr_experimental_benchmarks.csv), including a 6-layer Curie-graded La(Fe,Si)13Hy reproduction of Astronautics_rotary_2014
+2026-08-12 00:59:54 [INFO   ] main: Baseline comparison (AMR vs. vapor-compression vs. liquid cooling vs. Carnot)
+2026-08-12 00:59:54 [INFO   ] main:   - At 10K span: AMR_COP_elec=4.63, VCC_COP=12.23, Liquid_COP=19.89, Carnot_COP=29.12  (results/comparison_table.csv)
+2026-08-12 00:59:54 [INFO   ] main:   - Elastocaloric (Phase 23, static literature reference, NOT span-simulated -- see core/baseline_cooling.py's own honesty flag): COP_ref=4.63
+2026-08-12 00:59:54 [INFO   ] main: Economics & emissions (TCO and GWP at the representative operating point)
+2026-08-12 00:59:54 [INFO   ] main:   - results/*: economics.py CAPEX/OPEX comparison, emissions.py refrigerant + operational CO2e comparison
+2026-08-12 00:59:54 [INFO   ] main:   - Phase 15: full-system BOM cost model (materials + soft-magnetic yoke), order-of-magnitude full-system cost estimate, and CRF-based levelized cost of cooling, all at the same design point -- see step 5's log output above; step 5b compares the same estimate across material families
+2026-08-12 00:59:54 [INFO   ] main: Cascade staging & Curie-temperature grading
+2026-08-12 00:59:54 [INFO   ] main:   - At 10K span, 3-stage: plain-Gd COP=2.415, Curie-graded COP=2.443 (results/cascade_comparison.csv, results/graded_cascade_comparison.csv)
+2026-08-12 00:59:54 [INFO   ] main: Material family ranking (Gd / Gd5Si2Ge2 / GD- / LAFESIH- / MNFEPSI-tuned families)
+2026-08-12 00:59:54 [INFO   ] main:   - Best at 10K span: La(Fe,Si)13Hy (tuned)  COP_elec=6.724  (results/material_family_comparison.csv)
+2026-08-12 00:59:54 [INFO   ] main: Global sensitivity (Sobol) & response-surface (RSM) surrogate
+2026-08-12 00:59:54 [INFO   ] main:   - results/sobol_results.txt (state-dependent losses), results/sobol_results_phase2_constant.txt (constant losses), results/rsm_coefficients.txt (Qc surrogate, R^2 reported at fit time)
+2026-08-12 00:59:54 [INFO   ] main: Regenerator geometry optimization (packed-bed / parallel-plate)
+2026-08-12 00:59:54 [INFO   ] main:   - COP-optimal packed-bed sphere diameter: 0.5 mm; COP-optimal parallel-plate spacing: 0.1 mm (results/geometry_optimization_analysis.txt)
+2026-08-12 00:59:54 [INFO   ] main: Hypereg parallel-hydraulic pumping-power analysis (Phase 15 item 3)
+2026-08-12 00:59:54 [INFO   ] main:   - Klinar et al. (2024)-motivated pumping-power-only sweep; see results/hypereg_analysis.txt and results/hypereg_findings.md for the full literature findings note and quantitative result
+2026-08-12 00:59:54 [INFO   ] main: NSGA-III multi-objective design optimization (COP vs. Qc vs. cost; Phase 15: material + geometry co-optimized)
+2026-08-12 00:59:54 [INFO   ] main:   - 21 Pareto-optimal designs; best electrical COP=9.528 at f=0.423Hz, material=La(Fe,Si)13Hy (tuned, Tc=285.3K) (results/pareto_front.csv, results/pareto_front_by_material/*.csv)
+2026-08-12 00:59:54 [INFO   ] main: Hysteresis sensitivity: does Phase 16's thermal-hysteresis loss change the Phase 15 material-selection result? (step 11b, Phase 16)
+2026-08-12 00:59:54 [INFO   ] main:   - La(Fe,Si)13Hy share of merged front: 88% (hysteresis OFF, pre-Phase-16) -> 100% (hysteresis ON, Phase 16) -- see results/hysteresis_sensitivity.txt and that module's docstring honesty flags 1-2 before treating this as a settled, publication-quality answer rather than a directional sensitivity check
+2026-08-12 00:59:54 [INFO   ] main: Thermal-diode sensitivity study: mechanical-contact active thermal diode (step 11c, Phase 18)
+2026-08-12 00:59:54 [INFO   ] main:   - Cost-only, unbenchmarked design-exploration study (see results/thermal_diode_analysis.txt and core/thermal_diode.py's docstring honesty flag): confirms this repo's model has no internal mechanical-switching frequency ceiling for a diode to relax, and quantifies the small COP_electrical cost of an illustrative diode actuation-switching-power term -- no benchmark device in this repo's corpus uses thermal diodes, so this is not a validated feature
+2026-08-12 00:59:54 [INFO   ] main: Magnet-geometry (Halbach-cylinder) field-vs-mass cost model (step 11d, Phase 19)
+2026-08-12 00:59:54 [INFO   ] main:   - Merged Pareto front mean mu0H_max_T: 1.31 T (flat per-Tesla magnet-mass ratio) -> 1.54 T (Phase 19 geometric Halbach-cylinder magnet-mass relation) -- see results/magnet_geometry_pareto_sensitivity.txt and core/magnet_geometry.py's docstring honesty flags (incl. a citation correction found in this pass) before treating this as a settled, publication-quality answer rather than a directional sensitivity check
+2026-08-12 00:59:54 [INFO   ] main: Consolidated design recommendations (step 13)
+2026-08-12 00:59:54 [INFO   ] main:   - Ranks all COP-maximization levers above by demonstrated Sobol sensitivity and reports a recommended starting design point (results/design_recommendations.txt)
+2026-08-12 00:59:54 [INFO   ] main: Figures
+2026-08-12 00:59:54 [INFO   ] main:   - 26 figure(s) generated (results/figures/*.png, *.pdf)
+2026-08-12 00:59:54 [INFO   ] main: Magnetocaloric fluids (ferrofluid/MR suspension) as an alternative working-body class (step 14, Phase 20)
+2026-08-12 00:59:54 [INFO   ] main:   - Volume-fraction sweep: COP_electrical best at phi=0.10 (a genuine interior optimum) -- results/fluid_mce_analysis.txt
+2026-08-12 00:59:54 [INFO   ] main:   - At its own favorable span (0.68 K, phi=0.20): ferrofluid Qc=8.34W vs. solid AMR Qc=723.00W -- fluid dilution plus this architecture's lack of regeneration (see core/fluid_mce_cycle.py's own docstring) collapses usable span far below solid AMR's, a design-exploration finding, not a validated benchmark-backed result (no fluid-MCE-as-working-body device was found in this pass's own literature search -- see that module's HONESTY FLAG #2)
+2026-08-12 00:59:54 [INFO   ] main: Passive/hybrid magnetic regenerator: augmenting a conventional gas cycle's own regenerator with a magnetocaloric material's Curie-point heat-capacity anomaly (step 15, Phase 21)
+2026-08-12 00:59:54 [INFO   ] main:   - Best candidate at the representative operating point: Gd (polycrystalline)  eps 0.829 -> 0.860  COP 12.228 -> 12.258 (+0.24%) -- results/passive_regenerator_analysis.txt
+2026-08-12 00:59:54 [INFO   ] main:   - Alignment effect confirmed directly (not assumed): candidate materials whose own Curie temperature falls outside the operating window show ~0% gain, since delta_eps is clipped at 0 by construction (see core/baseline_cooling.py's own docstring). The effectiveness-to-COP mapping is an illustrative, literature-range-anchored ceiling, not a fitted or digitized coefficient -- see that module's Phase 21 honesty flag before treating this as a validated device-level COP prediction
