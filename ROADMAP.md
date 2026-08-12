@@ -1021,6 +1021,7 @@ Engelbrecht, rotary AMR - ScienceDirect (2016)".
       span doesn't reproduce under the model at all) and was judged too
       large a methodological change to make silently; flagged for a
       future pass if it's judged worth special-casing.
+
 ## Phase 14 — Bug fixes + Track A2 four-way material comparison + open-item decisions (this pass)
 
 Closes ROADMAP.md's suggested "Track A" bug-fix list and makes explicit,
@@ -1332,12 +1333,25 @@ total after) passes.
 updated) and into `README.md`'s architecture/usage sections — see those
 files for the user-facing writeup.
 
-Phase 16 candidates (not started)
-A real bottom-up AMR-specific BOM (HX, pump, motor, controls parts-and-labor), replacing item 5's order-of-magnitude vapor- compression-AC-benchmark multiplier with an AMR-native estimate.
-Revisit whether regenerator_effectiveness should be removed as a design variable now that it's documented as inert under USE_NTU_THERMAL_MODEL=True (see item 2's limitation note above), with a CSV/plots.py schema migration plan.
-A native mixed-variable (pymoo option (a)) material+geometry co-optimization, if a design is ever found where the "compare finished per-material fronts" approximation (option (b)'s documented limitation) is suspected to matter.
-Should Hypereg's benefit turn out non-negligible at a different (e.g. higher-frequency, higher-mdot) operating point than the one checked in core/hypereg_analysis.py, extend that sweep — nothing here claims the modest benefit found at THIS operating point generalizes.
-Phase 16: hysteresis loss quantification (completed)
+### Phase 16 candidates (not started)
+
+- A real bottom-up AMR-specific BOM (HX, pump, motor, controls
+  parts-and-labor), replacing item 5's order-of-magnitude
+  vapor-compression-AC-benchmark multiplier with an AMR-native estimate.
+- Revisit whether `regenerator_effectiveness` should be removed as a
+  design variable now that it's documented as inert under
+  `USE_NTU_THERMAL_MODEL=True` (see item 2's limitation note above), with
+  a CSV/`plots.py` schema migration plan.
+- A native mixed-variable (pymoo option (a)) material+geometry
+  co-optimization, if a design is ever found where the "compare finished
+  per-material fronts" approximation (option (b)'s documented limitation)
+  is suspected to matter.
+- Should Hypereg's benefit turn out non-negligible at a different (e.g.
+  higher-frequency, higher-mdot) operating point than the one checked in
+  `core/hypereg_analysis.py`, extend that sweep — nothing here claims the
+  modest benefit found at THIS operating point generalizes.
+
+## Phase 16 — hysteresis loss quantification — done
 
 Motivation. Phase 15's merged, globally non-dominated Pareto front (results/pareto_front.csv) came out 100% La(Fe,Si)13Hy, a first-order material. Thermal hysteresis loss — real, irreversible energy dissipated each cycle by first-order materials, which Gd genuinely does not pay — was, until this phase, a documented but entirely UNQUANTIFIED honesty flag (prose-only caveats in core/cascade.py and core/giguere_validation.py). It was invisible to every objective the NSGA-III optimizer actually sees. This phase made it a real number.
 
@@ -1377,7 +1391,7 @@ Did not model composition-dependence of hysteresis loss within a tuned-material 
 Did not fold hysteresis into magnetic_work()'s ideal-cycle thermodynamics or eta_2nd_law as an alternative accounting choice to the additive-W_parasitic treatment used here — see item 2 above.
 Did not re-run the sensitivity comparison at full pop_size=40, n_gen=25 resolution or with multiple seeds — see the open item called out in the Result section above.
 
-Phase 17: AMR cycle topology (Ericsson-like / Carnot-like vs. Brayton-like) — done
+## Phase 17 — AMR cycle topology (Ericsson-like / Carnot-like vs. Brayton-like) — done
 
 Motivation. core/amr_cycle.py's AMRSystem has, since before Phase 15, implicitly assumed a Brayton-like AMR cycle: adiabatic magnetization/demagnetization with the fluid static, then isofield hot/cold blows only. Kitanovski et al. (2015) Sect. 4.1.1-4.1.4 name two alternative topologies — Ericsson-like (field change happens under continuous fluid contact) and Carnot-like (the idealized reversible reference) — and several of this project's own benchmarked devices (Astronautics_rotary_2014, DTU_Eriksen_rotary_Gd_2015/DTU_Eriksen_MAGGIE_2016) are rotary, continuous-field designs that plausibly sit closer to Ericsson-like than to the model's Brayton-like default. This phase gave the model a real, opt-in switch for that instead of silently assuming Brayton for every device.
 
@@ -1397,12 +1411,32 @@ Tests added: tests/test_amr_cycle.py (6 new — backward-compatibility/default v
 
 What this phase deliberately did NOT do (real open items, not oversights):
 
-Did not digitize Kitanovski et al. (2015) Sect. 4.1.1-4.1.4's actual closed-form Ericsson-like/Carnot-like/max-specific-cooling-power equations — this project's own copy of the book does not include those pages (pp. 104-109). If a fuller copy becomes available, CYCLE_TYPE_FACTORS's illustrative multipliers should be replaced with the book's own relations and this honesty flag revisited.
-Did not add cycle_type as an NSGA-III categorical design variable in core/optimize.py (the "run per categorical option, merge fronts post-hoc" idiom Phase 15 established for material family and that the original Phase 17 plan flagged as optional/lower-priority) — core/optimize.py's AMRDesignProblem still only ever builds "brayton" systems. This is the most likely next step if cycle_type is judged worth optimizing over rather than only validating against.
-Did not thread cycle_type through core/cascade.py's multi-stage/graded-bed helpers — every cascade stage still implicitly runs "brayton", including for the two rotary devices' own graded-bed reproductions (7c's Astronautics check, 7b's graded cascade).
-Did not attempt a literature-sourced (rather than naming-convention-heuristic) per-device cycle-topology classification for infer_cycle_type_for_device() — none of the 16 source papers in this repo's corpus were re-read specifically to check whether they describe their own field profile as continuous/stepped; "rotary" in the device name was used as the sole proxy, exactly as the original Phase 17 plan itself proposed doing at this pass's scope.
+- Did not digitize Kitanovski et al. (2015) Sect. 4.1.1-4.1.4's actual
+  closed-form Ericsson-like/Carnot-like/max-specific-cooling-power
+  equations — this project's own copy of the book does not include those
+  pages (pp. 104-109). If a fuller copy becomes available,
+  `CYCLE_TYPE_FACTORS`'s illustrative multipliers should be replaced with
+  the book's own relations and this honesty flag revisited.
+- Did not add `cycle_type` as an NSGA-III categorical design variable in
+  `core/optimize.py` (the "run per categorical option, merge fronts
+  post-hoc" idiom Phase 15 established for material family and that the
+  original Phase 17 plan flagged as optional/lower-priority) —
+  `core/optimize.py`'s `AMRDesignProblem` still only ever builds
+  "brayton" systems. This is the most likely next step if `cycle_type` is
+  judged worth optimizing over rather than only validating against.
+- Did not thread `cycle_type` through `core/cascade.py`'s
+  multi-stage/graded-bed helpers — every cascade stage still implicitly
+  runs "brayton", including for the two rotary devices' own graded-bed
+  reproductions (7c's Astronautics check, 7b's graded cascade).
+- Did not attempt a literature-sourced (rather than
+  naming-convention-heuristic) per-device cycle-topology classification
+  for `infer_cycle_type_for_device()` — none of the 16 source papers in
+  this repo's corpus were re-read specifically to check whether they
+  describe their own field profile as continuous/stepped; "rotary" in the
+  device name was used as the sole proxy, exactly as the original Phase
+  17 plan itself proposed doing at this pass's scope.
 
-Phase 18: mechanical-contact active thermal diode (scoped-down, completed)
+## Phase 18 — mechanical-contact active thermal diode (scoped-down) — done
 
 Motivation. The original Phase 18 plan proposed the fuller of Kitanovski et al. (2015) Ch. 6's four active-diode mechanisms (thermoelectric 6.2.1, thermionic 6.2.2, spincaloritronic 6.2.3, mechanical-contact 6.2.4), wired as an NSGA-III categorical variant analogous to how Phase 15 handled material family and Phase 17 sketched (but deliberately did not implement) for cycle_type. The plan itself flagged this as "high effort, new physics, no benchmark, real risk of building something un-calibratable" and recommended scoping down to "what frequency ceiling would need to be broken for this to matter" as a sensitivity study before building the full diode model. This pass took that recommendation rather than the fuller plan.
 
@@ -1424,16 +1458,65 @@ Tests added: tests/test_thermal_diode.py (10 new — dataclass validation incl. 
 
 What this phase deliberately did NOT do (real open items, not oversights, matching the plan's own recommended scope-down):
 
-Did not digitize Kitanovski et al. (2015) Sect. 6.2.4's actual mechanical-contact-diode design equations, rectification ratios, or switching dynamics — this project's own copy of the book does not include those pages (pp. 211-268). DEFAULT_MECHANICAL_CONTACT_DIODE's numbers are illustrative placeholders, not literature values.
-Did not model any heat-transfer benefit from rectification_ratio — no closed-form relation for how a diode's rectification ratio would improve AMR cycle performance (raise achievable frequency, raise Qc, or raise eta_2nd_law) was available to digitize, so this pass implements the parasitic COST side only. This is a real, one-sided gap: a genuinely diode-equipped AMR should look BETTER than this module currently allows it to, not only more expensive to actuate.
-Did not add thermal_diode as an NSGA-III categorical design variable in core/optimize.py (the "run per categorical option, merge fronts post-hoc" idiom Phase 15 established for material family, and that Phase 17 also declined for cycle_type) — this repo's own check (Step 1 above) found no frequency ceiling for such a search to meaningfully explore relaxing, and with no heat-transfer benefit modeled either, a categorical NSGA-III variant would only ever make thermal_diode-equipped designs strictly cost-dominated, which would not be a meaningful search.
-Did not implement the other three Ch. 6 active-diode mechanisms (thermoelectric, thermionic, spincaloritronic) — explicitly out of scope per the plan's own risk-scoping recommendation ("lower risk of building something with no benchmark to check against" was the reason mechanical-contact was chosen first).
-Did not thread thermal_diode through core/cascade.py's multi-stage/graded-bed helpers — every cascade stage still implicitly runs with thermal_diode=None.
-Did not attempt to source rectification-ratio or actuation-energy figures from the general (non-Kitanovski, non-AMR-specific) solid-state thermal-diode review literature with proper citation — DEFAULT_MECHANICAL_CONTACT_DIODE's values are stated as round-number illustrations, not attributed to any specific paper, to avoid implying a grounding this pass did not actually do.
+- Did not digitize Kitanovski et al. (2015) Sect. 6.2.4's actual
+  mechanical-contact-diode design equations, rectification ratios, or
+  switching dynamics — this project's own copy of the book does not
+  include those pages (pp. 211-268). `DEFAULT_MECHANICAL_CONTACT_DIODE`'s
+  numbers are illustrative placeholders, not literature values.
+- Did not model any heat-transfer benefit from `rectification_ratio` — no
+  closed-form relation for how a diode's rectification ratio would
+  improve AMR cycle performance (raise achievable frequency, raise Qc, or
+  raise `eta_2nd_law`) was available to digitize, so this pass implements
+  the parasitic COST side only. This is a real, one-sided gap: a
+  genuinely diode-equipped AMR should look BETTER than this module
+  currently allows it to, not only more expensive to actuate.
+- Did not add `thermal_diode` as an NSGA-III categorical design variable
+  in `core/optimize.py` (the "run per categorical option, merge fronts
+  post-hoc" idiom Phase 15 established for material family, and that
+  Phase 17 also declined for `cycle_type`) — this repo's own check (Step
+  1 above) found no frequency ceiling for such a search to meaningfully
+  explore relaxing, and with no heat-transfer benefit modeled either, a
+  categorical NSGA-III variant would only ever make
+  thermal_diode-equipped designs strictly cost-dominated, which would not
+  be a meaningful search.
+- Did not implement the other three Ch. 6 active-diode mechanisms
+  (thermoelectric, thermionic, spincaloritronic) — explicitly out of
+  scope per the plan's own risk-scoping recommendation ("lower risk of
+  building something with no benchmark to check against" was the reason
+  mechanical-contact was chosen first).
+- Did not thread `thermal_diode` through `core/cascade.py`'s
+  multi-stage/graded-bed helpers — every cascade stage still implicitly
+  runs with `thermal_diode=None`.
+- Did not attempt to source rectification-ratio or actuation-energy
+  figures from the general (non-Kitanovski, non-AMR-specific) solid-state
+  thermal-diode review literature with proper citation —
+  `DEFAULT_MECHANICAL_CONTACT_DIODE`'s values are stated as round-number
+  illustrations, not attributed to any specific paper, to avoid implying
+  a grounding this pass did not actually do.
 
-Follow-up (closes the item directly above): rectification-ratio now cited. A web search for general (non-Kitanovski) mechanical-contact heat-switch literature found Bywaters & Griffin, "Passive Gas-Gap Heat Switches for use in Low-Temperature Cryogenic Systems," reporting on/off thermal-conductance ratios of roughly 100-200 for a piezo-actuated mechanical heat switch (PZHS) at 4-10 K under 8 N actuation force — a genuinely analogous mechanism (mechanical actuator engaging/disengaging contact bodies) though from a different application, thermal regime, and duty cycle than an AMR diode would need. core/thermal_diode.py's DEFAULT_MECHANICAL_CONTACT_DIODE was updated to rectification_ratio=20 (forward_conductance_W_K=5.0, reverse_conductance_W_K=0.25), a conservative ~1/10 of the PZHS's reported ceiling, with the module's honesty flag rewritten to state this citation and its limits explicitly (cryogenic ADR/cryocooler literature, not room-temperature/AMR-specific or Hz-scale-duty-cycle data). actuation_energy_J_per_cycle remains an uncited round-number placeholder — no source found reporting per-actuation energy at AMR-relevant frequencies (~0.1-10 Hz). All 39 core/thermal_diode*.py-related tests still pass unchanged (they check rectification_ratio > 1 generically, not the exact value), confirming this was a docstring/default-value update, not a behavior change.
+### Follow-up (closes the item directly above): rectification-ratio now cited
 
-Phase 16-18 follow-up pass (closes three further open items, completed after Phase 18's own delivery)
+A web search for general (non-Kitanovski) mechanical-contact
+heat-switch literature found Bywaters & Griffin, "Passive Gas-Gap Heat
+Switches for use in Low-Temperature Cryogenic Systems," reporting on/off
+thermal-conductance ratios of roughly 100-200 for a piezo-actuated
+mechanical heat switch (PZHS) at 4-10 K under 8 N actuation force — a
+genuinely analogous mechanism (mechanical actuator engaging/disengaging
+contact bodies) though from a different application, thermal regime, and
+duty cycle than an AMR diode would need. `core/thermal_diode.py`'s
+`DEFAULT_MECHANICAL_CONTACT_DIODE` was updated to `rectification_ratio=20`
+(`forward_conductance_W_K=5.0`, `reverse_conductance_W_K=0.25`), a
+conservative ~1/10 of the PZHS's reported ceiling, with the module's
+honesty flag rewritten to state this citation and its limits explicitly
+(cryogenic ADR/cryocooler literature, not room-temperature/AMR-specific
+or Hz-scale-duty-cycle data). `actuation_energy_J_per_cycle` remains an
+uncited round-number placeholder — no source found reporting
+per-actuation energy at AMR-relevant frequencies (~0.1-10 Hz). All 39
+`core/thermal_diode*.py`-related tests still pass unchanged (they check
+`rectification_ratio > 1` generically, not the exact value), confirming
+this was a docstring/default-value update, not a behavior change.
+
+## Phase 16-18 follow-up pass (closes three further open items, completed after Phase 18's own delivery)
 
 This pass returned to close specific, previously-flagged open items across Phases 16-18 before moving on to new phases, rather than leaving them as permanent "not started" entries. Three items were resolved:
 
@@ -1449,7 +1532,8 @@ This pass returned to close specific, previously-flagged open items across Phase
 Full suite after this pass: 269 tests collected, all passing (run in three batches — 233 fast tests, 27 in test_plots.py, and 10 slow multiseed/Astronautics-calibration tests — due to this session's own tool-call wall-time limits, not a repo issue; a single uninterrupted `pytest` run should complete in roughly 5-6 minutes based on the batch timings). Full main.py pipeline reruns cleanly end-to-end (all 26 stages "ok", 170.7s total wall time), with step 7c's new ericsson addendum and the (unchanged) step 11c thermal-diode study both present in the log.
 
 What remains genuinely open from Phases 1-18, not attempted in this pass, and why: Phase 7's remaining items (a still-open point-count-mismatch in one paper's digitized data, and other pixel-digitization/literature gaps flagged at the time) remain blocked by source-material availability, not effort — no new literature became available this session to close them. Phase 16's other three "candidates (not started)" (a real bottom-up AMR-specific BOM; removing regenerator_effectiveness as an inert NSGA-III design variable, which would need a CSV/plots.py schema migration; a native mixed-variable, option-(b), material+geometry co-optimization) remain deliberately deferred: the first has no new cost data source, the second is a real but risky schema change with no urgent motivating finding, and the third's own stated trigger ("if a design is ever found where the current per-material-then-merge approximation is suspected to matter") has not occurred. Phase 17's remaining "did NOT do" items (cycle_type as an NSGA-III categorical search variable; a literature-confirmed rather than naming-convention-proxy cycle-type classification for the full 16-device benchmark set) were not attempted: the former has weak motivation after this pass's own single-device null result, and the latter needs source material this project doesn't have. Phase 18's remaining "did NOT do" items (an actual heat-transfer-benefit model from rectification_ratio; threading thermal_diode through cascade.py; the other three Ch. 6 diode mechanisms) remain out of scope for the reasons already stated in Phase 18's own entry above — none of them had a new, cheap, well-motivated angle to close this session the way the rectification-ratio citation did.
-Phase 19: magnetic field source — field-vs-mass geometry model (completed)
+
+## Phase 19 — magnetic field source: field-vs-mass geometry model — done
 
 Motivation. The original Phase 19 plan proposed replacing economics.py's flat, per-Tesla magnet-mass ratio (MAGNET_TO_MCM_MASS_RATIO_PER_TESLA — its own docstring already called this "a rough fit to two worked examples," not a physical model) with a closed-form geometric relation, so that achieving a higher field costs nonlinearly more magnet mass at a fixed air-gap geometry — a real effect the flat-ratio proxy could not represent at all, since it is linear in mu0H_max by construction.
 
@@ -1470,7 +1554,8 @@ Integration points. main.py: new import `from core import magnet_geometry`; new 
 Tests added: tests/test_magnet_geometry.py (15 collected from 12 test functions — one is parametrized over 4 invalid-input cases — round-trip field/radius inversion, monotonicity, the super-linear-in-field mass-growth property directly asserted (m(2T) > 2*m(1T), accelerating), linear-in-length scaling at fixed field, bore-geometry consistency, return-shape checks, four input-validation error paths, bjork_qualitative_check()'s honest (non-forced) matches_2T_claim consistency check, file-writing smoke test, a remanence sanity bound), tests/test_economics.py (5 new — geometric mass increases with field and with regenerator mass, bom_cost_geometric()'s return shape matches bom_cost()'s, the geometric/flat cost ratio actually diverges at high field, the non-materials multiplier is applied correctly), tests/test_optimize_material_geometry.py (4 new — use_geometric_magnet_mass default-False reproduces the exact pre-Phase-19 value, the flag changes the value at high field, both run_optimization_for_material() and run_optimization() run end-to-end with the flag set and still return an internally non-dominated merged front). Full suite: 293/293 passing (269 pre-Phase-19 + 24 new: 15+5+4), zero regressions.
 
 Did NOT do (explicitly, not silently): did not correct Literature_Review.md's own arXiv:1410.1987 mis-citation (see HONESTY FLAG #2) — a real, cheap follow-up item for a future pass. Did not implement Bjørk et al. (2011)'s own figure-of-merit (M*, reported range 0-0.25) parameterized magnet-mass model — only that paper's public abstract was available to this pass (see HONESTY FLAG #2), not its actual equations, so `halbach_field_vs_mass()` implements the generic idealized-Halbach-cylinder relation instead; if a fuller copy of either Bjørk paper or Kitanovski Ch. 3 becomes available, this module's defaults and `bjork_qualitative_check()`'s proxy metric should both be revisited. Did not model finite-segment or open-ended-cylinder field reduction (the idealized Eq. 1 is a strict upper bound on achievable field for a given mass) — flagged as a limitation in core/magnet_geometry.py's own docstring rather than corrected with an ad hoc fudge factor. Did not rerun `run_geometric_cost_pareto_sensitivity()` at full production settings with multiple seeds before writing this entry (the pop_size=12/n_gen=5 spot check above is explicitly sub-reduced-resolution) — main.py's own step 11d will do the full pop_size=32/n_gen=15 run on the next `python main.py` invocation; treat the 1.85T->1.62T finding above as directional only until that run's own results/magnet_geometry_pareto_sensitivity.txt is inspected. Did not add a `use_geometric_magnet_mass` option to economics.py's `lifetime_cost()`/`levelized_cost_of_cooling()` (Phase 15 functions that still call `material_cost()` directly, not `bom_cost()`) — out of scope for this pass, since the plan's own item was specifically about `cost_index()`/the NSGA-III search, not the separate TCO/levelized-cost reporting path.
-Phase 20: magnetocaloric fluids as an alternative working-body class (completed)
+
+## Phase 20 — magnetocaloric fluids as an alternative working-body class — done
 
 Motivation. The original Phase 20 plan named this the highest-effort, lowest-priority "new capability" item — a genuinely different working-body topology (a magnetocaloric fluid flowing continuously through hot-/cold-side heat exchangers, magnetized/demagnetized in place) rather than a parameter on the existing solid-regenerator AMRSystem, with real risk of building something uncalibratable for lack of a benchmark. The plan's own scoping decision recommended a new sibling class rather than forcing this through AMRSystem's packed-bed/parallel-plate geometry assumptions — followed here.
 
@@ -1492,7 +1577,7 @@ Tests added: tests/test_fluid_mce_cycle.py (14 tests — Krieger-Dougherty monot
 
 Did NOT do (explicitly, not silently): did not implement Kitanovski Ch. 5's own rheology-adjusted MCE-intensity-vs-viscosity relations (not available — HONESTY FLAG #1) — used the generic Krieger-Dougherty/mixture-dilution combination instead, which should be revisited if a fuller copy of Kitanovski becomes available. Did not attempt OCR on the scanned Tishin PDF to verify its actual ferrofluid coverage (a real, cheap-ish follow-up item for a future pass, flagged rather than silently skipped). Did not model Brownian/thermal relaxation of particle magnetic moments (superparamagnetic behavior at small particle sizes) — particles are treated as carrying the same field-dependent entropy change as the corresponding bulk MagnetocaloricMaterial, scaled only by mass fraction; a real nanoparticle-physics simplification, stated in core/fluid_mce_cycle.py's own docstring. Did not calibrate `eta_2nd_law_fluid` against any benchmark device (none exists — HONESTY FLAG #2); it remains an explicitly illustrative, uncalibrated constant. Did not implement a magnetorheological (as opposed to ferrofluid) suspension variant separately, despite the plan naming both — the same Krieger-Dougherty/dilution framework is used for both, without a separate MR-specific yield-stress term Kitanovski Ch. 5 would presumably cover. Did not add a `data-center liquid-cooling comparison angle` beyond the single-span, single-operating-point comparison already run in `compare_to_solid_amr_and_liquid_cooling()` — a fuller sweep across spans/flow rates comparable to main.py step 4's own baseline-sweep table is a natural next step if this module's findings warrant further investment, which HONESTY FLAG #2's benchmark gap argues against for now.
 
-Phase 21: passive/hybrid magnetic regenerator configurations (completed)
+## Phase 21 — passive/hybrid magnetic regenerator configurations — done
 
 Motivation. The original Phase 21 plan named this the cheapest of the remaining new-capability items: unlike Phases 18/20 it needs no new physics or new benchmark data, only a recombination of two things this repo already computes — core/mce_material.py's own MagnetocaloricMaterial.total_heat_capacity() curves (already used by every validation figure) and core/baseline_cooling.py's existing vapor-compression/liquid-cooling COP correlations — to model a PASSIVE (not actively cycled) magnetic regenerator loaded into a conventional gas cycle's own internal regenerator, exploiting its Curie-point heat-capacity anomaly to raise regenerator effectiveness and, through that, the cycle's COP.
 
@@ -1512,7 +1597,7 @@ Tests added: tests/test_thermal.py (2 new — `cp_solid=None` exactly reproduces
 
 What this phase deliberately did NOT do (real open items, not oversights): did not digitize Tishin & Spichkin (2003) Sect. 11.1/11.2.3/11.2.4's own equations or reported figures (not available — see honesty flag above); the effectiveness-boost mechanism and the effectiveness-to-COP mapping are both this pass's own constructions, not reproductions of that chapter. Did not calibrate `MAX_COP_GAIN_AT_FULL_EFFECTIVENESS` against any benchmark device — none exists for this specific configuration (a magnetically-augmented passive regenerator inside a vapor-compression cycle) in data/amr_experimental_benchmarks.csv or in any source found by this pass; it remains an illustrative, literature-RANGE-anchored ceiling, not a fitted coefficient, at the same evidentiary tier as Phase 16/18's own placeholders. Did not extend the mechanism to liquid_cooling_cop() (only vapor_compression_cop()-based base COPs were exercised in core/passive_regenerator_analysis.py) — liquid cooling's own blended economizer/mechanical COP model (core/baseline_cooling.py's `liquid_cooling_cop()`) is structurally different (an hours-weighted blend, not a single second-law-efficiency figure) and augmenting it meaningfully would need its own design decision about which regime (economizer vs. mechanical) the regenerator boost applies to; `augmented_regenerator_cop()` itself is generic enough to accept any `base_cop` float, so a caller can already pass `liquid_cooling_cop(...).COP` directly if they choose to, this just wasn't exercised as a dedicated analysis in this pass. Did not attempt a first-order-material variant of the passive-regenerator mechanism (e.g. exploiting a first-order transition's latent-heat-like entropy jump instead of a second-order lambda-anomaly) — core/first_order_mce.py's FirstOrderMCEMaterial class has no heat-capacity-peak analog to reuse, and building one was judged out of scope for a phase explicitly scoped as "cheap because it reuses existing data." Did not add a new figure to plots.py — no existing figure slot fit this phase's own qualitative sweep-and-compare output, and the plan itself did not call for one; results/passive_regenerator_analysis.txt is the deliverable, consistent with how Phases 15 item 3 (hypereg) and 18 (thermal diode) also shipped without a dedicated figure.
 
-## Phase 22 item 1: Gaussian inhomogeneous/polycrystalline Tc-broadening of the mean-field Gd model (completed)
+## Phase 22 item 1 — Gaussian inhomogeneous/polycrystalline Tc-broadening of the mean-field Gd model — done
 
 Motivation. phase_plan.md ranks Phase 22 item 1 (Tishin Sect. 2.8, inhomogeneous ferromagnets) as the highest-value of that phase's four candidate items specifically because it directly targets a gap this repo already documented and left open: core/giguere_validation.py's own docstring (and this file's Phase 9/Giguere discussion) already notes the mean-field model's transition is "numerically much narrower ... than the real, hysteresis/inhomogeneity-broadened transition" a real polycrystalline sample shows. This item asks whether modeling that broadening explicitly changes anything checkable.
 
@@ -1530,7 +1615,7 @@ Tests added: tests/test_inhomogeneous_broadening.py (11 new — zero-sigma ensem
 
 What this phase deliberately did NOT do: did not digitize Tishin Sect. 2.8's own content (not available — see honesty flag above), so this is the standard textbook broadening treatment, not a reproduction of that section's specific numbers. Did not fit sigma_Tc to any real experimental curve (none exists in this repo's corpus) — it remains a swept sensitivity parameter, explicitly flagged as boundary-limited (not an interior optimum) in the module's own printed conclusion. Did not extend broadening to the first-order Landau model in core/first_order_mce.py/core/giguere_validation.py (Gd5Si2Ge2 etc.) — that model's giant MCE comes from a latent-heat-like discontinuity, not a lambda-anomaly, so a Tc-distribution Gaussian-broadening treatment is not obviously the right mechanism there and would need its own design decision, out of scope for this item. Did not attempt Phase 22 items 2-4 (superparamagnetic/nanocomposite materials, magnetoelastic/anisotropic contributions, amorphous-material cost/performance note) — phase_plan.md itself ranks these lower-priority/exploratory, and none was started this pass.
 
-## Phase 22 item 2: engineered multi-phase nanocomposite material family (completed)
+## Phase 22 item 2 — engineered multi-phase nanocomposite material family — done
 
 Motivation. phase_plan.md ranks this item second (after the inhomogeneous-broadening item, completed above) as "a genuinely new candidate material family alongside Gd/GD5SI2GE2/LAFESIH/MNFEPSI in material_family_comparison.py", while flagging it as lower priority "since it needs new composition-tuning data your corpus doesn't currently have digitized."
 
@@ -1551,7 +1636,7 @@ Tests added: tests/test_nanocomposite_material.py (13 new -- weight-sum validati
 What this item deliberately did NOT do: did not digitize Tishin Sect. 2.9/Ch. 10's own content (not available -- see honesty flag above), so this is a design-strategy reading grounded in the broader MCE literature, not a reproduction of those sections' specific numbers or a true superparamagnetic-physics model. Did not fit NANOCOMPOSITE_SPREAD_K or the triangular weights to any real experimental nanocomposite curve (none exists in this repo's corpus) -- both remain illustrative, design-chosen defaults, not calibrated values. Did not sweep spread_K or the weighting scheme the way item 1 swept sigma_Tc -- Finding 2's robustness result is reported at exactly one spread value (4.0K) and should be read as a single data point demonstrating the qualitative mechanism exists, not a characterization of how the effect scales with spread. Did not build nanocomposite variants of GD_FAMILY or MNFEPSI_FAMILY (only LAFESIH_FAMILY, per material_family_comparison.py's own existing ranking of it as the best-performing tunable family) -- WeightedMaterialEnsemble itself is generic enough that a caller could build one from any family's tuned_fn, this just wasn't exercised as a separate analysis. Did not attempt Phase 22 item 3 (magnetoelastic/anisotropic contributions, Sect. 2.10; amorphous-materials cost/performance note, Ch. 9) -- phase_plan.md itself ranks it lowest-priority within this phase, and it was not started this pass.
 
 
-## Phase 22 item 3: magnetoelastic/anisotropic contributions (not implemented, by design) + amorphous-materials cost/performance note (completed)
+## Phase 22 item 3 — magnetoelastic/anisotropic contributions (not implemented, by design) + amorphous-materials cost/performance note — done
 
 Motivation and scope, exactly as phase_plan.md itself sets it: "Magnetoelastic/anisotropic (Sect. 2.10) and amorphous materials (Ch.9) -- lowest priority; interesting physics but no clear near-term payoff for the data-center application specifically (amorphous materials trade lower cost for lower peak DeltaS, worth a one-line cost/performance note in economics.py rather than a full model)." This item therefore has two, deliberately asymmetric parts: magnetoelastic/anisotropic contributions get NO model (the plan itself asks for none -- "no clear near-term payoff", no deliverable named), while amorphous materials get exactly the one qualitative note the plan explicitly asks for, in economics.py, not a materials model.
 
@@ -1567,8 +1652,15 @@ Tests added: tests/test_economics.py gains 2 new tests -- `test_amorphous_materi
 
 What this item deliberately did NOT do: did not build any magnetoelastic/anisotropic model (Sect. 2.10) -- phase_plan.md itself names no deliverable for this half of the item, and no undigitizable-book-access workaround was attempted since there is no cheap, honest way to approximate single-crystal anisotropy/magnetostriction physics without anisotropy-constant data this repo's corpus does not have. Did not digitize Tishin Ch. 9's own amorphous-materials content (not available -- see honesty flag above), so the note is a general materials-science characterization, not a reproduction of that chapter's specific reported materials or numbers. Did not add an amorphous entry to `MCM_COST_PER_KG_BY_FAMILY` or any other numeric structure -- deliberately, per the note's own text, since no sourced $/kg or DeltaS_M figure exists in this repo's corpus to put there. Did not extend `core.cascade.GradedFamily`/`material_family_comparison.py` with an amorphous candidate family the way Phase 22 item 2 did for the nanocomposite blend -- phase_plan.md's own scoping asks only for "a one-line cost/performance note ... rather than a full model", and a seventh rankable family would be a full model, not a note.
 
-Phase 22 status: all three items (inhomogeneous broadening, nanocomposite material family, magnetoelastic/amorphous note) are now complete, following phase_plan.md's own priority ranking and scoping exactly -- including its own instruction that magnetoelastic/anisotropic contributions specifically did not warrant a model. Phase 22 is closed.
-## Phase 23 — Alternative caloric baseline: elastocaloric reference comparison line (completed)
+### Phase 22 status
+
+All three items (inhomogeneous broadening, nanocomposite material
+family, magnetoelastic/amorphous note) are now complete, following
+`phase_plan.md`'s own priority ranking and scoping exactly — including
+its own instruction that magnetoelastic/anisotropic contributions
+specifically did not warrant a model. Phase 22 is closed.
+
+## Phase 23 — Alternative caloric baseline: elastocaloric reference comparison line — done
 
 Motivation, exactly as phase_plan.md itself scopes it: elastocaloric cooling (NiTi/shape-memory-alloy phase transitions) is magnetocaloric's closest competitor solid-state caloric technology — no rare-earth dependency, and some published devices report lower thermal hysteresis than the first-order magnetocaloric materials this repo's own Phase 16 already flags as a COP risk. The plan is explicit that this is NOT a new device to simulate: "just add elastocaloric as a comparison row in the same table/plot ... using published elastocaloric COP/exergy-efficiency figures as a static reference point (similar treatment to how Carnot COP is already just a reference line in plots.py fig08, not a simulated system)."
 
