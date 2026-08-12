@@ -144,7 +144,7 @@ def run_hypereg_analysis(out_path="results/hypereg_analysis.txt"):
 
         print("\n--- Step 2: pumping-power saving vs. frequency at a fixed n=4 "
               "(the paper's own illustrative example) ---")
-        f_rows = sweep_frequency_at_fixed_n()
+        sweep_frequency_at_fixed_n()
 
         mdot_high = 0.3
         print(f"\n--- Step 3: does the benefit become non-negligible at a higher mdot "

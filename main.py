@@ -278,7 +278,6 @@ import numpy as np
 import csv
 
 from core.mce_material import GADOLINIUM
-from core.amr_cycle import AMRSystem
 from core.baseline_cooling import (vapor_compression_cop, liquid_cooling_cop,
                                     elastocaloric_reference_cop)
 from core import validation
@@ -307,7 +306,6 @@ from core import passive_regenerator_analysis
 from core import inhomogeneous_broadening
 from core import plots
 from core import design_recommendations
-from core import sensitivity as sensitivity_module
 
 RESULTS_DIR = "results"
 RESULTS_CSV = "results/comparison_table.csv"
@@ -1154,8 +1152,6 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
     logger.info("Magnet-geometry (Halbach-cylinder) field-vs-mass cost model "
                 "(step 11d, Phase 19)")
     if magnet_geometry_result and _ok("11d."):
-        counts_flat = magnet_geometry_result["counts_flat"]
-        counts_geom = magnet_geometry_result["counts_geometric"]
         rows_flat = magnet_geometry_result["rows_flat"]
         rows_geom = magnet_geometry_result["rows_geometric"]
         mean_flat = (sum(r["mu0H_max_T"] for r in rows_flat) / len(rows_flat)

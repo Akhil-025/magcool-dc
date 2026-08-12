@@ -1400,7 +1400,6 @@ def plot_fluid_mce_sweep():
 def plot_passive_regenerator_alignment():
     base, results = passive_regenerator_analysis.compare_candidate_materials(verbose=False)
     names = [r.material_name for r in results]
-    delta_eps = [r.delta_eps for r in results]
     gain_pct = [r.cop_gain_fraction * 100 for r in results]
 
     span_rows = passive_regenerator_analysis.span_sweep(verbose=False)

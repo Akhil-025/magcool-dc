@@ -255,7 +255,7 @@ CALIBRATION_POINTS = CALIBRATION_POINTS_CORE  # backward-compat alias
 def _build_system(points):
     A = np.zeros((len(points), 3))
     b = np.zeros(len(points))
-    for i, (name, f, H, mdot, Qc, Wp) in enumerate(points):
+    for i, (_name, f, H, mdot, Qc, Wp) in enumerate(points):
         A[i, 0] = f ** 2 * H ** 2
         A[i, 1] = mdot ** 2
         A[i, 2] = Qc
@@ -351,7 +351,7 @@ def analyze_parasitic_fraction_scaling(points=None, verbose=True):
                   "well above Okamura (200W, 0.367) and Astronautics (2502W, "
                   "0.453) -- i.e. grouped by device/paper, not ordered by scale.")
         else:
-            print(f"  NOTE (Paper-Mining Pass Part 6): with the DTU point corrected "
+            print("  NOTE (Paper-Mining Pass Part 6): with the DTU point corrected "
                   "from its old fabricated 818W/0.171 figure to the verified "
                   "102.8W/0.255 figure, this 4-point EXTENDED set is now "
                   "monotonically INCREASING with Qc -- the opposite direction "

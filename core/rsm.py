@@ -79,7 +79,7 @@ def fit_rsm(out_path="results/rsm_coefficients.txt", n_train=300, n_test=100):
     r2 = 1 - ss_res / ss_tot
     rmse = np.sqrt(np.mean((Y_test - Y_pred) ** 2))
 
-    lines = [f"Quadratic RSM surrogate for AMR cooling capacity Qc (W)",
+    lines = ["Quadratic RSM surrogate for AMR cooling capacity Qc (W)",
              f"Design variables: {VAR_NAMES}",
              f"Bounds: {BOUNDS}",
              f"Train samples: {n_train}, Held-out test samples: {n_test}",

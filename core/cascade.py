@@ -245,7 +245,7 @@ def run_cascade(T_cold_K, total_span_K, n_stages, material=None, mu0H_max=2.0,
                 "feasible": False}
 
     W_total = 0.0
-    for i in range(n_stages):
+    for _i in range(n_stages):
         stage = AMRSystem(material=material, mu0H_max=mu0H_max,
                            mass_regenerator=mass_per_stage, frequency=frequency,
                            fluid_mdot=fluid_mdot, regenerator_effectiveness=regenerator_effectiveness,
@@ -530,7 +530,7 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
     # the target-composition search below ends up running in parallel.
     mid_temps = []
     T_local = T_cold_K
-    for i in range(n_stages):
+    for _i in range(n_stages):
         mid_temps.append(T_local + span_per_stage / 2.0)
         T_local += span_per_stage
 
@@ -911,7 +911,7 @@ if __name__ == "__main__":
         print(f"{r['span_K']:>5} {fmt(r['AMR_1stage_COP'])} {fmt(r['AMR_2stage_COP'])} "
               f"{fmt(r['AMR_3stage_COP'])} {fmt(r['AMR_4stage_COP'])} "
               f"{r['VaporCompression_COP']:>7} {r['LiquidCooling_COP']:>7}")
-    print(f"Wrote results/cascade_comparison.csv")
+    print("Wrote results/cascade_comparison.csv")
 
     print("\n--- Material: Gd5Si2Ge2 (giant MCE) ---")
     rows_giant = compare_staging(material=GD5SI2GE2_FIRST_ORDER, mass_per_stage=5.0,
@@ -921,7 +921,7 @@ if __name__ == "__main__":
         print(f"{r['span_K']:>5} {fmt(r['AMR_1stage_COP'])} {fmt(r['AMR_2stage_COP'])} "
               f"{fmt(r['AMR_3stage_COP'])} {fmt(r['AMR_4stage_COP'])} "
               f"{r['VaporCompression_COP']:>7} {r['LiquidCooling_COP']:>7}")
-    print(f"Wrote results/cascade_comparison_giant_mce.csv")
+    print("Wrote results/cascade_comparison_giant_mce.csv")
 
     gd_10K = next(r for r in rows_gd if r["span_K"] == 10)
     giant_10K = next(r for r in rows_giant if r["span_K"] == 10)
@@ -982,7 +982,7 @@ if __name__ == "__main__":
     print("iterative search (see run_graded_cascade's COP_cascade=0.0 with Qc_W>0 rows in the")
     print("output CSV) -- flagged here as a real numerical fragility of this idealized 6th-")
     print("order Landau fit, not hidden by rounding it away.")
-    print(f"\nWrote results/graded_cascade_comparison.csv")
+    print("\nWrote results/graded_cascade_comparison.csv")
     print("\nBOTTOM LINE: unlike the fixed Gd5Si2Ge2 comparison above (which collapses to zero")
     print("everywhere in the ASHRAE range because Gd5Si2Ge2's own Tc=276K is fixed and far from")
     print("the operating point), a CURIE-GRADED cascade -- built from literature-documented")
@@ -1000,8 +1000,8 @@ if __name__ == "__main__":
     print("=" * 100)
     astro = validate_astronautics_graded_bed()
     if astro.get("feasible"):
-        print(f"Layer Tc targets (evenly spread across the device's reported 303.6-316.2K "
-              f"layer range):")
+        print("Layer Tc targets (evenly spread across the device's reported 303.6-316.2K "
+              "layer range):")
         for s in astro["stage_info"]:
             print(f"    stage {s['stage']}: T_mid={s['T_mid_K']}K, needed composition Tc="
                   f"{s['Tc_target_K']}K -> {s['material']}")

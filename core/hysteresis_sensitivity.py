@@ -167,7 +167,7 @@ def run_hysteresis_sensitivity(pop_size=32, n_gen=15, seed=1,
     lines.append(" run_optimization()'s own 40/25 production default.)")
     lines.append("")
     lines.append("Hysteresis literature-placeholder values used in the ON run:")
-    for label, mat in _HYSTERETIC_CONSTANTS.items():
+    for label, _mat in _HYSTERETIC_CONSTANTS.items():
         lines.append(f"  {label:<16} {original_values[label]:.1f} J/kg  "
                       f"(see core/first_order_mce.py for provenance/caveats)")
     lines.append("")

@@ -107,8 +107,6 @@ def summarize_frequency_lever(sobol_state_dependent_Si, pareto_rows):
     show the frequency trade-off in this repo's own optimizer output,
     rather than asserting a number that isn't traceable to a computed
     result."""
-    names = list(sobol_state_dependent_Si["names"]) if isinstance(sobol_state_dependent_Si, dict) \
-        and "names" in sobol_state_dependent_Si else None
     freq_ST = None
     if sobol_state_dependent_Si is not None:
         try:
@@ -134,11 +132,11 @@ def summarize_frequency_lever(sobol_state_dependent_Si, pareto_rows):
         lines.append(f"   NSGA-III best-cooling-capacity design: f={best_qc['frequency_Hz']:.3f} Hz  "
                      f"-> COP_elec={best_qc['COP_electrical']:.2f}, Qc={best_qc['Qc_W']:.0f} W")
         if best_qc["frequency_Hz"] > 0:
-            lines.append(f"   Action: reduce cycle frequency toward the low-speed end of the "
-                         f"design space when electrical COP is the priority; raise it toward "
-                         f"the high end only when cooling capacity is the priority and higher "
-                         f"parasitic loss is acceptable. This is a genuine Pareto trade-off in "
-                         f"this repo's model, not a free win in either direction.")
+            lines.append("   Action: reduce cycle frequency toward the low-speed end of the "
+                         "design space when electrical COP is the priority; raise it toward "
+                         "the high end only when cooling capacity is the priority and higher "
+                         "parasitic loss is acceptable. This is a genuine Pareto trade-off in "
+                         "this repo's model, not a free win in either direction.")
     return "\n".join(lines), {"frequency_ST": freq_ST,
                                "best_cop_design": best_cop, "best_qc_design": best_qc}
 
