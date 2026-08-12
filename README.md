@@ -213,11 +213,17 @@ heat-transfer benefit from `rectification_ratio`.
 
 **Phase 19 — magnet geometry** (`core/magnet_geometry.py`): a standard
 idealized-Halbach-cylinder relation replaces the old flat $/T magnet-mass
-ratio with a genuinely super-linear one; a spot-check A/B Pareto rerun
-found the geometric cost term pulls the optimizer's mean field down (1.85T
-→ 1.62T), the expected direction. Also corrected a mis-citation this
-project and its own plan had both been carrying (the Bjørk et al.
-field-vs-cost tradeoff paper is arXiv:1410.6248, not :1410.1987).
+ratio with a genuinely super-linear one. A reduced-resolution spot check
+(pop_size=12/n_gen=5) initially suggested the geometric cost term pulls
+the optimizer's mean field down; the full production-settings rerun
+(pop_size=32/n_gen=15) **reversed** that direction instead — mean field
+went *up* (1.31T → 1.54T), not down — the same reduced-settings-vs-
+production-settings reversal pattern Phase 16's own hysteresis check hit.
+No multi-seed confirmation has been run for this one yet, so treat the
+direction as **open**, not settled, until that's done (see `ROADMAP.md`'s
+Phase 19 follow-up note). Also corrected a mis-citation this project and
+its own plan had both been carrying (the Bjørk et al. field-vs-cost
+tradeoff paper is arXiv:1410.6248, not :1410.1987).
 
 **Phase 20 — magnetocaloric fluids** (`core/fluid_mce_cycle.py`,
 `core/fluid_mce_analysis.py`): the headline finding is that, absent a
@@ -625,7 +631,7 @@ required Phase 3 upgrade, not silently patched.
 | Field | Literature ΔT_ad | Model ΔT_ad | Error |
 |---|---|---|---|
 | 1 T | 3.2 K | 4.76 K | +48.9% |
-| 2 T | 6.3 K | 7.49 K | +18.9% |
+| 2 T | 5.8 K | 7.49 K | +29.2% |
 | 5 T | 14.6 K | 13.51 K | -7.5% |
 
 Mean-field theory is known to overpredict ΔT_ad near T_c because it

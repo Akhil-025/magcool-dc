@@ -1555,6 +1555,45 @@ Tests added: tests/test_magnet_geometry.py (15 collected from 12 test functions 
 
 Did NOT do (explicitly, not silently): did not correct Literature_Review.md's own arXiv:1410.1987 mis-citation (see HONESTY FLAG #2) — a real, cheap follow-up item for a future pass. Did not implement Bjørk et al. (2011)'s own figure-of-merit (M*, reported range 0-0.25) parameterized magnet-mass model — only that paper's public abstract was available to this pass (see HONESTY FLAG #2), not its actual equations, so `halbach_field_vs_mass()` implements the generic idealized-Halbach-cylinder relation instead; if a fuller copy of either Bjørk paper or Kitanovski Ch. 3 becomes available, this module's defaults and `bjork_qualitative_check()`'s proxy metric should both be revisited. Did not model finite-segment or open-ended-cylinder field reduction (the idealized Eq. 1 is a strict upper bound on achievable field for a given mass) — flagged as a limitation in core/magnet_geometry.py's own docstring rather than corrected with an ad hoc fudge factor. Did not rerun `run_geometric_cost_pareto_sensitivity()` at full production settings with multiple seeds before writing this entry (the pop_size=12/n_gen=5 spot check above is explicitly sub-reduced-resolution) — main.py's own step 11d will do the full pop_size=32/n_gen=15 run on the next `python main.py` invocation; treat the 1.85T->1.62T finding above as directional only until that run's own results/magnet_geometry_pareto_sensitivity.txt is inspected. Did not add a `use_geometric_magnet_mass` option to economics.py's `lifetime_cost()`/`levelized_cost_of_cooling()` (Phase 15 functions that still call `material_cost()` directly, not `bom_cost()`) — out of scope for this pass, since the plan's own item was specifically about `cost_index()`/the NSGA-III search, not the separate TCO/levelized-cost reporting path.
 
+### Phase 19 follow-up: full-production-settings rerun reverses the spot-check direction (open, not resolved)
+
+This entry's own "Did NOT do" paragraph above flagged the 1.85T→1.62T
+finding as directional-only, from a pop_size=12/n_gen=5 spot check below
+even the module's own reduced-resolution default, pending a full
+pop_size=32/n_gen=15 run via `main.py` step 11d. That run has now
+happened (`results/magnet_geometry_pareto_sensitivity.txt`), and the
+direction **reverses**: the merged front's mean `mu0H_max_T` goes UP
+under the geometric cost term, not down —
+
+```
+mu0H_max_T range: FLAT 1.06-1.80 T (mean 1.31 T)  |  GEOMETRIC 1.01-2.88 T (mean 1.54 T)
+FINDING: the geometric cost term does NOT pull the merged front's mean
+mu0H_max_T down relative to the flat-ratio baseline in this run
+```
+
+(Front sizes: FLAT 21 designs / 100% La(Fe,Si)13Hy; GEOMETRIC 20 designs
+/ 100% La(Fe,Si)13Hy — material composition is unaffected, only the mean
+field shifts.)
+
+This is the same failure mode Phase 16's own hysteresis-reversal
+follow-up already found for a different A/B Pareto comparison: a
+small-N/low-generation NSGA-III spot check does not reliably predict the
+direction of the effect at production settings. Stated directly rather
+than smoothed over: this pass does **not** have a settled explanation
+for why the direction flipped from the expected "geometric cost
+discourages high field" story — candidates include ordinary NSGA-III
+search noise even at production settings (this was a single seed=1 run;
+no multi-seed check has been performed here, unlike Phase 16's own
+`run_hysteresis_multiseed_stability_check()`), or a genuine
+objective-space interaction where the geometric magnet-mass cost's
+discouragement of high fields at fixed capacity is outweighed by some
+other trade-off once cost is a real (non-flat) function of field. Until
+a multi-seed rerun is performed — the same fix that resolved Phase 16's
+own reversal — this Phase 19 finding should be treated as **open, not
+settled in either direction**, and any downstream text (including
+`README.md`'s own summary) should say so rather than repeat the
+now-superseded spot-check number.
+
 ## Phase 20 — magnetocaloric fluids as an alternative working-body class — done
 
 Motivation. The original Phase 20 plan named this the highest-effort, lowest-priority "new capability" item — a genuinely different working-body topology (a magnetocaloric fluid flowing continuously through hot-/cold-side heat exchangers, magnetized/demagnetized in place) rather than a parameter on the existing solid-regenerator AMRSystem, with real risk of building something uncalibratable for lack of a benchmark. The plan's own scoping decision recommended a new sibling class rather than forcing this through AMRSystem's packed-bed/parallel-plate geometry assumptions — followed here.
