@@ -1,0 +1,87 @@
+==========================================================================================
+PHASE 7: geometry-dependent pumping power, motivated by Tusek, Kitanovski,
+Poredos (2013), 'Geometrical optimization of packed-bed and parallel-plate
+active magnetic regenerators', Int. J. Refrig. 36, 1456-1464
+==========================================================================================
+
+--- Step 1: confirm the pre-Phase-7 gap (no geometry optimum was even possible) ---
+Diagnostic: pre-Phase-7 eps(particle_diameter) at fixed mdot=0.08kg/s:
+    d_p=  2.000mm  eps=0.8190
+    d_p=  1.000mm  eps=0.8647
+    d_p=  0.500mm  eps=0.8829
+    d_p=  0.250mm  eps=0.8898
+    d_p=  0.170mm  eps=0.8915
+    d_p=  0.100mm  eps=0.8926
+    d_p=  0.070mm  eps=0.8930
+    d_p=  0.050mm  eps=0.8933
+    d_p=  0.025mm  eps=0.8935
+    d_p=  0.010mm  eps=0.8936
+    d_p=  0.001mm  eps=0.8936
+  Monotonically non-decreasing as d_p shrinks? True (no optimum possible without a geometry-coupled pumping-power term)
+
+--- Step 2: check whether mdot can simply be re-optimized per geometry, as the paper does ---
+Diagnostic: ideal COP (no pumping) vs. mdot at fixed d_p=0.5mm:
+    mdot= 0.5000kg/s  COP_ideal=14.149
+    mdot= 0.1000kg/s  COP_ideal=15.164
+    mdot= 0.0200kg/s  COP_ideal=15.817
+    mdot= 0.0050kg/s  COP_ideal=15.830
+    mdot= 0.0020kg/s  COP_ideal=15.830
+    mdot= 0.0005kg/s  COP_ideal=15.830
+  Monotonically non-decreasing as mdot falls (i.e. best at mdot->0)? True
+  CONCLUSION: single-objective COP maximization is degenerate in this repo's 2nd-law work model (drives mdot, and Qc with it, toward zero). This module therefore sweeps geometry at a FIXED representative mdot (0.08 kg/s) rather than re-optimizing mdot per geometry the way the paper's own dynamic model does -- a real methodological difference from the paper, stated here rather than hidden.
+
+--- Step 3: packed-bed sphere-diameter sweep at fixed mdot=0.08kg/s ---
+  d_p= 2.000mm   Qc=  761.91W   COP_aug=14.9459
+  d_p= 1.000mm   Qc=  804.41W   COP_aug=15.1998
+  d_p= 0.500mm   Qc=  821.37W   COP_aug=15.2681
+  d_p= 0.250mm   Qc=  827.75W   COP_aug=15.1889
+  d_p= 0.170mm   Qc=  829.32W   COP_aug=15.0443
+  d_p= 0.100mm   Qc=  830.43W   COP_aug=14.6054
+  d_p= 0.070mm   Qc=  830.81W   COP_aug=14.0318
+  d_p= 0.050mm   Qc=  831.01W   COP_aug=13.1608
+  d_p= 0.025mm   Qc=  831.21W   COP_aug=10.0033
+
+  At fixed mdot=0.08kg/s:
+    diameter maximizing Qc (of those swept):  0.025 mm (within the swept range Qc keeps rising toward smaller diameters, since eps has not yet saturated at this mdot)
+    diameter maximizing COP_aug:              0.5 mm (a genuine INTERIOR optimum: smaller diameters raise eps only marginally further while pumping power keeps growing)
+  Paper's Table 3 (own operating point, own per-geometry mdot): 0.07 mm (Qc) / 0.17 mm (COP).
+
+--- Step 4: parallel-plate spacing sweep at fixed mdot=0.08kg/s ---
+  spacing= 1.000mm   Qc=  726.51W   COP_aug=14.7284
+  spacing= 0.500mm   Qc=  775.27W   COP_aug=15.0313
+  spacing= 0.250mm   Qc=  802.28W   COP_aug=15.1941
+  spacing= 0.100mm   Qc=  819.44W   COP_aug=15.2680
+  spacing= 0.075mm   Qc=  822.37W   COP_aug=15.2582
+  spacing= 0.050mm   Qc=  825.33W   COP_aug=15.2006
+  spacing= 0.035mm   Qc=  827.11W   COP_aug=15.0759
+  spacing= 0.020mm   Qc=  828.90W   COP_aug=14.5765
+  spacing= 0.010mm   Qc=  830.10W   COP_aug=12.7131
+
+  At fixed mdot=0.08kg/s, plate thickness 0.25mm:
+    spacing maximizing Qc (of those swept):  0.01 mm
+    spacing maximizing COP_aug:               0.1 mm
+  Paper's Table 3 (own operating point): 0.035 mm (Qc) / 0.075 mm (COP), regardless of plate thickness.
+
+--- Conclusion ---
+Coupling the NTU effectiveness gain to the new geometry-explicit hydraulic
+pumping-power term (Tusek et al. 2013 Eqs. 5-7) DOES reproduce a genuine
+interior COP optimum vs. packed-bed sphere diameter and parallel-plate
+spacing in this repo's own model (Step 3-4) -- confirming the paper's
+qualitative finding, which the pre-Phase-7 model structure could not show
+even in principle (Step 1). Doing this required fixing mdot at a
+representative value rather than re-optimizing it per geometry as the paper
+does, because Step 2 found that free COP-only optimization is itself
+degenerate in this repo's 2nd-law magnetic-work model (pushes mdot, and Qc
+with it, toward zero) -- a genuine, separate limitation, stated rather than
+papered over.
+The specific optimum found here (packed-bed COP-optimal: 0.5mm;
+parallel-plate COP-optimal: 0.1mm) should NOT be expected to match
+the paper's Table 3 (0.17mm packed-bed / 0.075mm parallel-plate) exactly:
+this repo's operating point (291K/10K span, 2kg, 1Hz, 1.5T, fixed
+mdot=0.08kg/s) differs from the paper's own fixed conditions (278-293K/15K
+span, 40x10xL mm outer dims, 0.5/3Hz, per-geometry-optimized mdot), and the
+pumping power used here is idealized hydraulic power with no pump/motor
+efficiency, unlike a real device. The value of this exercise is the
+qualitative confirmation that a genuine geometry optimum now exists in the
+model where none could before -- not a numerical reproduction of the
+paper's own operating point.

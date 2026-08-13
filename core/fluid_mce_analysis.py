@@ -5,7 +5,7 @@ Phase 20 validation/exploration deliverable for core/fluid_mce_cycle.py.
 Same redirect-stdout-to-buffer-then-write pattern as
 core/geometry_analysis.py / core/thermal_diode_analysis.py.
 
-Runs two checks, both reported honestly rather than massaged to agree
+Runs three checks, all reported honestly rather than massaged to agree
 with any prior expectation (see core/fluid_mce_cycle.py's own module
 docstring for the underlying physics and honesty flags):
 
@@ -15,32 +15,42 @@ docstring for the underlying physics and honesty flags):
    reporting whether an interior COP_electrical optimum exists (the same
    "genuinely open territory" question the plan itself posed, not
    resolved by the plan, and not force-resolved here either).
-2. `compare_to_solid_amr_and_liquid_cooling()`: compares
-   FerrofluidMCESystem against a representative solid-AMR AMRSystem
-   (Gd, same field/flow) and against core.baseline_cooling's direct-
-   liquid-cooling reference COP, at the fluid system's OWN favorable
-   (small) span -- per the plan's own framing ("worth at least a
-   first-pass comparison against your existing direct-liquid-cooling
-   baseline, since it's the closest architecture your competitor
-   technology already uses").
+2. `fixed_span_comparison()`: this module's PRIMARY reported comparison.
+   Holds span fixed at a shared, externally-imposed value (this repo's
+   representative 10K data-center span, not either system's own
+   favorable span) so the ferrofluid system's usable-span collapse shows
+   up directly as a Qc=0 infeasibility, rather than being hidden by
+   letting each technology pick its own comparison point.
+3. `compare_to_solid_amr_and_liquid_cooling()`: SECONDARY comparison,
+   at the fluid system's OWN favorable (small) span -- kept for the
+   span/COP magnitude detail at a specific phi, per the plan's original
+   framing ("worth at least a first-pass comparison against your
+   existing direct-liquid-cooling baseline"), but read after the
+   fixed-span table above, not instead of it.
 """
 import contextlib
 import io
 import os
 
-import numpy as np
 
 from core.mce_material import GADOLINIUM
 from core.amr_cycle import AMRSystem
 from core.baseline_cooling import liquid_cooling_cop, vapor_compression_cop
 from core.fluid_mce_cycle import (
     FerrofluidMCESystem, suspension_delta_T_adiabatic,
-    krieger_dougherty_viscosity, DEFAULT_PHI_MAX,
+    DEFAULT_PHI_MAX,
 )
 
 T_COLD_K_REPRESENTATIVE = 291.0   # matches core/optimize.py's own T_COLD_K
 FIELD_T = 1.5
 MDOT_KGS = 0.05
+REPRESENTATIVE_SPAN_K = 10.0   # matches main.py's own REPRESENTATIVE_SPAN_K --
+                                 # a realistic data-center span, used below as
+                                 # the SHARED span both systems are held to in
+                                 # fixed_span_comparison() (see that function's
+                                 # docstring for why this, not each system's
+                                 # own favorable span, is this module's primary
+                                 # reported comparison)
 
 
 def _self_consistent_span(mu0H_max, phi, T_cold, n_iter=6):
@@ -94,12 +104,67 @@ def volume_fraction_sweep(phis=(0.01, 0.02, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 
     return {"rows": rows, "best_row": best, "interior_optimum_found": is_interior}
 
 
+def fixed_span_comparison(span_K=REPRESENTATIVE_SPAN_K, T_cold=T_COLD_K_REPRESENTATIVE,
+                            mu0H_max=FIELD_T, mdot=MDOT_KGS, phi=0.20,
+                            mass_regenerator_amr=5.0, frequency_amr=1.0):
+    """PRIMARY comparison for this module: Qc and COP_electrical for the
+    ferrofluid MCE system, a representative solid AMR, and the liquid-
+    cooling/vapor-compression baselines, all evaluated at the SAME
+    externally-imposed span (`span_K`, default = this repo's own
+    representative 10K data-center span) -- not at the ferrofluid
+    system's own tiny favorable span the way
+    `compare_to_solid_amr_and_liquid_cooling()` below does.
+
+    Why this table, not that one, should be read first: the real
+    headline finding of this module is that the mixture-heat-capacity
+    dilution model plus this architecture's lack of regeneration
+    collapses the ferrofluid system's *usable span* to a fraction of a
+    Kelvin (see `volume_fraction_sweep()` and this module's own
+    docstring), so a COP comparison at the ferrofluid's own favorable
+    span necessarily hides that collapse -- it only ever compares the
+    two systems at a span small enough for the fluid system to already
+    be feasible. Holding span FIXED at a realistic value instead makes
+    the feasibility gap itself the reported number: at a representative
+    10K span, the fluid system's cooling_capacity() clips Qc to 0 (the
+    span exceeds its achievable dTad_suspension entirely) while the
+    solid AMR, whose regenerator bed amplifies span well beyond a single
+    stage's own dTad, still delivers real cooling capacity. That is a
+    directly comparable, single-number demonstration of the span gap,
+    rather than something a reader has to infer from a paragraph of
+    prose after two systems were quietly evaluated at different spans.
+    """
+    fluid_sys = FerrofluidMCESystem(GADOLINIUM, mu0H_max, phi, mdot)
+    fluid_result = fluid_sys.run(T_cold, span_K)
+
+    amr_sys = AMRSystem(material=GADOLINIUM, mu0H_max=mu0H_max,
+                          mass_regenerator=mass_regenerator_amr, frequency=frequency_amr,
+                          fluid_mdot=mdot, regenerator_effectiveness=0.85)
+    amr_result = amr_sys.run(T_cold, span_K)
+
+    T_hot = T_cold + span_K
+    liquid = liquid_cooling_cop(T_cold, T_hot)
+    vcc = vapor_compression_cop(T_cold, T_hot)
+
+    return {
+        "span_K": span_K,
+        "phi": phi,
+        "fluid_MCE": {"Qc_W": fluid_result.Qc, "COP_electrical": fluid_result.COP_electrical,
+                       "feasible": fluid_result.Qc > 0,
+                       "own_dTad_suspension_K": fluid_result.dTad_suspension_K},
+        "solid_AMR": {"Qc_W": amr_result.Qc, "COP_electrical": amr_result.COP_electrical,
+                       "feasible": amr_result.Qc > 0},
+        "liquid_cooling": {"COP": liquid.COP},
+        "vapor_compression": {"COP": vcc.COP},
+    }
+
+
 def compare_to_solid_amr_and_liquid_cooling(T_cold=T_COLD_K_REPRESENTATIVE,
                                                mu0H_max=FIELD_T, mdot=MDOT_KGS,
                                                phi=0.20, mass_regenerator_amr=5.0,
                                                frequency_amr=1.0):
-    """Compares, at the fluid system's OWN favorable span (90% of its
-    dTad_suspension at `phi`):
+    """SECONDARY comparison (see `fixed_span_comparison()` above for this
+    module's primary, shared-span table). Compares, at the fluid
+    system's OWN favorable span (90% of its dTad_suspension at `phi`):
       * FerrofluidMCESystem (this module)
       * a representative solid AMRSystem (Gd, same field/flow, Phase-15-
         era defaults: mass_regenerator=5kg, frequency=1Hz, constant
@@ -167,9 +232,34 @@ def run_fluid_mce_analysis(out_path="results/fluid_mce_analysis.txt", verbose=Tr
                   "interior point. Reported plainly rather than assumed.".format(
                       sweep["rows"][0]["phi"], sweep["rows"][-1]["phi"]))
 
-        print(f"\n--- Comparison at the fluid system's own favorable span, vs. solid AMR "
-              f"and vs. core/baseline_cooling.py's liquid-cooling/vapor-compression "
-              f"references ---")
+        print("\n--- Fixed-span comparison (PRIMARY): all four technologies held to the "
+              f"SAME {REPRESENTATIVE_SPAN_K:.0f}K representative span, rather than each "
+              "evaluated at its own favorable span ---")
+        fixed = fixed_span_comparison()
+        print(f"\nAt span={fixed['span_K']:.1f}K (fixed), phi={fixed['phi']:.2f}:")
+        f_feas = "feasible" if fixed["fluid_MCE"]["feasible"] else "INFEASIBLE (Qc clipped to 0)"
+        a_feas = "feasible" if fixed["solid_AMR"]["feasible"] else "INFEASIBLE (Qc clipped to 0)"
+        print(f"  Ferrofluid MCE:      Qc={fixed['fluid_MCE']['Qc_W']:.3f}W   "
+              f"COP_electrical={fixed['fluid_MCE']['COP_electrical']:.3f}   [{f_feas}]   "
+              f"(own achievable dTad_suspension={fixed['fluid_MCE']['own_dTad_suspension_K']:.3f}K "
+              f"vs. the {fixed['span_K']:.0f}K span asked of it)")
+        print(f"  Solid AMR (Gd):      Qc={fixed['solid_AMR']['Qc_W']:.3f}W   "
+              f"COP_electrical={fixed['solid_AMR']['COP_electrical']:.3f}   [{a_feas}]")
+        print(f"  Liquid cooling:      COP={fixed['liquid_cooling']['COP']:.3f}")
+        print(f"  Vapor compression:   COP={fixed['vapor_compression']['COP']:.3f}")
+        if not fixed["fluid_MCE"]["feasible"] and fixed["solid_AMR"]["feasible"]:
+            print(f"\nFINDING: at a realistic, externally-imposed {fixed['span_K']:.0f}K span, "
+                  "the ferrofluid system is infeasible (its own achievable "
+                  f"dTad_suspension, {fixed['fluid_MCE']['own_dTad_suspension_K']:.2f}K, does "
+                  "not cover the span) while the solid AMR still delivers real cooling "
+                  "capacity -- this is the headline result of this module (the SPAN gap), "
+                  "shown here as a direct feasibility comparison at a shared span rather "
+                  "than inferred from two systems quietly evaluated at different spans.")
+
+        print("\n--- Comparison at the fluid system's own favorable span (SECONDARY -- "
+              "kept for the phi=0.20 span/COP detail, but read the fixed-span table above "
+              "first), vs. solid AMR and vs. core/baseline_cooling.py's liquid-cooling/"
+              "vapor-compression references ---")
         comp = compare_to_solid_amr_and_liquid_cooling()
         print(f"\nAt span={comp['span_K']:.3f}K, phi={comp['phi']:.2f}:")
         print(f"  Ferrofluid MCE (this module):  Qc={comp['fluid_MCE']['Qc_W']:.3f}W   "
@@ -219,7 +309,7 @@ def run_fluid_mce_analysis(out_path="results/fluid_mce_analysis.txt", verbose=Tr
             fh.write(text)
         if verbose:
             print(f"Wrote {out_path}")
-    return {"sweep": sweep, "comparison": comp, "text": text}
+    return {"sweep": sweep, "fixed_span_comparison": fixed, "comparison": comp, "text": text}
 
 
 if __name__ == "__main__":
