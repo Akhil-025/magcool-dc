@@ -846,6 +846,9 @@ def main():
         ("2b. Cycle-type (Ericsson-like vs. Brayton-like) validation sensitivity "
          "(core/validation_system.py, Phase 17)",
          lambda: validation_system.run_cycle_type_validation()),
+        ("2c. Calibration-failure root-cause diagnostic: search-space artifact vs. "
+         "structural limitation (core/validation_system.py, Paper-Mining Pass review item 1)",
+         lambda: validation_system.run_calibration_failure_diagnostics()),
         ("3. Loss-model calibration (auto-loaded by AMRSystem's default loss model)",
          lambda: (loss_model.calibrate_loss_coefficients(), loss_model.run_extended_diagnostic())),
         ("3b. Regenerator thermal-effectiveness demo (core/thermal.py, reached transitively otherwise)",
@@ -1067,6 +1070,7 @@ def main():
                      "hypereg_analysis.txt (Phase 15), "
                      "hysteresis_sensitivity.txt (Phase 16), "
                      "cycle_type_validation.txt (Phase 17), "
+                     "calibration_failure_diagnostics.txt (Paper-Mining Pass review item 1), "
                      "thermal_diode_analysis.txt (Phase 18), "
                      "magnet_geometry_analysis.txt, "
                      "magnet_geometry_pareto_sensitivity.txt, "
@@ -1108,6 +1112,14 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
     logger.info("  - System-level: calibrated against 16 published AMR prototype/benchmark rows "
                 "(data/amr_experimental_benchmarks.csv), including a 6-layer Curie-graded "
                 "La(Fe,Si)13Hy reproduction of Astronautics_rotary_2014")
+    if _ok("2c."):
+        logger.info("  - Calibration-failure root cause (step 2c, Paper-Mining Pass review item "
+                     "1): checks, per NO-CALIBRATION-FOUND row, whether span already exceeds "
+                     "2*dTad_noload (structural -- no mdot bound can fix it) or whether a much "
+                     "wider mdot search closes the gap (search-space artifact) -- see "
+                     "results/calibration_failure_diagnostics.txt for the per-device breakdown "
+                     "and which classification the largest devices (Astronautics, DTU MagQueen, "
+                     "Risoe/DTU, Cooltech) fall into")
 
     logger.info("Baseline comparison (AMR vs. vapor-compression vs. liquid cooling vs. Carnot)")
     if representative_row and _ok("4."):
