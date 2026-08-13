@@ -5,7 +5,9 @@ from core.validation_system import (
     run_field_sensitivity_check, run_capacity_only_calibration_check,
     run_tusek_multipoint_curve_validation, _load_tusek_curve,
     calibrate_and_check, infer_cycle_type_for_device, run_cycle_type_validation,
+    diagnose_qc_feasibility_reopening,
 )
+from core.mce_material import GADOLINIUM
 
 
 def test_load_benchmarks_has_device_group_column():
@@ -361,6 +363,41 @@ def test_tusek_multipoint_curve_validation_genuine_finding_nonmonotonic_curve():
     endpoint_pred = next(p for p in out["predictions"] if p["span_K"] == 14.75)
     assert endpoint_pred["Qc_lit_W"] == pytest.approx(0.0)
     assert endpoint_pred["Qc_model_W"] == pytest.approx(0.0, abs=0.5)
+
+    # Root-cause attribution (added after tracing the above symptom to its
+    # actual origin): the 12.23K miss is diagnosed as the known near-Tc
+    # feasibility-margin reopening, not left as an unexplained number, and
+    # is flagged as such on the prediction row itself.
+    assert out["qc_feasibility_reopening"]["reopens"] is True
+    assert mid_span_pred.get("flagged_near_Tc_nonmonotonicity") is True
+
+
+def test_diagnose_qc_feasibility_reopening_detects_the_near_Tc_reopening():
+    """Gd's own feasibility margin (2*dTad_noload(T_mid) - span), at the
+    field/T_cold this Tusek AMR(A) curve uses, is known (see
+    core/mce_material.py's magnetic_heat_capacity() docstring) to go
+    negative, swing back positive just above Tc=294K, then go negative
+    again -- confirm the diagnostic actually catches this rather than
+    reporting false confidence."""
+    result = diagnose_qc_feasibility_reopening(
+        GADOLINIUM, T_cold=289.0, mu0H_max=1.15, span_lo=6.0, span_hi=15.0)
+    assert result["reopens"] is True
+    assert result["n_feasible_to_infeasible_crossings"] == 2
+    assert result["n_infeasible_to_feasible_crossings"] == 1
+    # the reopening should sit near where T_mid crosses Tc=294K, i.e.
+    # span ~= 2*(294 - 289) = 10K
+    assert 9.0 < result["first_reopen_span_K"] < 11.0
+    assert result["final_reclose_span_K"] is not None
+
+
+def test_diagnose_qc_feasibility_reopening_false_when_range_avoids_Tc():
+    """A span range whose T_mid never approaches Tc should show a single,
+    ordinary feasibility crossing (or none) -- the diagnostic shouldn't
+    over-flag unrelated ranges."""
+    result = diagnose_qc_feasibility_reopening(
+        GADOLINIUM, T_cold=260.0, mu0H_max=1.15, span_lo=0.5, span_hi=4.0)
+    assert result["reopens"] is False
+    assert result["n_infeasible_to_feasible_crossings"] == 0
 
 
 def test_tusek_multipoint_curve_validation_missing_curve_reports_status():

@@ -204,7 +204,42 @@ class MagnetocaloricMaterial:
         via C_mag = T * dS_M/dT at fixed field. This term peaks sharply at Tc
         and is what a pure-Debye-lattice estimate omits; including it is
         required to reproduce measured total C(T) near Tc (see e.g. Dan'kov
-        et al., Phys. Rev. B 57, 3478 (1998), experimental Gd heat capacity)."""
+        et al., Phys. Rev. B 57, 3478 (1998), experimental Gd heat capacity).
+
+        MODEL LIMITATION: at H=0, this mean-field/Brillouin construction has
+        C_mag(T,0) fall to exactly zero for T >= Tc (the self-consistent
+        magnetization is exactly 0 in the paramagnetic phase at zero field,
+        so entropy_magnetic(T,0) is a T-independent constant there) while
+        approaching a finite nonzero value as T -> Tc from below. That is a
+        genuine finite-jump discontinuity in idealized mean-field theory
+        (the textbook Weiss-theory specific-heat jump at a second-order
+        transition, not a numerical artifact of the dT finite difference --
+        verified by re-checking at dT=0.02K and finding the same jump, only
+        narrower). Real materials round this off via short-range
+        correlations/critical fluctuations this model does not include (same
+        root cause as validation.py's documented near-Tc DeltaT_ad
+        overprediction and run_curie_shift_check()'s null Curie-shift
+        result).
+
+        CONSEQUENCE for delta_T_adiabatic(): because C_total's denominator
+        drops sharply right above Tc while delta_S_isothermal(T,H) is still
+        substantial there, delta_T_adiabatic(T,H) rises steeply in a narrow
+        band just above Tc, on top of its normal single-peaked approach to
+        that same region. core/amr_cycle.py's AMRSystem.cooling_capacity()
+        evaluates delta_T_adiabatic at only one point (T_mid = T_cold +
+        span/2) per span; if T_mid sweeps through that steep band as span
+        grows, the feasibility margin (2*dTad_noload(T_mid) - span) can go
+        negative (Qc clipped to 0) and then swing positive again at a
+        LARGER span before finally going negative for good -- which is
+        unphysical (a real device's achievable cooling capacity cannot
+        increase as the demanded span widens). See
+        core/validation_system.py's diagnose_qc_feasibility_reopening() for
+        a reusable check of this specific failure mode and
+        run_tusek_multipoint_curve_validation()'s use of it to attribute a
+        large curve-validation miss (Tusek AMR(A), V*=0.95, span=12.23K:
+        +787% vs. literature) to this cause rather than leaving it as an
+        unexplained number.
+        """
         T = np.atleast_1d(np.asarray(T, dtype=float))
         S_plus = self.entropy_magnetic(T + dT, H)
         S_minus = self.entropy_magnetic(T - dT, H)

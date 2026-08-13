@@ -161,8 +161,9 @@ def run_thermal_diode_analysis(out_path="results/thermal_diode_analysis.txt"):
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         print("=" * 90)
-        print("PHASE 18: mechanical-contact active thermal diode -- scoped-down")
-        print("sensitivity study, motivated by Kitanovski et al. (2015) Ch. 6.")
+        print("PHASE 18: mechanical-contact active thermal diode -- COST-ONLY sensitivity")
+        print("study (reports an UPPER BOUND on switching-power overhead; no offsetting")
+        print("heat-transfer benefit is modeled, so this is not a two-directional finding).")
         print("See core/thermal_diode.py's module docstring for the full honesty flag")
         print("(this project's copy of the book does not include Ch. 6, pp. 211-268).")
         print("=" * 90)

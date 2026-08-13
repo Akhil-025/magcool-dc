@@ -272,10 +272,117 @@ def summarize_field_flow_lever(pareto_rows):
     return "\n".join(lines), {"knee_point": None}
 
 
+def summarize_cycle_type_finding(cycle_type_result):
+    """Folds in step 2b's (Phase 17) cycle-topology validation sensitivity:
+    does inferring an 'ericsson'-like cycle for rotary devices (instead of
+    this model's flat 'brayton' default) change the COP prediction error
+    against the published benchmark rows? Reads cycle_type_result (the
+    list of per-device dicts returned by
+    validation_system.run_cycle_type_validation()) rather than recomputing
+    anything -- same convention as the other five levers above."""
+    lines = ["6. CYCLE TOPOLOGY (Ericsson-like vs. Brayton-like) -- validation finding, not a design lever"]
+    if not cycle_type_result:
+        lines.append("   Not available for this run.")
+        return "\n".join(lines), {"cycle_type_result": None}
+    try:
+        n_improved = sum(1 for r in cycle_type_result if r.get("direction") == "improved")
+        n_worsened = sum(1 for r in cycle_type_result if r.get("direction") == "worsened")
+        n_unchanged = sum(
+            1 for r in cycle_type_result
+            if r.get("cycle_type_inferred") == "ericsson" and r.get("direction") == "unchanged")
+        n_not_comparable = sum(
+            1 for r in cycle_type_result
+            if r.get("cycle_type_inferred") == "ericsson"
+            and str(r.get("direction", "")).startswith("not comparable"))
+        lines.append(f"   Rotary-device subset re-checked as 'ericsson' vs. this model's flat "
+                     f"'brayton' default: {n_improved} improved, {n_worsened} worsened, "
+                     f"{n_unchanged} unchanged, {n_not_comparable} not comparable.")
+        lines.append("   This is a directional sensitivity check against a small rotary subset "
+                     "using a naming-convention proxy for cycle topology (not a literature-"
+                     "confirmed classification) -- it does NOT validate the specific "
+                     "CYCLE_TYPE_FACTORS multiplier values themselves, and is reported here as a "
+                     "validation finding rather than an actionable design lever.")
+    except Exception:
+        lines.append("   Result available but could not be summarized (unexpected shape).")
+    return "\n".join(lines), {"cycle_type_result": cycle_type_result}
+
+
+def summarize_thermal_diode_finding(thermal_diode_rows):
+    """Folds in step 11c's (Phase 18) mechanical-contact thermal-diode
+    cost-only sensitivity: how much does the illustrative diode-actuation
+    switching-power cost reduce COP_electrical, across frequency? Reads
+    thermal_diode_rows (list of (frequency_Hz, COP_no_diode,
+    COP_diode_assisted, delta_cop_pct) tuples, as returned by
+    thermal_diode_analysis.sweep_frequency_with_and_without_diode())."""
+    lines = ["7. THERMAL DIODE (mechanical-contact) -- cost-only sensitivity, not a net-benefit finding"]
+    if not thermal_diode_rows:
+        lines.append("   Not available for this run.")
+        return "\n".join(lines), {"thermal_diode_rows": None}
+    try:
+        worst = min(thermal_diode_rows, key=lambda row: row[3])
+        lines.append(f"   Illustrative actuation switching-power cost reduces COP_electrical by "
+                     f"at most {abs(worst[3]):.2f}% (at f={worst[0]:.2f} Hz) across the frequencies "
+                     "swept here -- small relative to the eddy-current/base-overhead losses that "
+                     "already dominate parasitic loss at this operating point.")
+        lines.append("   No offsetting heat-transfer benefit from the diode's rectification ratio "
+                     "is modeled, so this is a documented upper-bound cost accounting, not a claim "
+                     "that real thermal diodes are a net negative for AMR performance -- treat as "
+                     "a design-exploration finding, not a validated lever (no benchmark device in "
+                     "this repo's corpus uses thermal diodes).")
+    except Exception:
+        lines.append("   Result available but could not be summarized (unexpected shape).")
+    return "\n".join(lines), {"thermal_diode_rows": thermal_diode_rows}
+
+
+def summarize_passive_regen_and_elastocaloric(passive_regen_base, passive_regen_rows,
+                                               elastocaloric_result):
+    """Folds in step 15's (Phase 21) passive/hybrid magnetic-regenerator
+    augmentation of a conventional vapor-compression cycle, plus the
+    static Phase 23 elastocaloric literature reference. passive_regen_base
+    is the vapor-compression VaporCompressionResult (has .COP);
+    passive_regen_rows is the sorted list of PassiveRegeneratorResult
+    returned by passive_regenerator_analysis.compare_candidate_materials().
+    elastocaloric_result is the ElastocaloricReferenceResult returned by
+    baseline_cooling.elastocaloric_reference_cop()."""
+    lines = ["8. PASSIVE-REGENERATOR AUGMENTATION & ELASTOCALORIC REFERENCE -- context, not AMR-specific levers"]
+    if passive_regen_base is not None and passive_regen_rows:
+        try:
+            best = passive_regen_rows[0]
+            lines.append(f"   Best passive-regenerator candidate (Phase 21): {best.material_name}  "
+                         f"eps {best.eps_baseline:.3f} -> {best.eps_augmented:.3f}  "
+                         f"COP {passive_regen_base.COP:.4f} -> {best.augmented_COP:.4f} "
+                         f"({best.cop_gain_fraction:+.2%}) -- an alignment effect (only materials "
+                         "whose own Curie temperature falls inside the operating window gain "
+                         "anything), capped by an illustrative literature-range ceiling, not a "
+                         "validated device-level COP prediction.")
+        except Exception:
+            lines.append("   Passive-regenerator result available but could not be summarized "
+                         "(unexpected shape).")
+    else:
+        lines.append("   Passive-regenerator result not available for this run.")
+    if elastocaloric_result is not None:
+        try:
+            lines.append(f"   Elastocaloric literature reference (Phase 23, static, NOT "
+                         f"span-simulated): COP_representative={elastocaloric_result.COP_representative:.2f} "
+                         f"(range {elastocaloric_result.COP_low:.1f}-{elastocaloric_result.COP_high:.1f}) "
+                         "-- an external anchor for comparison, not an output of this repo's own AMR model.")
+        except Exception:
+            lines.append("   Elastocaloric reference available but could not be summarized "
+                         "(unexpected shape).")
+    else:
+        lines.append("   Elastocaloric reference not available for this run.")
+    return "\n".join(lines), {"passive_regen_base": passive_regen_base,
+                               "passive_regen_rows": passive_regen_rows,
+                               "elastocaloric_result": elastocaloric_result}
+
+
 def build_report(sobol_state_dependent_Si=None, pareto_rows=None, material_rows=None,
                   graded_row=None, gd_cascade_row=None, n_stages=3,
                   pb_best_cop_row=None, pp_best_cop_row=None,
                   representative_span_K=10.0,
+                  cycle_type_result=None, thermal_diode_rows=None,
+                  passive_regen_base=None, passive_regen_rows=None,
+                  elastocaloric_result=None,
                   out_path="results/design_recommendations.txt"):
     """Assembles all five levers into one report, writes it to
     `out_path`, prints it, and returns a structured dict for any caller
@@ -303,8 +410,13 @@ def build_report(sobol_state_dependent_Si=None, pareto_rows=None, material_rows=
     section3, data3 = summarize_grading_lever(graded_row, gd_cascade_row, n_stages)
     section4, data4 = summarize_geometry_lever(pb_best_cop_row, pp_best_cop_row)
     section5, data5 = summarize_field_flow_lever(pareto_rows or [])
+    section6, data6 = summarize_cycle_type_finding(cycle_type_result)
+    section7, data7 = summarize_thermal_diode_finding(thermal_diode_rows)
+    section8, data8 = summarize_passive_regen_and_elastocaloric(
+        passive_regen_base, passive_regen_rows, elastocaloric_result)
 
-    for section in (section1, section2, section3, section4, section5):
+    for section in (section1, section2, section3, section4, section5,
+                    section6, section7, section8):
         lines.append(section)
         lines.append("")
 
@@ -344,6 +456,9 @@ def build_report(sobol_state_dependent_Si=None, pareto_rows=None, material_rows=
         "grading": data3,
         "geometry": data4,
         "field_flow": data5,
+        "cycle_type": data6,
+        "thermal_diode": data7,
+        "passive_regen_and_elastocaloric": data8,
         "text": text,
         "out_path": out_path,
     }

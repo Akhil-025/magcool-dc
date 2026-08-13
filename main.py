@@ -565,7 +565,15 @@ def run_full_system_cost_by_material():
 
 def run_emissions(representative_row):
     """Step 6: emissions comparison fed with the *actual* COPs from the
-    baseline sweep instead of the module's illustrative example numbers."""
+    baseline sweep instead of the module's illustrative example numbers.
+
+    Also logs the same comparison at emissions.FACILITY_SCALE_KW (1 MW):
+    compare_emissions() is linear in capacity, so the technology ranking
+    and ratio are identical at either scale, but the representative
+    operating point's own capacity (~1.3 kW here) makes the absolute
+    tCO2e/yr numbers small enough that the ratio is easy to lose next to
+    them -- the facility-scale row makes the same conclusion easier to
+    read (see emissions.py's own "Reporting scale" docstring note)."""
     capacity_kW = representative_row["AMR_Qc_W"] / 1000.0
     amr_cop = representative_row["AMR_COP_electrical"]
     vcc_cop = representative_row["VaporCompression_COP"]
@@ -578,6 +586,22 @@ def run_emissions(representative_row):
         logger.info(f"{r.technology:<32} refrigerant={r.refrigerant_GWP_tCO2e_per_year:7.2f} "
                     f"tCO2e/yr  operational={r.operational_CO2_tCO2e_per_year:8.2f} tCO2e/yr  "
                     f"total={r.total_tCO2e_per_year:8.2f} tCO2e/yr")
+
+    logger.info(f"Same comparison at facility scale ({emissions.FACILITY_SCALE_KW:.0f} kW = "
+                f"{emissions.FACILITY_SCALE_KW / 1000.0:.1f} MW, same COPs -- linear model, "
+                "so this is the same ratio read at a scale where it's easier to see):")
+    facility_rows = emissions.compare_emissions(
+        emissions.FACILITY_SCALE_KW, amr_cop=amr_cop, vcc_cop=vcc_cop, liquid_cop=liquid_cop)
+    for r in facility_rows:
+        logger.info(f"{r.technology:<32} refrigerant={r.refrigerant_GWP_tCO2e_per_year:9.2f} "
+                    f"tCO2e/yr  operational={r.operational_CO2_tCO2e_per_year:10.2f} tCO2e/yr  "
+                    f"total={r.total_tCO2e_per_year:10.2f} tCO2e/yr")
+    amr_total = facility_rows[0].total_tCO2e_per_year
+    baseline_totals = [r.total_tCO2e_per_year for r in facility_rows[1:] if r.total_tCO2e_per_year > 0]
+    if baseline_totals:
+        best_baseline = min(baseline_totals)
+        logger.info(f"Ratio (AMR total / best baseline total): {amr_total / best_baseline:.2f}x "
+                    "-- identical at either scale by construction of the linear model.")
 
 
 def run_cascade_comparison():
@@ -747,14 +771,27 @@ def run_plot_generation(precomputed=None):
 def run_design_recommendations_synthesis(sobol_state_dependent_Si, pareto_rows, material_rows,
                                           graded_rows, cascade_rows_gd, pb_best_cop_row,
                                           pp_best_cop_row, n_stages=3,
-                                          representative_span_K=REPRESENTATIVE_SPAN_K):
+                                          representative_span_K=REPRESENTATIVE_SPAN_K,
+                                          cycle_type_result=None, thermal_diode_rows=None):
     """Step 13: consolidates the already-computed results from steps
-    3c/7b/8d/9b/11 into one ranked "how do I raise AMR electrical COP"
-    report via core/design_recommendations.py. Pulls out the 10K-span,
+    2b/3c/7b/8d/9b/11/11c into one ranked "how do I raise AMR electrical
+    COP" report via core/design_recommendations.py. Pulls out the 10K-span,
     3-stage graded-vs-plain-Gd cascade rows (matching the comparison
     main.py already logs at the end of step 7b) since the graded/plain
     cascade sweeps return every span/stage-count combination, not just
-    the representative one."""
+    the representative one.
+
+    Also folds in three findings that previously lived only in their own
+    result files and never made it into this consolidated report: cycle-
+    type validation (step 2b), thermal-diode cost sensitivity (step 11c),
+    and passive/hybrid-regenerator augmentation (step 21/Phase 21) plus
+    the static elastocaloric literature reference (Phase 23). cycle_type_
+    result and thermal_diode_rows are passed in (steps 2b/11c both run
+    before this one). The passive-regenerator and elastocaloric numbers
+    are cheap (sub-second, no file I/O) to recompute directly here rather
+    than plumbing them through from step 15, which runs AFTER this
+    report is built -- same convention as step 3c's own cheap geometry
+    re-sweep above."""
     graded_row = None
     gd_cascade_row = None
     if graded_rows is not None:
@@ -762,6 +799,15 @@ def run_design_recommendations_synthesis(sobol_state_dependent_Si, pareto_rows, 
     if cascade_rows_gd is not None:
         gd_cascade_row = next((r for r in cascade_rows_gd if r["span_K"] == representative_span_K),
                                None)
+
+    # Cheap (sub-second), non-printing, non-file-writing recomputation --
+    # see the docstring note above for why these two are computed here
+    # rather than passed in from their own (later-running, or text-only)
+    # pipeline stages.
+    passive_regen_base, passive_regen_rows = passive_regenerator_analysis.compare_candidate_materials(
+        verbose=False)
+    elastocaloric_result = elastocaloric_reference_cop()
+
     design_recommendations.build_report(
         sobol_state_dependent_Si=sobol_state_dependent_Si,
         pareto_rows=pareto_rows,
@@ -772,6 +818,11 @@ def run_design_recommendations_synthesis(sobol_state_dependent_Si, pareto_rows, 
         pb_best_cop_row=pb_best_cop_row,
         pp_best_cop_row=pp_best_cop_row,
         representative_span_K=representative_span_K,
+        cycle_type_result=cycle_type_result,
+        thermal_diode_rows=thermal_diode_rows,
+        passive_regen_base=passive_regen_base,
+        passive_regen_rows=passive_regen_rows,
+        elastocaloric_result=elastocaloric_result,
         out_path="results/design_recommendations.txt",
     )
 
@@ -841,7 +892,8 @@ def main():
         ("11b. Hysteresis sensitivity: does Phase 16's thermal-hysteresis loss change the "
          "Phase 15 material-selection result? (core/hysteresis_sensitivity.py, Phase 16)",
          None),  # handled specially below, result (hysteresis_result) captured for the executive summary
-        ("11c. Thermal-diode sensitivity study: mechanical-contact active thermal diode "
+        ("11c. Thermal-diode cost-only sensitivity (upper bound on switching-power "
+         "overhead, NOT a net-benefit finding): mechanical-contact active thermal diode "
          "(core/thermal_diode.py, core/thermal_diode_analysis.py, Phase 18)",
          lambda: thermal_diode_analysis.run_thermal_diode_analysis()),
         ("11d. Magnet-geometry (Halbach-cylinder) field-vs-mass cost model "
@@ -883,6 +935,8 @@ def main():
     magnet_geometry_result = None
     fluid_mce_result = None
     passive_regen_result = None
+    cycle_type_result = None
+    thermal_diode_rows = None
 
     for name, fn in stages:
         _banner(name)
@@ -903,6 +957,8 @@ def main():
                     # only ever compares one companion point, not the full
                     # digitized curve.
                     validation_system.run_tusek_multipoint_curve_validation()
+                elif name.startswith("2b."):
+                    cycle_type_result = validation_system.run_cycle_type_validation()
                 elif name.startswith("4."):
                     rows = run_baseline_sweep()
                     representative_row = next(
@@ -936,6 +992,15 @@ def main():
                     sobol_const_Si = fn()
                 elif name.startswith("11b."):
                     hysteresis_result = hysteresis_sensitivity.run_hysteresis_sensitivity()
+                elif name.startswith("11c."):
+                    fn()
+                    # Cheap (sub-second), non-printing re-sweep purely to capture
+                    # the diode-vs-no-diode COP rows for step 13's synthesis
+                    # report -- same convention as step 3c's geometry re-sweep
+                    # above; run_thermal_diode_analysis() already did the
+                    # printed, file-writing version of this same sweep.
+                    thermal_diode_rows = thermal_diode_analysis.sweep_frequency_with_and_without_diode(
+                        verbose=False)
                 elif name.startswith("11d."):
                     magnet_geometry.run_magnet_geometry_analysis()
                     magnet_geometry_result = magnet_geometry.run_geometric_cost_pareto_sensitivity()
@@ -965,6 +1030,8 @@ def main():
                         cascade_rows_gd=cascade_rows_gd,
                         pb_best_cop_row=pb_best_cop_row,
                         pp_best_cop_row=pp_best_cop_row,
+                        cycle_type_result=cycle_type_result,
+                        thermal_diode_rows=thermal_diode_rows,
                     )
                 elif name.startswith("14."):
                     fluid_mce_result = fluid_mce_analysis.run_fluid_mce_analysis()
@@ -1136,8 +1203,9 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
     else:
         logger.info("  - unavailable (stage failed or was skipped)")
 
-    logger.info("Thermal-diode sensitivity study: mechanical-contact active thermal diode "
-                "(step 11c, Phase 18)")
+    logger.info("Thermal-diode cost-only sensitivity (upper bound on switching-power "
+                "overhead, not a net-benefit finding): mechanical-contact active thermal "
+                "diode (step 11c, Phase 18)")
     if _ok("11c."):
         logger.info("  - Cost-only, unbenchmarked design-exploration study (see "
                     "results/thermal_diode_analysis.txt and core/thermal_diode.py's docstring "

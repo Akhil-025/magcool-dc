@@ -40,6 +40,18 @@ CO2_PER_KWH_GRID = 0.71   # kg CO2/kWh, representative Indian grid average
                             # cite the latest CEA figure directly in the paper
                             # rather than relying on this placeholder)
 
+# Reporting scale: compare_emissions() is linear in capacity_kW (both the
+# refrigerant-charge term and the operational-energy term scale directly
+# with it), so the technology ranking and the AMR/baseline ratio are
+# identical at any capacity -- only the absolute tCO2e/yr numbers change.
+# This repo's own representative operating point is ~1.3 kW, which makes
+# those absolute numbers small enough that the ratio between technologies
+# is easy to lose. FACILITY_SCALE_KW (1 MW) is a round, illustrative
+# data-center-scale capacity used purely to re-express the same linear
+# comparison at numbers that are easier to read -- not a claim that this
+# repo's device-level model has been validated at facility scale.
+FACILITY_SCALE_KW = 1000.0
+
 
 @dataclass
 class EmissionsResult:

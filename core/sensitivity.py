@@ -58,8 +58,19 @@ def model_cop(params, use_state_dependent_losses=False):
     return result.COP_electrical
 
 
-def run_sobol(n_base=64, seed=42, out_path="results/sobol_results.txt",
+def run_sobol(n_base=256, seed=42, out_path="results/sobol_results.txt",
               use_state_dependent_losses=False):
+    # n_base=256 (3072 total Saltelli samples for 5 params) rather than the
+    # earlier default of 64 (768 samples): at n_base=64 the bottom three
+    # parameters' total-order confidence intervals were comparable in size
+    # to the effects themselves (e.g. state-dependent mode:
+    # regen_effectiveness ST=0.0118+/-0.0062, mu0H_max_T ST=0.0061+/-0.0026),
+    # too wide to rank-order the tail with any confidence even though
+    # design_recommendations.py cites this ranking directly. Sobol CI width
+    # scales roughly as 1/sqrt(N), so a 4x sample increase roughly halves
+    # it. Runtime cost is modest (~4x more AMRSystem.run() calls, itself a
+    # cheap 0-D evaluation) -- see tests/test_sensitivity.py's own much
+    # smaller N_BASE=16 for why the test suite doesn't pay this cost.
     # NOTE: np.random.seed(seed) alone does NOT make this reproducible.
     # SALib's Sobol sampler (this SALib version) draws from scipy's QMC
     # Sobol-sequence generator internally, which has its own independent

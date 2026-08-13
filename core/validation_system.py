@@ -665,6 +665,70 @@ def run_field_sensitivity_check(verbose=True, device_group="ChubuToshiba_Gd_2016
 TUSEK_FIG10_CSV = "data/tusek_ate2013_figs/fig10_data.csv"
 
 
+def _dTad_noload_span_scan(material, T_cold, mu0H_max, spans):
+    """dTad_noload(T_mid(span)) for each span in `spans`, T_mid = T_cold +
+    span/2 -- exactly the quantity core/amr_cycle.py's cooling_capacity()
+    evaluates internally to build span_fraction. Exposed here (rather than
+    only implicitly inside AMRSystem) so a non-monotonicity in this single
+    curve can be diagnosed directly, independent of mdot/mass/frequency."""
+    H = mu0H_max / (4 * np.pi * 1e-7)
+    T_mids = T_cold + np.asarray(spans, dtype=float) / 2.0
+    return material.delta_T_adiabatic(T_mids, H)
+
+
+def diagnose_qc_feasibility_reopening(material, T_cold, mu0H_max,
+                                        span_lo, span_hi, n_points=400):
+    """Detects the near-Tc mean-field artifact documented in
+    core/mce_material.py's magnetic_heat_capacity() docstring.
+
+    core/amr_cycle.py's cooling_capacity() clips Qc to zero once the
+    feasibility margin `2*dTad_noload(T_mid) - span` goes negative (span
+    exceeds what the no-load temperature lift can cover). dTad_noload(T)
+    itself is NOT required to be monotonic in span for this to behave
+    physically -- it is expected to rise as T_mid approaches the
+    material's Tc from below, that alone is normal single-peaked MCE
+    behavior. The genuine problem is narrower: because the zero-field
+    heat capacity C(T,H=0) that dTad_noload's denominator uses has a real
+    finite-jump discontinuity exactly at Tc (see magnetic_heat_capacity()'s
+    own docstring), dTad_noload(T_mid) can jump up steeply enough, right
+    where T_mid crosses Tc, to push the margin back positive AFTER it has
+    already gone negative at a smaller span. Physically this must never
+    happen: a real device's achievable cooling capacity cannot increase
+    as the demanded span widens, so the margin should cross zero (positive
+    to negative) at most ONCE as span increases.
+
+    This function scans that margin over [span_lo, span_hi] and reports
+    every positive-to-negative and negative-to-positive sign change. More
+    than one positive-to-negative crossing means cooling_capacity() will
+    predict Qc=0, then Qc>0 again, then Qc=0 for good, as span increases
+    -- exactly the failure mode
+    test_tusek_multipoint_curve_validation_genuine_finding_nonmonotonic_curve()
+    locks down and run_tusek_multipoint_curve_validation() now attributes
+    its large per-point misses to, via this function.
+    """
+    spans = np.linspace(span_lo, span_hi, n_points)
+    dTads = _dTad_noload_span_scan(material, T_cold, mu0H_max, spans)
+    margin = 2.0 * dTads - spans
+    sign = np.sign(margin)
+    sign[sign == 0] = 1.0  # treat an exact-zero margin as still-feasible
+    changes = np.where(np.diff(sign) != 0)[0]
+    neg_crossings = [int(i) for i in changes if sign[i] > 0 > sign[i + 1]]
+    pos_crossings = [int(i) for i in changes if sign[i] < 0 < sign[i + 1]]
+
+    out = {"reopens": len(pos_crossings) > 0, "spans_K": spans.tolist(),
+           "margin_K": margin.tolist(),
+           "n_feasible_to_infeasible_crossings": len(neg_crossings),
+           "n_infeasible_to_feasible_crossings": len(pos_crossings)}
+    if out["reopens"]:
+        i = pos_crossings[0]
+        out["first_reopen_span_K"] = float(spans[i + 1])
+        out["first_reopen_T_mid_K"] = float(T_cold + spans[i + 1] / 2.0)
+        # span at which it goes infeasible for good after reopening, if any
+        later_neg = [j for j in neg_crossings if j > i]
+        out["final_reclose_span_K"] = float(spans[later_neg[0] + 1]) if later_neg else None
+    return out
+
+
 def _load_tusek_curve(amr="A", v_star=0.95, csv_path=TUSEK_FIG10_CSV):
     """Load one digitized (span_K, Qc_W) curve -- one AMR geometry at one
     V* flow ratio -- from data/tusek_ate2013_figs/fig10_data.csv, sorted by
@@ -752,10 +816,40 @@ def run_tusek_multipoint_curve_validation(verbose=True, amr="A", v_star=0.95):
             print(f"{'':<10} predict span={span:5.2f}K ({role}): model={Qc_model:6.2f}W  "
                   f"lit={Qc_lit:6.2f}W  err={err_str}")
 
+    # Diagnose whether any large per-point miss above is attributable to the
+    # near-Tc feasibility-margin reopening documented in
+    # diagnose_qc_feasibility_reopening()'s own docstring, rather than
+    # leaving a big error percentage unexplained. Scanned over the full
+    # span range this curve covers (anchor to the last digitized point).
+    span_lo, span_hi = pts[0][0], pts[-1][0]
+    reopen = diagnose_qc_feasibility_reopening(sys_.mat, t_cold, sys_.mu0H_max,
+                                                span_lo, span_hi)
+    if reopen["reopens"]:
+        reopen_span = reopen["first_reopen_span_K"]
+        if verbose:
+            reclose = reopen.get("final_reclose_span_K")
+            reclose_str = f"{reclose:.2f}K" if reclose is not None else "the end of this range"
+            print(f"{'':<10} DIAGNOSTIC: this curve's own feasibility margin "
+                  f"(2*dTad_noload(T_mid(span)) - span) goes infeasible, then "
+                  f"reopens positive again at span={reopen_span:.2f}K (T_mid="
+                  f"{reopen['first_reopen_T_mid_K']:.2f}K) before closing for good at "
+                  f"span={reclose_str}. This is the known near-Tc mean-field heat-"
+                  "capacity discontinuity (see core/mce_material.py's "
+                  "magnetic_heat_capacity() docstring), not a flow-rate/mdot-basis "
+                  "error in this curve's calibration -- it makes cooling_capacity()'s "
+                  "predicted Qc(span) fall to zero and then rise again at a larger "
+                  "span, which is unphysical and is the likely cause of any large-"
+                  f"magnitude error at a predicted point whose span sits at or beyond "
+                  f"{reopen_span:.2f}K on this curve.")
+        for p in predictions:
+            if p["span_K"] >= reopen_span:
+                p["flagged_near_Tc_nonmonotonicity"] = True
+
     return {"amr": amr, "v_star": v_star, "status": "ok",
             "anchor_span_K": anchor_span, "anchor_Qc_W": anchor_Qc,
             "mdot_calibrated_kg_s": round(mdot_cal, 4),
-            "predictions": predictions}
+            "predictions": predictions,
+            "qc_feasibility_reopening": reopen}
 
 
 if __name__ == "__main__":

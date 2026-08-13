@@ -1,6 +1,7 @@
 ==========================================================================================
-PHASE 18: mechanical-contact active thermal diode -- scoped-down
-sensitivity study, motivated by Kitanovski et al. (2015) Ch. 6.
+PHASE 18: mechanical-contact active thermal diode -- COST-ONLY sensitivity
+study (reports an UPPER BOUND on switching-power overhead; no offsetting
+heat-transfer benefit is modeled, so this is not a two-directional finding).
 See core/thermal_diode.py's module docstring for the full honesty flag
 (this project's copy of the book does not include Ch. 6, pp. 211-268).
 ==========================================================================================

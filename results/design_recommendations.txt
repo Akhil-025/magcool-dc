@@ -4,7 +4,7 @@ AMR ELECTRICAL-COP DESIGN RECOMMENDATIONS -- consolidated from all analyses abov
 Every figure below was computed by an earlier pipeline stage in this same run; this report only re-organizes those results by design lever, ranked by the demonstrated Sobol sensitivity of electrical COP to each lever (sensitivity.py).
 
 1. OPERATING FREQUENCY -- the dominant lever
-   Sobol total-order sensitivity (state-dependent loss model): ST(frequency) = 0.877
+   Sobol total-order sensitivity (state-dependent loss model): ST(frequency) = 0.866
    NSGA-III best-electrical-COP design:  f=0.423 Hz  -> COP_elec=9.53, Qc=25481 W
    NSGA-III best-cooling-capacity design: f=2.559 Hz  -> COP_elec=6.21, Qc=39282 W
    Action: reduce cycle frequency toward the low-speed end of the design space when electrical COP is the priority; raise it toward the high end only when cooling capacity is the priority and higher parasitic loss is acceptable. This is a genuine Pareto trade-off in this repo's model, not a free win in either direction.
@@ -26,6 +26,18 @@ Every figure below was computed by an earlier pipeline stage in this same run; t
 5. FIELD STRENGTH / FLOW RATE BALANCE (now co-optimized with material and geometry)
    Knee-point (balanced) Pareto design: H=1.056 T, f=2.47 Hz, mdot=0.4985 kg/s, mass=6.31 kg, eps=0.881, d_p=0.3416 mm, material=La(Fe,Si)13Hy (tuned, Tc=285.3K)  -> COP_elec=8.908, Qc=36287.31 W, cost=$900.4
    Action: operate near this balanced point rather than at either objective's own extreme (max-COP alone drives frequency and Qc very low; max-Qc alone raises parasitic loss and cuts COP roughly 3x in this repo's Pareto front) -- see results/pareto_front.csv for the full 21-design front and the other extreme points. As of phase 15 this knee point already reflects the best-performing material and regenerator geometry found jointly with field/frequency/flow, not just the best fixed-Gd, fixed-geometry point -- levers 2 and 4 above remain useful as focused single-lever sweeps for understanding WHY a given material/geometry wins, but are no longer this repo's only way to explore those two choices.
+
+6. CYCLE TOPOLOGY (Ericsson-like vs. Brayton-like) -- validation finding, not a design lever
+   Rotary-device subset re-checked as 'ericsson' vs. this model's flat 'brayton' default: 1 improved, 0 worsened, 0 unchanged, 1 not comparable.
+   This is a directional sensitivity check against a small rotary subset using a naming-convention proxy for cycle topology (not a literature-confirmed classification) -- it does NOT validate the specific CYCLE_TYPE_FACTORS multiplier values themselves, and is reported here as a validation finding rather than an actionable design lever.
+
+7. THERMAL DIODE (mechanical-contact) -- cost-only sensitivity, not a net-benefit finding
+   Illustrative actuation switching-power cost reduces COP_electrical by at most 0.03% (at f=1.00 Hz) across the frequencies swept here -- small relative to the eddy-current/base-overhead losses that already dominate parasitic loss at this operating point.
+   No offsetting heat-transfer benefit from the diode's rectification ratio is modeled, so this is a documented upper-bound cost accounting, not a claim that real thermal diodes are a net negative for AMR performance -- treat as a design-exploration finding, not a validated lever (no benchmark device in this repo's corpus uses thermal diodes).
+
+8. PASSIVE-REGENERATOR AUGMENTATION & ELASTOCALORIC REFERENCE -- context, not AMR-specific levers
+   Best passive-regenerator candidate (Phase 21): Gd (polycrystalline)  eps 0.829 -> 0.860  COP 12.2283 -> 12.2582 (+0.24%) -- an alignment effect (only materials whose own Curie temperature falls inside the operating window gain anything), capped by an illustrative literature-range ceiling, not a validated device-level COP prediction.
+   Elastocaloric literature reference (Phase 23, static, NOT span-simulated): COP_representative=4.63 (range 3.7-5.8) -- an external anchor for comparison, not an output of this repo's own AMR model.
 
 ----------------------------------------------------------------------------------------------------
 RECOMMENDED STARTING DESIGN POINT (NSGA-III knee point, this run):
