@@ -268,6 +268,238 @@ def run_cascade(T_cold_K, total_span_K, n_stages, material=None, mu0H_max=2.0,
             "COP_cascade": round(COP_cascade, 3), "feasible": True}
 
 
+def run_explicit_material_cascade(T_cold_K, total_span_K, materials, mu0H_max=2.0,
+                                   mass_per_stage=2.0, frequency=1.0, fluid_mdot=0.08,
+                                   regenerator_effectiveness=0.85, cycle_type="brayton"):
+    """Same series-cascade mechanics as run_cascade()/run_graded_cascade()
+    above, but for the case where the REAL per-stage material composition
+    is already known from a paper (not searched for, unlike
+    run_graded_cascade()'s composition-tuning against a hypothetical
+    GradedFamily). `materials` is an explicit, ordered list (coldest stage
+    first) of MagnetocaloricMaterial instances, one per stage -- e.g.
+    [GADOLINIUM.with_Tc(272.15), GADOLINIUM.with_Tc(282.65), ...] for a
+    reported Gd/Gd-Y multi-layer bed. n_stages = len(materials).
+    mass_per_stage may be a single float (split evenly across all stages)
+    or a list/tuple of per-stage masses matching len(materials), for the
+    (more common) case where a paper reports a total MCM mass but not a
+    per-layer breakdown.
+
+    See validate_maggie_real_graded_bed() below for the motivating use:
+    reproducing DTU_Eriksen_MAGGIE_2016's actual reported 4-composition
+    Gd/Gd-Y bed using the paper's own measured Curie temperatures,
+    rather than a hypothetical composition-tuned family."""
+    n_stages = len(materials)
+    if n_stages == 0:
+        raise ValueError("materials must be a non-empty list")
+    if isinstance(mass_per_stage, (list, tuple)):
+        if len(mass_per_stage) != n_stages:
+            raise ValueError(f"mass_per_stage has {len(mass_per_stage)} entries, "
+                              f"expected {n_stages} (one per material)")
+        masses = list(mass_per_stage)
+    else:
+        masses = [mass_per_stage] * n_stages
+
+    span_per_stage = total_span_K / n_stages
+    T_local = T_cold_K
+    stage1 = AMRSystem(material=materials[0], mu0H_max=mu0H_max,
+                        mass_regenerator=masses[0], frequency=frequency,
+                        fluid_mdot=fluid_mdot, regenerator_effectiveness=regenerator_effectiveness,
+                        loss_model=_LOSS_MODEL, use_ntu_thermal_model=USE_NTU_THERMAL_MODEL,
+                        cycle_type=cycle_type)
+    r1 = stage1.run(T_local, span_per_stage)
+    Qc_target = r1.Qc
+    if Qc_target <= 0:
+        return {"n_stages": n_stages, "span_per_stage_K": span_per_stage,
+                "Qc_W": 0.0, "W_total_W": np.nan, "COP_cascade": 0.0, "feasible": False}
+
+    W_total = 0.0
+    T_local = T_cold_K
+    stage_info = []
+    for i in range(n_stages):
+        stage = AMRSystem(material=materials[i], mu0H_max=mu0H_max,
+                           mass_regenerator=masses[i], frequency=frequency,
+                           fluid_mdot=fluid_mdot, regenerator_effectiveness=regenerator_effectiveness,
+                           loss_model=_LOSS_MODEL, use_ntu_thermal_model=USE_NTU_THERMAL_MODEL,
+                           cycle_type=cycle_type)
+        r_i = stage.run(T_local, span_per_stage)
+        if r_i.Qc > 0:
+            scale = Qc_target / r_i.Qc
+            W_i = (r_i.W_mag + r_i.W_parasitic) * scale
+        else:
+            W_i = np.inf
+        W_total += W_i
+        stage_info.append({"stage": i + 1, "T_mid_K": round(T_local + span_per_stage / 2.0, 2),
+                            "material": materials[i].name, "Tc_K": round(materials[i].Tc, 2),
+                            "mass_kg": round(masses[i], 4), "own_Qc_W": round(r_i.Qc, 2)})
+        T_local += span_per_stage
+
+    COP_cascade = Qc_target / W_total if W_total > 0 else 0.0
+    return {"n_stages": n_stages, "span_per_stage_K": span_per_stage,
+            "Qc_W": round(Qc_target, 1), "W_total_W": round(W_total, 1),
+            "COP_cascade": round(COP_cascade, 3), "feasible": True, "stage_info": stage_info}
+
+
+def validate_maggie_real_graded_bed(cycle_type="brayton"):
+    """REAL (not hypothetical, not composition-searched) reproduction of
+    DTU_Eriksen_MAGGIE_2016, using the actual reported per-layer alloy
+    compositions and measured Curie temperatures of the physical
+    prototype -- unlike validate_risoe_dtu_graded_bed()/
+    validate_cooltech_graded_bed() above, which explicitly test a
+    HYPOTHETICAL graded redesign because those two devices' real hardware
+    is not graded. This device's real hardware IS graded, and the paper
+    reports exactly what it's graded with.
+
+    Sources (both now in this repo's Papers/):
+      - D. Eriksen, K. Engelbrecht, C.R.H. Bahl, R. Bjork, K.K. Nielsen,
+        A.R. Insinga, N. Pryds, "Design and experimental tests of a
+        rotary active magnetic regenerator prototype," Int. J.
+        Refrigeration (2015) -- Fig. 3 (a labeled photo/diagram, not a
+        text table) shows the regenerator's 11 compartments filled with
+        four alloys, each labeled with its own measured Curie
+        temperature: Gd (Tc=18C), Gd97.5Y2.5 (Tc=14C), Gd95Y5 (Tc=9.5C),
+        Gd90Y10 (Tc=-1C), arranged hot-to-cold in that order. Read
+        directly off the rendered figure (pdftotext cannot extract text
+        embedded in a figure image) -- not inferred or estimated.
+      - D. Eriksen, "Active magnetic regenerator refrigeration with
+        rotary multi-bed technology" (PhD thesis, DTU, 2016), Ch. 3.2.2/
+        Fig. 3.3 -- same figure, same prototype, confirms the same four
+        Curie temperatures and the total MCM mass of 1.7kg. Sec. 6.5.2-
+        6.5.3 additionally reports the exact operating point this row's
+        Qc=81.5W/COP=3.6 figures come from: "a maximum second-law
+        efficiency of 18% was obtained at a cooling load of 81.5 W,
+        resulting in a temperature span of 15.5 K" at fAMR=0.61Hz, with
+        "TH = 19.5C and delta-T = 15.5C" -- giving T_cold=277.15K
+        (=19.5C-15.5C=4.0C), NOT the generic T_COLD_ASSUMED_K=289.0
+        default validation_system.py falls back to for plain-Gd rows
+        without a directly-reported cold-side temperature.
+
+    Modeling choice: Gd-Y solid solutions are, like pure Gd itself, SECOND-
+    ORDER (mean-field/Heisenberg) ferromagnets -- diluting Gd with
+    non-magnetic Y lowers Tc without introducing first-order/
+    magnetostructural character. This is therefore modeled with
+    GADOLINIUM.with_Tc() (core/mce_material.py -- already built for
+    exactly this purpose by core/inhomogeneous_broadening.py, Phase 22
+    item 1: same J/g/M_molar/theta_D as pure Gd, only Tc shifted), NOT
+    cascade.py's GD_FAMILY/LAFESIH_FAMILY machinery, which composition-
+    tunes a FIRST-ORDER Landau model (core/first_order_mce.py) -- the
+    wrong physics class for a Gd-Y solid solution. Because the real Tc's
+    are given directly by the paper, no composition-target search
+    (run_graded_cascade()'s brentq-per-stage machinery) is needed at all
+    -- this calls run_explicit_material_cascade() with the four materials
+    already built at their reported Tc's.
+
+    mass_per_stage: the paper reports only the 1.7kg TOTAL MCM mass, not
+    a per-layer breakdown across the four compositions (Fig. 3 gives
+    compartment WIDTHS in mm for a physical drawing, not per-layer
+    masses) -- so this splits 1.7kg evenly across the 4 compositions
+    (0.425kg each), flagged here as an assumption the paper does not
+    directly support, same honesty standard as every other
+    mass-per-stage assumption elsewhere in this module.
+
+    fluid_mdot is calibrated (brentq) to reproduce the reported Qc=81.5W
+    exactly, then COP_cascade is compared to the reported COP=3.6 --
+    mirroring validate_astronautics_graded_bed()'s own methodology."""
+    T_cold_K = 277.15   # 4.0C = 19.5C(T_hot) - 15.5K(span), thesis Sec. 6.5.3
+    span_K = 15.5
+    mu0H = 1.13
+    freq = 0.61
+    mass_total_kg = 1.7
+    Qc_lit = 81.5
+    cop_lit = 3.6
+
+    # Hot-to-cold as drawn in Fig. 3; run_explicit_material_cascade wants
+    # coldest-stage-first (matches its T_local increment from T_cold_K up).
+    layer_Tc_C_hot_to_cold = [18.0, 14.0, 9.5, -1.0]
+    materials = [GADOLINIUM.with_Tc(Tc_C + 273.15) for Tc_C in reversed(layer_Tc_C_hot_to_cold)]
+    n_stages = len(materials)
+    mass_per_stage = mass_total_kg / n_stages
+
+    def qc_residual(mdot):
+        r = run_explicit_material_cascade(T_cold_K, span_K, materials, mu0H_max=mu0H,
+                                           mass_per_stage=mass_per_stage, frequency=freq,
+                                           fluid_mdot=max(mdot, 1e-6), cycle_type=cycle_type)
+        return (r["Qc_W"] if r["feasible"] else 0.0) - Qc_lit
+
+    try:
+        mdot_cal = brentq(qc_residual, 1e-6, 5.0, xtol=1e-6)
+    except ValueError:
+        return {"feasible": False,
+                "status": f"no calibration found (reported Qc={Qc_lit}W unreachable within "
+                f"mdot in [1e-6, 5.0] kg/s for the real 4-layer Gd/Gd-Y bed at "
+                f"T_cold={T_cold_K}K, mu0H={mu0H}T, f={freq}Hz)"}
+
+    result = run_explicit_material_cascade(T_cold_K, span_K, materials, mu0H_max=mu0H,
+                                            mass_per_stage=mass_per_stage, frequency=freq,
+                                            fluid_mdot=mdot_cal, cycle_type=cycle_type)
+    result["mdot_calibrated_kg_s"] = round(mdot_cal, 5)
+    result["Qc_lit_W"] = Qc_lit
+    result["COP_lit"] = cop_lit
+    if result["feasible"]:
+        result["COP_error_pct"] = round(100 * (result["COP_cascade"] - cop_lit) / cop_lit, 1)
+    return result
+
+
+def run_maggie_span_sensitivity(cycle_type="brayton", verbose=True):
+    """DTU_Eriksen_rotary_Gd_2015 (10.2K span, same physical prototype,
+    earlier/higher-frequency paper) already calibrates cleanly under the
+    single-Tc Gd approximation (step 2, err=-2.1%) -- so the real 4-layer
+    graded-bed model built for the 15.5K MAGGIE row above should, at
+    minimum, not make that already-working companion point worse when
+    checked under the SAME real-materials treatment. This is a direct
+    consistency check between the two rows sharing one physical device,
+    not a new independent validation."""
+    maggie = validate_maggie_real_graded_bed(cycle_type=cycle_type)
+
+    T_cold_2015_K, span_2015_K = 285.75, 10.2   # thesis Sec. 5: best result
+    # at Fig. 7's own operating point; ambient/ref T not separately
+    # re-derived here -- reuses MAGGIE's own T_hot-span convention
+    # (291.15K hot side implied) purely as a same-device consistency
+    # check, not a claim this is the 2015 paper's own reported T_cold.
+    layer_Tc_C_hot_to_cold = [18.0, 14.0, 9.5, -1.0]
+    materials = [GADOLINIUM.with_Tc(Tc_C + 273.15) for Tc_C in reversed(layer_Tc_C_hot_to_cold)]
+    n_stages = len(materials)
+    mass_per_stage = 1.7 / n_stages
+    mu0H, freq = 1.13, 0.75
+    Qc_lit_2015, cop_lit_2015 = 102.8, 3.1
+
+    def qc_residual(mdot):
+        r = run_explicit_material_cascade(T_cold_2015_K, span_2015_K, materials, mu0H_max=mu0H,
+                                           mass_per_stage=mass_per_stage, frequency=freq,
+                                           fluid_mdot=max(mdot, 1e-6), cycle_type=cycle_type)
+        return (r["Qc_W"] if r["feasible"] else 0.0) - Qc_lit_2015
+
+    try:
+        mdot_cal = brentq(qc_residual, 1e-6, 5.0, xtol=1e-6)
+        companion = run_explicit_material_cascade(T_cold_2015_K, span_2015_K, materials,
+                                                    mu0H_max=mu0H, mass_per_stage=mass_per_stage,
+                                                    frequency=freq, fluid_mdot=mdot_cal,
+                                                    cycle_type=cycle_type)
+        companion["feasible"] = True
+        companion["mdot_calibrated_kg_s"] = round(mdot_cal, 5)
+        companion["Qc_lit_W"] = Qc_lit_2015
+        companion["COP_lit"] = cop_lit_2015
+        companion["COP_error_pct"] = round(
+            100 * (companion["COP_cascade"] - cop_lit_2015) / cop_lit_2015, 1)
+    except ValueError:
+        companion = {"feasible": False, "status": "no calibration found for the "
+                     "companion 10.2K/0.75Hz point under the real 4-layer bed"}
+
+    if verbose:
+        if maggie.get("feasible"):
+            print(f"  MAGGIE (15.5K, 0.61Hz):  Qc={maggie['Qc_W']}W (target {maggie['Qc_lit_W']}W)  "
+                  f"COP_cascade={maggie['COP_cascade']}  vs. lit COP={maggie['COP_lit']}  "
+                  f"({maggie['COP_error_pct']:+.1f}% error)")
+        else:
+            print(f"  MAGGIE (15.5K, 0.61Hz):  {maggie.get('status')}")
+        if companion.get("feasible"):
+            print(f"  Companion (10.2K, 0.75Hz):  Qc={companion['Qc_W']}W "
+                  f"(target {companion['Qc_lit_W']}W)  COP_cascade={companion['COP_cascade']}  "
+                  f"vs. lit COP={companion['COP_lit']}  ({companion['COP_error_pct']:+.1f}% error)")
+        else:
+            print(f"  Companion (10.2K, 0.75Hz):  {companion.get('status')}")
+    return {"maggie": maggie, "companion_2015": companion}
+
+
 @dataclass
 class StagedBaselineResult:
     """Same fields as amr_cycle.AMRCycleResult, plus n_stages so callers
@@ -823,6 +1055,447 @@ def validate_astronautics_graded_bed(apply_correction=None, cycle_type="brayton"
     result["COP_lit"] = cop_lit
     result["COP_error_pct"] = round(100 * (result["COP_cascade"] - cop_lit) / cop_lit, 1)
     return result
+
+
+def validate_magqueen_graded_bed(mass_total_kg=1.0, n_stages=10,
+                                  apply_correction=None, cycle_type="brayton",
+                                  use_internal_pool=True):
+    """Extends the validate_astronautics_graded_bed() pattern (ROADMAP.md
+    Phase 9) to DTU_MagQueen_2018, the calibration_failure_diagnostics.txt
+    step-2c diagnostic's OTHER LAFESIH_FAMILY device (margin=-24.97K,
+    "structural"). Like Astronautics_rotary_2014, MagQueen's own reported
+    hardware genuinely IS Curie-graded -- data/amr_experimental_benchmarks.csv's
+    own row note: "13 packed beds x 10 layers La(Fe,Mn,Si)13Hz alloy each"
+    -- so n_stages=10 (one bed's own axial layer count) is a real,
+    paper-derived structural choice here, unlike the arbitrary n_stages
+    used below for Risoe_DTU/Cooltech (which have no reported layers to
+    match). T_cold_K=305.0 reuses validation_system.T_COLD_LAFESIH_K, the
+    same La(Fe,Si)13Hy-specific assumption already applied to this row by
+    the single-Tc validation in step 2, for an apples-to-apples comparison
+    -- NOT independently confirmed for MagQueen's own reported operating
+    point (Johra et al. 2019 / Dall'Olio et al. 2018 are not in this
+    repo's Papers/; see the CSV row's own note).
+
+    mass_total_kg is NOT reported for this device (no volume/density given
+    -- see the CSV row's own note, same gap flagged for Cooltech_2013_rotary)
+    and is left as a required argument rather than a silently-assumed
+    default; run_magqueen_mass_sensitivity() below sweeps it instead of
+    picking one value, per the same reasoning validation_system.py already
+    applies (mass=1.0kg fallback, flagged as illustrative) to this row's
+    single-Tc check.
+
+    Qc_lit=1200.0W and cop_lit=4.0 are the CSV row's own DERIVED (not
+    directly reported) Qc/COP_cooling values -- see that row's note for
+    the Qh=Qc+W identity used to get them from the paper's own reported
+    heating-mode numbers.
+
+    use_internal_pool=True (default) opens its own ProcessPoolExecutor to
+    parallelize the n_stages=10 per-stage Curie-target searches, same as
+    validate_astronautics_graded_bed(). Set False when this function is
+    ITSELF being called from inside a worker process (e.g. by
+    run_magqueen_mass_sensitivity()'s outer, mass-level pool below) --
+    ProcessPoolExecutor workers are daemonic and cannot spawn their own
+    child processes, so nesting pools would raise
+    "daemonic processes are not allowed to have children" rather than
+    silently work. With use_internal_pool=False this falls back to
+    run_graded_cascade's own sequential per-stage loop -- same numeric
+    result either way, just computed without a nested pool.
+    """
+    from scipy.optimize import brentq
+
+    T_cold_K = 305.0
+    span_K = 25.0
+    mu0H = 1.6
+    freq = 2.0
+    Qc_lit = 1200.0
+    cop_lit = 4.0
+
+    family = LAFESIH_FAMILY
+    if apply_correction is not None:
+        base = LAFESIH_FAMILY
+
+        def tuned_fn(Tc, _corr=float(apply_correction)):
+            mat = lafesih_composition_tuned_material(Tc)
+            mat.dTad_correction = _corr
+            return mat
+        family = GradedFamily(name=base.name, tuned_fn=tuned_fn, tc_min=base.tc_min,
+                               tc_max=base.tc_max, reference_material=base.reference_material,
+                               fallback_material=base.fallback_material)
+
+    pool = None
+    _blas_env_cm = None
+    if use_internal_pool and _family_name(family) is not None:
+        try:
+            _blas_env_cm = _single_threaded_blas_env()
+            _blas_env_cm.__enter__()
+            pool = ProcessPoolExecutor(max_workers=min(n_stages, os.cpu_count() or 1),
+                                        initializer=_pool_worker_init)
+        except Exception:
+            pool = None
+            if _blas_env_cm is not None:
+                _blas_env_cm.__exit__(None, None, None)
+                _blas_env_cm = None
+
+    try:
+        def qc_residual(mdot):
+            r = run_graded_cascade(T_cold_K, span_K, n_stages, mu0H_max=mu0H,
+                                    mass_per_stage=mass_total_kg / n_stages, frequency=freq,
+                                    fluid_mdot=max(mdot, 1e-6), family=family, executor=pool,
+                                    cycle_type=cycle_type)
+            return (r["Qc_W"] if r["feasible"] else 0.0) - Qc_lit
+
+        try:
+            mdot_cal = brentq(qc_residual, 1e-6, 1.0, xtol=1e-6)
+        except ValueError:
+            return {"feasible": False, "mass_total_kg": mass_total_kg,
+                    "status": "no calibration found (reported Qc unreachable within "
+                    f"mdot in [1e-6, 1.0] kg/s for the {n_stages}-layer graded "
+                    f"La(Fe,Si)13Hy bed at mass_total_kg={mass_total_kg})"}
+
+        result = run_graded_cascade(T_cold_K, span_K, n_stages, mu0H_max=mu0H,
+                                     mass_per_stage=mass_total_kg / n_stages, frequency=freq,
+                                     fluid_mdot=mdot_cal, family=family, executor=pool,
+                                     cycle_type=cycle_type)
+    finally:
+        if pool is not None:
+            pool.shutdown(wait=True)
+        if _blas_env_cm is not None:
+            _blas_env_cm.__exit__(None, None, None)
+
+    result["mdot_calibrated_kg_s"] = round(mdot_cal, 5)
+    result["mass_total_kg"] = mass_total_kg
+    result["Qc_lit_W"] = Qc_lit
+    result["COP_lit"] = cop_lit
+    result["COP_error_pct"] = round(100 * (result["COP_cascade"] - cop_lit) / cop_lit, 1)
+    return result
+
+
+def _magqueen_mass_worker(mass_total_kg):
+    """Top-level (picklable) worker for run_magqueen_mass_sensitivity()'s
+    outer, mass-level pool. use_internal_pool=False because this already
+    runs inside a worker process -- see validate_magqueen_graded_bed()'s
+    own docstring for why nesting pools would fail outright rather than
+    just be slow."""
+    return validate_magqueen_graded_bed(mass_total_kg=mass_total_kg, use_internal_pool=False)
+
+
+def run_magqueen_mass_sensitivity(masses_kg=(0.5, 1.0, 2.0, 5.0, 10.0), verbose=True,
+                                   parallel=True):
+    """DTU_MagQueen_2018's mass_MCM_kg is not reported (see
+    validate_magqueen_graded_bed()'s own docstring), so rather than
+    silently picking one placeholder value, this sweeps a small range of
+    plausible total-MCM masses (0.5-10 kg -- bracketing Astronautics'
+    1.52kg and this repo's other packed-bed devices, e.g.
+    DTU_Eriksen_rotary_Gd_2015's 1.7kg, without asserting a specific
+    figure this repo's corpus does not contain) and reports how the
+    10-layer graded-bed calibration/COP-error result moves with mass, so
+    any conclusion about whether this device's structural gap closes is
+    read as a sensitivity range rather than a single, unsupported number.
+
+    parallel=True (default) runs the swept masses THEMSELVES in parallel
+    across one shared ProcessPoolExecutor (max_workers=min(len(masses_kg),
+    cpu_count())), rather than each mass sequentially opening and closing
+    its own internal 10-worker pool for its per-stage searches (the
+    original behavior, still used when parallel=False or if pool startup
+    fails for any reason). Each worker computes one mass's full
+    calibration single-threaded (use_internal_pool=False in
+    _magqueen_mass_worker) -- ProcessPoolExecutor workers can't spawn
+    their own children, so parallelizing across masses and parallelizing
+    across stages-within-a-mass are mutually exclusive, not additive;
+    given 5 masses vs. 10 stages, parallelizing across masses uses the
+    available cores about as well while avoiding 5 separate pool
+    startup/teardown cycles."""
+    results = None
+    if parallel and len(masses_kg) > 1:
+        pool = None
+        _blas_env_cm = None
+        try:
+            _blas_env_cm = _single_threaded_blas_env()
+            _blas_env_cm.__enter__()
+            pool = ProcessPoolExecutor(max_workers=min(len(masses_kg), os.cpu_count() or 1),
+                                        initializer=_pool_worker_init)
+            futures = [pool.submit(_magqueen_mass_worker, m) for m in masses_kg]
+            results = [f.result() for f in futures]
+        except Exception:
+            results = None  # fall through to the sequential path below
+        finally:
+            if pool is not None:
+                pool.shutdown(wait=True)
+            if _blas_env_cm is not None:
+                _blas_env_cm.__exit__(None, None, None)
+
+    if results is None:
+        results = [validate_magqueen_graded_bed(mass_total_kg=m) for m in masses_kg]
+
+    if verbose:
+        for m, r in zip(masses_kg, results):
+            if r.get("feasible"):
+                print(f"  mass_total={m:5.2f}kg  mdot_cal={r['mdot_calibrated_kg_s']:.5f}kg/s  "
+                      f"Qc={r['Qc_W']:.1f}W  COP_cascade={r['COP_cascade']:.3f}  "
+                      f"COP_error={r['COP_error_pct']:+.1f}%  "
+                      f"n_fallback_to_Gd={r['n_stages_out_of_range']}/10")
+            else:
+                print(f"  mass_total={m:5.2f}kg  {r.get('status', 'infeasible')}")
+    n_feasible = sum(1 for r in results if r.get("feasible"))
+    if verbose:
+        print(f"CONCLUSION: {n_feasible}/{len(masses_kg)} swept masses calibrate at all -- "
+              "since mass_MCM_kg is genuinely unreported for this device, treat any single "
+              "mass's COP_error_pct above as illustrative of the SENSITIVITY, not as this "
+              "repo's calibrated answer for MagQueen (unlike Astronautics_rotary_2014, whose "
+              "1.52kg total mass IS directly reported by Jacobs et al. 2014).")
+    return results
+
+
+def validate_risoe_dtu_graded_bed(n_stages=6, apply_correction=None,
+                                   cycle_type="brayton", family=None):
+    """Extends the graded-bed structural-fix pattern (ROADMAP.md Phase 9,
+    validate_astronautics_graded_bed()) to Risoe_DTU_Gd_2011, one of the
+    calibration_failure_diagnostics.txt step-2c devices flagged
+    STRUCTURAL (margin=2*dTad_noload-span=-23.80K -- the largest-span
+    COP-bearing benchmark row in this repo's set, 30K).
+
+    IMPORTANT DIFFERENCE from Astronautics/MagQueen: Risoe_DTU_Gd_2011's
+    own reported hardware (Engelbrecht et al., IRC Purdue 2010 / part
+    I-II ScienceDirect 2016) is a SINGLE packed bed of plain Gd, not a
+    Curie-graded multi-layer bed -- data/amr_experimental_benchmarks.csv's
+    own row has no layer/grading note the way Astronautics' and MagQueen's
+    rows do. There is therefore NO literature basis for claiming this
+    specific device IS graded. What this function tests instead is the
+    genuinely different question core/validation_system.py's
+    calibration_failure_diagnostics.txt item 3 raises: could a
+    HYPOTHETICAL Curie-graded redesign, at this device's same reported
+    field/mass/frequency and reported Qc/COP target, close the structural
+    gap a single-Tc material cannot? It reuses GD_FAMILY (the same
+    Gd5(SixGe1-x)4(-Ga) composition-tunable family compare_graded_cascade()
+    already uses for its own non-device-specific sweep, Giguere-corrected
+    by default) rather than LAFESIH_FAMILY, since GD_FAMILY's documented
+    tc window (20-290K) brackets plain Gd's own ~294K Tc -- the material
+    class this device's own reported hardware actually uses -- unlike
+    LAFESIH_FAMILY's 190-340K window, centered on an unrelated,
+    much-hotter material class this device was never reported to use.
+
+    n_stages=6 is an arbitrary, non-paper-derived choice mirroring
+    validate_astronautics_graded_bed()'s own 6-layer count, for a
+    like-for-like structural comparison -- Engelbrecht et al. report no
+    per-layer breakdown to match against, because the real device has no
+    layers to match. T_cold_K=289.0 reuses
+    validation_system.T_COLD_ASSUMED_K, the same Gd-centered default
+    already applied to this row by the single-Tc validation in step 2."""
+    from scipy.optimize import brentq
+
+    T_cold_K = 289.0
+    span_K = 30.0
+    mu0H = 1.1
+    mass_total = 0.1955
+    freq = 1.0
+    Qc_lit = 35.0
+    cop_lit = 5.0
+
+    if family is None:
+        family = GD_FAMILY
+        if apply_correction is not None:
+            base = GD_FAMILY
+
+            def tuned_fn(Tc, _corr=float(apply_correction)):
+                mat = composition_tuned_material(Tc, apply_giguere_correction=False)
+                mat.dTad_correction = _corr
+                return mat
+            family = GradedFamily(name=base.name, tuned_fn=tuned_fn, tc_min=base.tc_min,
+                                   tc_max=base.tc_max, reference_material=base.reference_material,
+                                   fallback_material=base.fallback_material)
+
+    pool = None
+    _blas_env_cm = None
+    if _family_name(family) is not None:
+        try:
+            _blas_env_cm = _single_threaded_blas_env()
+            _blas_env_cm.__enter__()
+            pool = ProcessPoolExecutor(max_workers=min(n_stages, os.cpu_count() or 1),
+                                        initializer=_pool_worker_init)
+        except Exception:
+            pool = None
+            if _blas_env_cm is not None:
+                _blas_env_cm.__exit__(None, None, None)
+                _blas_env_cm = None
+
+    try:
+        def qc_residual(mdot):
+            r = run_graded_cascade(T_cold_K, span_K, n_stages, mu0H_max=mu0H,
+                                    mass_per_stage=mass_total / n_stages, frequency=freq,
+                                    fluid_mdot=max(mdot, 1e-6), family=family, executor=pool,
+                                    cycle_type=cycle_type)
+            return (r["Qc_W"] if r["feasible"] else 0.0) - Qc_lit
+
+        try:
+            mdot_cal = brentq(qc_residual, 1e-6, 5.0, xtol=1e-6)
+        except ValueError:
+            return {"feasible": False, "status": "no calibration found "
+                    "(reported Qc unreachable within mdot in [1e-6, 5.0] kg/s "
+                    f"for the {n_stages}-stage hypothetical graded Gd-alloy bed)"}
+
+        result = run_graded_cascade(T_cold_K, span_K, n_stages, mu0H_max=mu0H,
+                                     mass_per_stage=mass_total / n_stages, frequency=freq,
+                                     fluid_mdot=mdot_cal, family=family, executor=pool,
+                                     cycle_type=cycle_type)
+    finally:
+        if pool is not None:
+            pool.shutdown(wait=True)
+        if _blas_env_cm is not None:
+            _blas_env_cm.__exit__(None, None, None)
+
+    result["mdot_calibrated_kg_s"] = round(mdot_cal, 5)
+    result["Qc_lit_W"] = Qc_lit
+    result["COP_lit"] = cop_lit
+    result["COP_error_pct"] = round(100 * (result["COP_cascade"] - cop_lit) / cop_lit, 1)
+    return result
+
+
+def validate_cooltech_graded_bed(n_stages=6, mass_total_kg=1.0,
+                                  apply_correction=None, cycle_type="brayton", family=None):
+    """Extends the graded-bed structural-fix question to
+    Cooltech_2013_rotary, calibration_failure_diagnostics.txt's other
+    STRUCTURAL row and this repo's largest-span benchmark device overall
+    (42K, margin=-38.99K). Cooltech_2013_rotary is a CAPACITY-ONLY row
+    (no COP reported -- Greco et al. 2019's secondary-source review gives
+    span/Qc only), so this mirrors
+    core.validation_system.run_capacity_only_calibration_check()'s own
+    feasibility-only treatment (does the reported Qc become reachable at
+    all, for SOME mdot) rather than validate_risoe_dtu_graded_bed()'s
+    full Qc-then-COP methodology -- there is no COP_lit here to compare
+    against.
+
+    Same caveat as validate_risoe_dtu_graded_bed(): Cooltech's own
+    reported hardware (Greco et al. 2019, citing Kitanovski et al. 2015c/
+    Chaudron et al. 2018/Lionte et al. 2018b -- none in this repo's
+    Papers/) is described only as "packed bed regenerators (Gd or
+    Gd-Tb)", with no grading/layering reported -- this tests the same
+    HYPOTHETICAL graded-redesign question, using GD_FAMILY for the same
+    material-class reason given there. n_stages=6 is the same arbitrary,
+    non-paper-derived choice. mass_total_kg is NOT reported for this
+    device either (data/amr_experimental_benchmarks.csv's own row note:
+    "no volume/mass column ... left blank, so core/validation_system.py's
+    calibrate_and_check() falls back to its own existing mass=1.0kg
+    default") -- run_cooltech_mass_sensitivity() below sweeps it rather
+    than treating any one value as calibrated. T_cold_K=289.0 reuses
+    validation_system.T_COLD_ASSUMED_K, same Gd-centered default already
+    applied to this row's own single-Tc feasibility check in step 2."""
+    T_cold_K = 289.0
+    span_K = 42.0
+    mu0H = 0.98
+    freq = 4.0
+    Qc_lit = 120.0
+
+    if family is None:
+        family = GD_FAMILY
+        if apply_correction is not None:
+            base = GD_FAMILY
+
+            def tuned_fn(Tc, _corr=float(apply_correction)):
+                mat = composition_tuned_material(Tc, apply_giguere_correction=False)
+                mat.dTad_correction = _corr
+                return mat
+            family = GradedFamily(name=base.name, tuned_fn=tuned_fn, tc_min=base.tc_min,
+                                   tc_max=base.tc_max, reference_material=base.reference_material,
+                                   fallback_material=base.fallback_material)
+
+    r_probe = run_graded_cascade(T_cold_K, span_K, n_stages, mu0H_max=mu0H,
+                                  mass_per_stage=mass_total_kg / n_stages, frequency=freq,
+                                  fluid_mdot=1.0, family=family, cycle_type=cycle_type)
+    if not r_probe["feasible"] or r_probe["Qc_W"] <= 0:
+        return {"feasible": False, "mass_total_kg": mass_total_kg,
+                "status": f"no calibration found (the {n_stages}-stage hypothetical graded "
+                f"Gd-alloy bed's own Qc(mdot=1.0kg/s)={r_probe.get('Qc_W', 0.0)}W is already "
+                "0 -- span still exceeds this bed's own achievable no-load dTad even after "
+                "graded splitting)"}
+
+    from scipy.optimize import brentq
+
+    def qc_residual(mdot):
+        r = run_graded_cascade(T_cold_K, span_K, n_stages, mu0H_max=mu0H,
+                                mass_per_stage=mass_total_kg / n_stages, frequency=freq,
+                                fluid_mdot=max(mdot, 1e-9), family=family, cycle_type=cycle_type)
+        return (r["Qc_W"] if r["feasible"] else 0.0) - Qc_lit
+
+    try:
+        mdot_cal = brentq(qc_residual, 1e-9, 5.0, xtol=1e-9)
+    except ValueError:
+        return {"feasible": False, "mass_total_kg": mass_total_kg,
+                "status": "no calibration found (span_fraction>0 for the graded bed, but "
+                f"reported Qc={Qc_lit}W still unreachable within mdot in [1e-9, 5.0] kg/s)"}
+
+    result = run_graded_cascade(T_cold_K, span_K, n_stages, mu0H_max=mu0H,
+                                 mass_per_stage=mass_total_kg / n_stages, frequency=freq,
+                                 fluid_mdot=mdot_cal, family=family, cycle_type=cycle_type)
+    result["mdot_calibrated_kg_s"] = round(mdot_cal, 6)
+    result["mass_total_kg"] = mass_total_kg
+    result["Qc_lit_W"] = Qc_lit
+    result["COP_lit"] = None
+    return result
+
+
+def _cooltech_mass_worker(mass_total_kg):
+    """Top-level (picklable) worker for run_cooltech_mass_sensitivity()'s
+    mass-level pool. validate_cooltech_graded_bed() never opens its own
+    internal pool (unlike validate_magqueen_graded_bed()), so there is no
+    nested-pool hazard here -- this wrapper exists only so the function
+    passed to ProcessPoolExecutor is a plain top-level name, which is a
+    pickling requirement, not a correctness one."""
+    return validate_cooltech_graded_bed(mass_total_kg=mass_total_kg)
+
+
+def run_cooltech_mass_sensitivity(masses_kg=(0.5, 1.0, 2.0, 5.0, 10.0), verbose=True,
+                                   parallel=True):
+    """Same reasoning as run_magqueen_mass_sensitivity(): Cooltech_2013_rotary's
+    mass_MCM_kg is not reported, so this sweeps a small range rather than
+    asserting one placeholder as this repo's answer. No COP_lit exists for
+    this capacity-only row, so "success" here means the graded bed
+    reaches positive Qc feasibility at the reported 42K span, not a COP
+    match.
+
+    parallel=True (default) runs the swept masses in parallel across one
+    shared ProcessPoolExecutor, the same top-level-parallelism approach
+    run_magqueen_mass_sensitivity() uses -- see that function's own
+    docstring for why mass-level parallelism (rather than per-stage
+    parallelism within each mass) is the right level to parallelize at
+    here."""
+    results = None
+    if parallel and len(masses_kg) > 1:
+        pool = None
+        _blas_env_cm = None
+        try:
+            _blas_env_cm = _single_threaded_blas_env()
+            _blas_env_cm.__enter__()
+            pool = ProcessPoolExecutor(max_workers=min(len(masses_kg), os.cpu_count() or 1),
+                                        initializer=_pool_worker_init)
+            futures = [pool.submit(_cooltech_mass_worker, m) for m in masses_kg]
+            results = [f.result() for f in futures]
+        except Exception:
+            results = None
+        finally:
+            if pool is not None:
+                pool.shutdown(wait=True)
+            if _blas_env_cm is not None:
+                _blas_env_cm.__exit__(None, None, None)
+
+    if results is None:
+        results = [validate_cooltech_graded_bed(mass_total_kg=m) for m in masses_kg]
+
+    if verbose:
+        for m, r in zip(masses_kg, results):
+            if r.get("feasible"):
+                print(f"  mass_total={m:5.2f}kg  mdot_cal={r['mdot_calibrated_kg_s']:.6f}kg/s  "
+                      f"Qc={r['Qc_W']:.1f}W (target {r['Qc_lit_W']:.1f}W)  "
+                      f"n_fallback_to_Gd={r['n_stages_out_of_range']}/6")
+            else:
+                print(f"  mass_total={m:5.2f}kg  {r.get('status', 'infeasible')}")
+    n_feasible = sum(1 for r in results if r.get("feasible"))
+    if verbose:
+        print(f"CONCLUSION: {n_feasible}/{len(masses_kg)} swept masses reach positive Qc "
+              "feasibility at this device's reported 42K span (this repo's largest benchmark "
+              "span) for a 6-stage hypothetical graded Gd-alloy bed -- mass_MCM_kg is genuinely "
+              "unreported for this device, so treat this as a feasibility sensitivity, not a "
+              "calibrated result.")
+    return results
 
 
 def run_astronautics_cycle_type_sensitivity(apply_correction=None, verbose=True):

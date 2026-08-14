@@ -5,6 +5,11 @@ from core.cascade import (
     run_cascade, run_graded_cascade, GD_FAMILY, LAFESIH_FAMILY, MNFEPSI_FAMILY,
     _target_composition_for_peak, _peak_temperature,
     validate_astronautics_graded_bed, run_astronautics_cycle_type_sensitivity,
+    validate_magqueen_graded_bed, run_magqueen_mass_sensitivity,
+    validate_risoe_dtu_graded_bed, validate_cooltech_graded_bed,
+    run_cooltech_mass_sensitivity,
+    run_explicit_material_cascade, validate_maggie_real_graded_bed,
+    run_maggie_span_sensitivity,
 )
 from core.mce_material import GADOLINIUM
 from core.first_order_mce import (
@@ -231,3 +236,136 @@ def test_run_astronautics_cycle_type_sensitivity_brayton_matches_direct_call():
     via_sensitivity = run_astronautics_cycle_type_sensitivity(verbose=False)["brayton"]
     assert direct["COP_cascade"] == pytest.approx(via_sensitivity["COP_cascade"])
     assert direct["Qc_W"] == pytest.approx(via_sensitivity["Qc_W"])
+
+
+# ---------------------------------------------------------------------------
+# calibration_failure_diagnostics.txt follow-up (step 7d): extending the
+# graded-bed structural fix beyond Astronautics_rotary_2014.
+# ---------------------------------------------------------------------------
+
+def test_validate_magqueen_graded_bed_reproduces_reported_qc():
+    """DTU_MagQueen_2018's own reported hardware IS a 10-layer graded bed
+    (unlike Risoe/Cooltech below), so this should reproduce the reported
+    Qc exactly (by calibrated-mdot construction) with a genuine, non-zero
+    cascade COP -- not the Qc-only-feasibility, COP-collapses-to-0 outcome
+    the hypothetical Risoe/Cooltech redesigns below can land on."""
+    r = validate_magqueen_graded_bed(mass_total_kg=1.52)
+    assert r["feasible"]
+    assert r["Qc_W"] == pytest.approx(1200.0, rel=1e-3)
+    assert r["COP_cascade"] > 0.0
+    assert r["n_stages_out_of_range"] == 0  # all 10 layers within LAFESIH_FAMILY's 190-340K range
+
+
+def test_run_magqueen_mass_sensitivity_sweeps_multiple_masses():
+    """mass_MCM_kg is unreported for MagQueen -- this must return one
+    result per swept mass, not silently collapse to a single value."""
+    masses = (1.0, 2.0)
+    results = run_magqueen_mass_sensitivity(masses_kg=masses, verbose=False)
+    assert len(results) == len(masses)
+    assert all(r.get("feasible") for r in results)
+    assert all(r["Qc_W"] == pytest.approx(1200.0, rel=1e-3) for r in results)
+
+
+def test_validate_risoe_dtu_graded_bed_closes_qc_gap_step2_could_not():
+    """Step 2's single-Tc model returns NO CALIBRATION FOUND for this
+    30K-span device (calibration_failure_diagnostics.txt: margin=-23.80K,
+    structural). The 6-stage hypothetical graded redesign should at least
+    reach the reported Qc, even if COP does not also come out positive."""
+    r = validate_risoe_dtu_graded_bed()
+    assert r["feasible"]
+    assert r["Qc_W"] == pytest.approx(35.0, rel=1e-3)
+    assert "COP_error_pct" in r
+
+
+def test_validate_cooltech_graded_bed_reaches_qc_feasibility():
+    """Cooltech_2013_rotary is this repo's largest-span (42K) benchmark
+    row and a capacity-only row (no COP_lit) -- the graded redesign should
+    reach the reported Qc=120W, and COP_lit must be reported as None
+    (not silently fabricated) since none exists for this row."""
+    r = validate_cooltech_graded_bed(mass_total_kg=1.0)
+    assert r["feasible"]
+    assert r["Qc_W"] == pytest.approx(120.0, rel=1e-3)
+    assert r["COP_lit"] is None
+
+
+def test_run_cooltech_mass_sensitivity_sweeps_multiple_masses():
+    masses = (1.0, 2.0)
+    results = run_cooltech_mass_sensitivity(masses_kg=masses, verbose=False)
+    assert len(results) == len(masses)
+    assert all(r.get("feasible") for r in results)
+    assert all(r["Qc_W"] == pytest.approx(120.0, rel=1e-3) for r in results)
+
+
+def test_magqueen_mass_sensitivity_parallel_matches_sequential():
+    """Top-level mass-parallelism (parallel=True, one shared pool across
+    the swept masses) must give bit-for-bit the same results as the
+    original sequential path (parallel=False, each mass opening its own
+    internal per-stage pool) -- parallelism should only change wall time,
+    never the numeric outcome."""
+    masses = (1.0, 2.0)
+    seq = run_magqueen_mass_sensitivity(masses_kg=masses, verbose=False, parallel=False)
+    par = run_magqueen_mass_sensitivity(masses_kg=masses, verbose=False, parallel=True)
+    for rs, rp in zip(seq, par):
+        assert rs["feasible"] == rp["feasible"]
+        assert rs["Qc_W"] == pytest.approx(rp["Qc_W"], rel=1e-6)
+        assert rs["COP_cascade"] == pytest.approx(rp["COP_cascade"], rel=1e-6)
+
+
+def test_cooltech_mass_sensitivity_parallel_matches_sequential():
+    masses = (1.0, 2.0)
+    seq = run_cooltech_mass_sensitivity(masses_kg=masses, verbose=False, parallel=False)
+    par = run_cooltech_mass_sensitivity(masses_kg=masses, verbose=False, parallel=True)
+    for rs, rp in zip(seq, par):
+        assert rs["feasible"] == rp["feasible"]
+        assert rs["Qc_W"] == pytest.approx(rp["Qc_W"], rel=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# DTU_Eriksen_MAGGIE_2016: REAL (not hypothetical) 4-composition Gd/Gd-Y
+# graded bed, using the paper's own measured Curie temperatures.
+# ---------------------------------------------------------------------------
+
+def test_run_explicit_material_cascade_matches_run_cascade_for_identical_materials():
+    """run_explicit_material_cascade() with n identical materials must
+    reduce to the same result as run_cascade() with that one material --
+    it's a strict generalization, not a different mechanism."""
+    from core.mce_material import GADOLINIUM
+    materials = [GADOLINIUM] * 3
+    explicit = run_explicit_material_cascade(291.0, 9.0, materials, mu0H_max=1.5,
+                                              mass_per_stage=2.0, frequency=1.0,
+                                              fluid_mdot=0.08)
+    identical = run_cascade(291.0, 9.0, 3, material=GADOLINIUM, mu0H_max=1.5,
+                             mass_per_stage=2.0, frequency=1.0, fluid_mdot=0.08)
+    assert explicit["feasible"] == identical["feasible"]
+    assert explicit["Qc_W"] == pytest.approx(identical["Qc_W"], rel=1e-6)
+    assert explicit["COP_cascade"] == pytest.approx(identical["COP_cascade"], rel=1e-6)
+
+
+def test_validate_maggie_real_graded_bed_calibrates_where_single_tc_could_not():
+    """Step 2's single-Tc Gd model returns NO CALIBRATION FOUND for this
+    15.5K-span row (calibration_failure_diagnostics.txt: margin=-3.62K,
+    structural). The real 4-layer Gd/Gd-Y bed, using the paper's own
+    measured per-layer Curie temperatures, should reach the reported
+    Qc=81.5W exactly (by calibrated-mdot construction) and report a
+    genuine (non-fabricated) COP comparison against the reported COP=3.6."""
+    r = validate_maggie_real_graded_bed()
+    assert r["feasible"]
+    assert r["n_stages"] == 4
+    assert r["Qc_W"] == pytest.approx(81.5, rel=1e-3)
+    assert r["COP_lit"] == 3.6
+    assert "COP_error_pct" in r
+    # Stage materials must be genuinely distinct Tc's (four alloys), not
+    # four copies of the same material.
+    stage_tcs = [s["Tc_K"] for s in r["stage_info"]]
+    assert len(set(stage_tcs)) == 4
+
+
+def test_run_maggie_span_sensitivity_checks_both_operating_points():
+    """DTU_Eriksen_rotary_Gd_2015 (10.2K span) is the SAME physical
+    prototype at an earlier/different operating point -- the companion
+    check must also calibrate, using the identical 4-layer material set."""
+    result = run_maggie_span_sensitivity(verbose=False)
+    assert "maggie" in result and "companion_2015" in result
+    assert result["maggie"]["feasible"]
+    assert result["companion_2015"]["feasible"]
+    assert result["companion_2015"]["Qc_W"] == pytest.approx(102.8, rel=1e-3)
