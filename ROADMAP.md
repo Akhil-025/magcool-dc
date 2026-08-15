@@ -2127,3 +2127,149 @@ not modify any EXISTING material's calibration (GADOLINIUM, LACAMNO3,
 GD5SI2GE2_FIRST_ORDER, LAFESIH_FIRST_ORDER, MNFEPSI_FIRST_ORDER,
 NANOCOMPOSITE_FAMILY, GA1XCMN3X_FAMILY) -- this phase only adds a new,
 independent candidate alongside them.
+
+## Phase 26 — Latent-heat C_p spike for the first-order Landau model: a partial, literature-grounded closure of honesty flag #1 / the Giguere 2.4x DeltaT_ad gap — done
+
+**Where this came from.** A second user-supplied document (distinct from
+Phase 24/25's "10 materials" one) proposed four physics/optimizer upgrades.
+Before writing any code, each claim was checked against this repo's own
+prior work:
+  - The claimed "2.42x DeltaT_ad overestimate" and its stated cause (a
+    "0-D lattice-only C_p denominator with no latent heat modeling") is
+    TRUE and already documented -- `core/giguere_validation.py` already
+    reports this exact gap.
+  - The claimed "0.0 K/T fitted Curie shift" is TRUE, but the document's
+    proposed fix (add a Tc(H) parameter) is something this repo had
+    ALREADY implemented, ALREADY tried, and ALREADY found to fail for a
+    structural reason proven by direct computation, not assumed:
+    `core.mce_material.calibrate_curie_shift()`/`diagnose_curie_shift_block()`
+    show the fitted shift stays pinned at ~0 K/T because the reference
+    curve S_M(T,0) is bit-for-bit identical regardless of the shift
+    parameter (mu0*H=0 makes curie_shift_K_per_T*mu0*H=0 by construction),
+    so the DeltaS_M(T,H)=S_M(T,H)-S_M(T,0) peak location stays anchored to
+    the unshifted reference curve no matter what the shifted term does. A
+    real fix needs short-range-correlation physics beyond mean-field
+    theory (de Oliveira & von Ranke, Phys. Rep. 489 (2010) 89-159) -- out
+    of scope for a patch, and NOT attempted further in this phase.
+  - The other three proposed upgrades (geometry-explicit eddy loss, a Qc
+    floor / pump efficiency, layered beds in NSGA-III) were all confirmed
+    real, unaddressed gaps, but deferred this pass at the user's own
+    choice, in favor of tackling the latent-heat item first.
+
+**What was implemented (`core/first_order_mce.py`).** `delta_T_adiabatic()`
+previously divided by `lattice_heat_capacity(T)` alone -- a smooth Debye
+lattice curve with NO representation of the first-order transition's own
+latent heat, exactly honesty flag #1's documented concern. Added:
+  - `latent_heat_J_per_kg`/`latent_heat_width_K` fields on
+    `FirstOrderMCEMaterial` (defaults 0.0/1.0 -- `latent_heat_capacity()`
+    is then identically zero everywhere, so EVERY pre-existing instance
+    -- GD5SI2GE2_FIRST_ORDER, LAFESIH_FIRST_ORDER, MNFEPSI_FIRST_ORDER,
+    MNCUCOGE_FIRST_ORDER, and every `composition_tuned_material()`-style
+    output -- is bit-for-bit UNCHANGED; confirmed by direct test
+    (`test_default_materials_unaffected_by_latent_heat_addition`), same
+    "opt-in, default preserves old behavior" discipline already used for
+    `curie_shift_K_per_T`).
+  - `latent_heat_capacity(T, T_center)`: a Gaussian C_p spike,
+    normalized so its integral over T recovers `latent_heat_J_per_kg`
+    exactly (confirmed by test).
+  - `_field_dependent_transition_T(H)`: locates the ACTUAL field-H
+    transition location (steepest |d(DeltaS_M)/dT| over a scan) rather
+    than using the fixed zero-field Tc. This was NOT the first thing
+    tried -- a first attempt centered the Gaussian at `self.Tc` and found
+    (by direct computation, not assumed) that it changed the 7T peak
+    DeltaT_ad by less than 0.01K, because this Landau model's own
+    honesty flag #3 already documents that its DeltaT_ad peak sits
+    systematically ABOVE Tc (confirmed here: ~286.3K at 7T vs. Tc=276.0K,
+    a 10.3K miss that leaves a ~2K-wide Gaussian almost entirely off the
+    relevant temperature range). Centering at the field-tracked
+    transition location instead is what actually moves the result.
+  - `total_heat_capacity(T, H_final)` = lattice + latent (short-circuits
+    to lattice-only, skipping the transition-location scan entirely, when
+    `latent_heat_J_per_kg=0.0` -- so no pre-existing material incurs any
+    extra computation).
+  - `GD5SI2GE2_FIRST_ORDER_LATENT_HEAT`: a SEPARATE, explicitly-opted-in
+    instance (`dataclasses.replace` of GD5SI2GE2_FIRST_ORDER), so nothing
+    that depends on the plain GD5SI2GE2_FIRST_ORDER instance used
+    elsewhere in this repo is affected.
+
+**Where the numbers came from.** `latent_heat_J_per_kg=4968.0` (=
+Tc*peak_DeltaS_M = 276.0*18.0): derived from Xu et al.'s direct
+calorimetric latent-heat measurement of a Gd5Si2Ge2-type compound
+(arXiv:1012.2102 -- a fixed heating power applied across the transition of
+a 6.5mg sample gives Delta_Q_L=32.944mJ at that sample's own Tc=267.5K,
+i.e. Delta_S=Delta_Q_L/(m*Tc)=18.9 J/(kg K), "nicely consistent with the
+plateau of DeltaS 19.0 J/kg K determined by magnetic measurement" -- for
+this compound family, the paper's own direct measurement shows the
+latent-heat entropy and the field-induced DeltaS_M plateau are
+essentially the SAME magnitude, not some smaller fraction of it).
+Applying that same L=Tc*DeltaS_M relation to this repo's own
+Tc=276.0K/peak DeltaS_M~18 J/(kg K) calibration target (a different but
+related specific composition than the paper's own 267.5K sample) gives
+L=4968 J/kg. `latent_heat_width_K=5.0/2.3548=2.12`: reuses the SAME 5K
+thermal hysteresis width already cited in this file for
+GD5SI2GE2_FIRST_ORDER's own `hysteresis_loss_J_per_kg` comment (Biswas et
+al. 2019) as a proxy for the real transition's broadening scale -- not
+independently measured for the latent-heat peak shape specifically
+(Levin, Caplin & Cohen, Appl. Phys. Lett. 89, 212505 (2006), cited in
+`latent_heat_capacity()`'s own docstring, show the real peak is
+asymmetric and narrower in places -- this Gaussian is a deliberately
+simple proxy for the integrated latent heat, not a shape claim).
+
+**Result -- a real, partial improvement, explicitly NOT a full fix.**
+`core/giguere_validation.py::run_latent_heat_validation()` (new function,
+runs both existing cross-checks against the new instance):
+  - 7T peak DeltaT_ad vs. Giguere et al.'s direct 10.0K target: RAW model
+    24.17K -> LATENT-HEAT model 19.01K -- closes ~36% of the gap, using
+    only literature-grounded (L, sigma), NOT tuned to hit 10.0K.
+    Numerically, sigma~7K gets within ~1K of the 10.0K target -- verified,
+    but NOT used, since that value has no independent citation and would
+    be curve-fitting the answer rather than adding physics (explicitly
+    flagged in `GD5SI2GE2_FIRST_ORDER_LATENT_HEAT`'s own comment as a
+    trap not to fall into later).
+  - 2T/5T/7T Gd5Si2Ge2/Gd peak-ratio vs. Pecharsky & Gschneidner (1997)'s
+    ~1.30 (an INDEPENDENT check, already in this module, that the flat
+    `DTAD_CORRECTION_FACTOR` is separately known to fail at low fields --
+    see `run_pecharsky_ratio_check()`'s own documented 0.51 at 5T): the
+    latent-heat model gives 0.70/0.91/0.81 -- closer to 1.0 (less wrong)
+    than the flat correction's 0.87/0.51 at 2T/5T, but STILL below 1.0 at
+    every field, i.e. it ALSO predicts Gd5Si2Ge2 underperforms plain Gd,
+    still contradicting the "giant" MCE premise. A genuine improvement on
+    an independent check it was never tuned against, not a resolution of
+    it.
+
+**Explicit decision: neither GD5SI2GE2_FIRST_ORDER nor
+`DTAD_CORRECTION_FACTOR`'s default behavior was changed or swapped out for
+this new instance.** `GD5SI2GE2_FIRST_ORDER_LATENT_HEAT` exists alongside
+the two pre-existing treatments (uncorrected, and
+Giguere-correction-factor-corrected), not in place of either -- downstream
+code (cascade.py, optimize.py, economics.py, etc.) is UNCHANGED and keeps
+using whatever it already used. Swapping a default based on a single new
+partial-improvement result, without re-running this repo's own downstream
+validation suite (Astronautics/MagQueen/CoolTech/Risoe-DTU benchmarks)
+against it, would repeat exactly the single-point-recalibration risk
+`run_pecharsky_ratio_check()`'s own docstring already warns about for
+`DTAD_CORRECTION_FACTOR`. Left as a concretely-scoped follow-up: re-run
+those benchmark validations with `GD5SI2GE2_FIRST_ORDER_LATENT_HEAT`
+substituted in, before considering any default change.
+
+**Tests.** New `tests/test_latent_heat.py` (9 tests: default-instance
+bit-for-bit unchanged, latent_heat_capacity zero-by-default and correct
+Gaussian normalization, field-dependent transition location actually
+shifts with field, peak DeltaT_ad reduction matches the documented 19.01K
+value, instance parameter checks, total_heat_capacity short-circuit
+behavior, and `run_latent_heat_validation()`'s own return shape). Full
+suite (`tests/`) re-run after this phase: 411 passed (384 non-cascade +
+27 `test_cascade.py`, run in batches per that file's own runtime), 0
+failed, 0 regressions.
+
+**Not done in this phase.** The Tc(H)/mean-field structural limitation
+(document item 1's other half) was investigated but not fixed -- see
+above, genuinely out of scope without a different statistical-mechanics
+framework. LAFESIH_FIRST_ORDER/MNFEPSI_FIRST_ORDER/MNCUCOGE_FIRST_ORDER
+were NOT given their own latent-heat-enabled variants in this pass (no
+per-compound latent-heat literature value was researched for those three
+-- the L=Tc*DeltaS_M shortcut used here is specific to Gd5Si2Ge2's own
+directly-measured near-1:1 relationship, not assumed to generalize). The
+document's other three proposed upgrades (eddy-loss geometry coupling,
+Qc floor + pump efficiency, layered beds in NSGA-III) were not touched --
+deferred at the user's own explicit choice this pass.

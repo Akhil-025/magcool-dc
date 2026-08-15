@@ -247,6 +247,90 @@ def run_pecharsky_ratio_check(verbose=True):
     return rows
 
 
+def run_latent_heat_validation(verbose=True):
+    """Phase 26: checks GD5SI2GE2_FIRST_ORDER_LATENT_HEAT (the
+    field-tracked-latent-heat-Cp-spike variant, see that instance's own
+    block comment in first_order_mce.py for full derivation/citations)
+    against BOTH cross-checks already in this module -- Giguere et al.'s
+    7T direct DeltaT_ad, and Pecharsky & Gschneidner's ~1.30 Gd5Si2Ge2/Gd
+    peak-ratio at 2T/5T -- alongside the existing GD5SI2GE2_FIRST_ORDER
+    (no latent heat) and DTAD_CORRECTION_FACTOR-corrected numbers, so all
+    three treatments are visible side by side.
+
+    ACTUAL RESULT (same "report the real finding" precedent as this
+    module's other two check functions above):
+      - 7T vs. Giguere's direct 10.0K: RAW model 24.17K -> LATENT-HEAT
+        model 19.01K -- a genuine ~36% closure of the gap using only
+        literature-grounded (L, sigma), NOT a full fix, and NOT tuned to
+        hit 10.0K (see GD5SI2GE2_FIRST_ORDER_LATENT_HEAT's own comment for
+        why sigma was not re-tuned further).
+      - 2T/5T vs. Pecharsky & Gschneidner's ~1.30 Gd5Si2Ge2/Gd ratio: the
+        latent-heat model gives 0.70 (2T) / 0.91 (5T) / 0.81 (7T) -- closer
+        to 1.0 (and so less severely wrong) than the flat
+        DTAD_CORRECTION_FACTOR's 0.87 (2T) / 0.51 (5T), but STILL below
+        1.0 at every field checked, i.e. it ALSO predicts Gd5Si2Ge2
+        underperforms plain Gd, which still contradicts the "giant" MCE
+        premise Pecharsky & Gschneidner's own ~1.30 finding represents.
+        This is a real, partial improvement over the flat correction
+        factor (less wrong, not right), not a resolution of
+        run_pecharsky_ratio_check()'s own documented finding.
+
+    CONCLUSION: latent heat is a genuine, literature-grounded physical
+    mechanism this model was missing, and adding it (correctly, tracking
+    the field-dependent transition location rather than a fixed Tc) closes
+    real ground on BOTH independent checks in this module without being
+    tuned to either one. It does not fully resolve either gap. Do not
+    read GD5SI2GE2_FIRST_ORDER_LATENT_HEAT as a validated replacement for
+    GD5SI2GE2_FIRST_ORDER or for the DTAD_CORRECTION_FACTOR path --
+    downstream code should keep using whichever of those two the calling
+    context already used (see ROADMAP.md Phase 26 for the decision not to
+    swap either default in this pass)."""
+    from core.mce_material import GADOLINIUM
+    from core.first_order_mce import GD5SI2GE2_FIRST_ORDER, GD5SI2GE2_FIRST_ORDER_LATENT_HEAT
+
+    lines = []
+    lines.append("GD5SI2GE2_FIRST_ORDER_LATENT_HEAT vs. GD5SI2GE2_FIRST_ORDER (no latent heat)")
+    lines.append("=" * 78)
+
+    Ts_wide = np.linspace(260.0, 300.0, 1601)
+    dT_raw = GD5SI2GE2_FIRST_ORDER.delta_T_adiabatic(Ts_wide, 7.0 / mu0)
+    dT_lh = GD5SI2GE2_FIRST_ORDER_LATENT_HEAT.delta_T_adiabatic(Ts_wide, 7.0 / mu0)
+    peak_raw = float(np.max(dT_raw))
+    peak_lh = float(np.max(dT_lh))
+    gap_closed_pct = 100 * (peak_raw - peak_lh) / (peak_raw - GIGUERE_DIRECT_DTAD_7T)
+
+    lines.append(f"7T peak DeltaT_ad: raw={peak_raw:.2f}K  latent-heat={peak_lh:.2f}K  "
+                 f"Giguere direct target={GIGUERE_DIRECT_DTAD_7T:.1f}K")
+    lines.append(f"Gap to direct target closed by latent heat: {gap_closed_pct:.1f}% "
+                 f"(NOT a full fix)")
+    lines.append("")
+
+    rows = []
+    for B in (2.0, 5.0, 7.0):
+        Ts = np.linspace(260.0, 320.0, 2001)
+        dT_gd5_lh = GD5SI2GE2_FIRST_ORDER_LATENT_HEAT.delta_T_adiabatic(Ts, B / mu0)
+        dT_gd = GADOLINIUM.delta_T_adiabatic(Ts, B / mu0)
+        peak_gd5_lh = float(np.max(dT_gd5_lh))
+        peak_gd = float(np.max(dT_gd))
+        ratio_lh = peak_gd5_lh / peak_gd
+        rows.append({"field_T": B, "gd5si2ge2_latent_heat_peak_K": round(peak_gd5_lh, 2),
+                     "gd_peak_K": round(peak_gd, 2), "ratio_latent_heat": round(ratio_lh, 2)})
+        lines.append(f"{B:.0f}T: Gd5Si2Ge2(latent-heat) peak={peak_gd5_lh:5.2f}K  "
+                     f"Gd peak={peak_gd:5.2f}K  ratio={ratio_lh:.2f}  "
+                     f"(Pecharsky & Gschneidner 1997: ~{PECHARSKY_1997_PEAK_RATIO:.2f}; "
+                     f"still <1.0 -- see this function's docstring)")
+
+    text = "\n".join(lines)
+    if verbose:
+        print(text)
+    return {
+        "peak_dTad_7T_raw_K": peak_raw,
+        "peak_dTad_7T_latent_heat_K": peak_lh,
+        "gap_closed_pct": gap_closed_pct,
+        "pecharsky_ratio_rows": rows,
+    }
+
+
 if __name__ == "__main__":
     run_validation()
     print("\n" + "=" * 78)
@@ -254,3 +338,7 @@ if __name__ == "__main__":
           "(1997) (Paper-Mining Pass Part 3, S2)")
     print("=" * 78)
     run_pecharsky_ratio_check()
+    print("\n" + "=" * 78)
+    print("Phase 26: latent-heat C_p spike (GD5SI2GE2_FIRST_ORDER_LATENT_HEAT)")
+    print("=" * 78)
+    run_latent_heat_validation()

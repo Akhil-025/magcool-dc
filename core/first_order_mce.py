@@ -124,6 +124,7 @@ the only one, and note the real spread when citing this in the paper.
      whole selection criterion.
 """
 
+import dataclasses
 import numpy as np
 from dataclasses import dataclass
 
@@ -172,6 +173,36 @@ class FirstOrderMCEMaterial:
     # range), so composition_tuned_material()-style tuned instances below
     # inherit their base family's value UNCHANGED across the whole tuned
     # Tc range -- flagged per-family where set.
+    latent_heat_J_per_kg: float = 0.0
+    latent_heat_width_K: float = 1.0
+    # Phase 26 addition -- see this module's honesty flag #1 (the
+    # "lattice-only C_lattice denominator" concern) and
+    # core/giguere_validation.py's own documented ~2.4x overestimate this
+    # was added in direct response to. delta_T_adiabatic()'s denominator
+    # was, prior to this field, ONLY the smooth Debye lattice_heat_capacity()
+    # -- no representation at all of the first-order transition's own
+    # latent heat, which a real first-order transition's C_p(T) exhibits as
+    # a sharp (delta-function-like, broadened by real-sample inhomogeneity)
+    # spike at Tc. latent_heat_J_per_kg/_width_K parameterize a Gaussian
+    # approximation of that spike (see latent_heat_capacity() below),
+    # ADDED to lattice_heat_capacity() in delta_T_adiabatic()'s denominator
+    # -- physically, this represents heat absorbed by the structural
+    # transformation itself (not lattice vibrations, not magnetic ordering)
+    # near Tc, which real Debye-only C_p estimates always miss for a
+    # first-order transition. Defaults (0.0, 1.0) make latent_heat_capacity()
+    # identically zero everywhere (0/anything=0 in the Gaussian's
+    # normalization), so EVERY pre-existing FirstOrderMCEMaterial instance
+    # in this module (GD5SI2GE2_FIRST_ORDER, LAFESIH_FIRST_ORDER,
+    # MNFEPSI_FIRST_ORDER, MNCUCOGE_FIRST_ORDER, and every
+    # composition_tuned_material()-style function's output) is BIT-FOR-BIT
+    # UNCHANGED by this addition -- same "opt-in, default preserves old
+    # behavior" discipline already used for curie_shift_K_per_T in
+    # core/mce_material.py. A SEPARATE, explicitly-opted-in instance
+    # (GD5SI2GE2_FIRST_ORDER_LATENT_HEAT, see below) is what
+    # core/giguere_validation.py's new run_latent_heat_validation() actually
+    # exercises, precisely so this addition cannot silently change any
+    # existing result that depends on the plain GD5SI2GE2_FIRST_ORDER
+    # instance used everywhere else in this repo.
 
     def __post_init__(self):
         self.N = NA / self.M_molar
@@ -223,10 +254,85 @@ class FirstOrderMCEMaterial:
             c_molar[i] = 9 * self.n_atoms_per_fu * R * (Ti / self.theta_D) ** 3 * integral
         return c_molar / self.M_molar
 
+    def latent_heat_capacity(self, T, T_center):
+        """Gaussian approximation of the first-order transition's own
+        latent-heat contribution to C_p(T), J/(kg K), CENTERED AT T_center
+        (the field-dependent transition location -- see
+        _field_dependent_transition_T() below and delta_T_adiabatic()'s own
+        comment for why this must NOT be fixed at self.Tc). See the
+        latent_heat_J_per_kg/_width_K field comments above for the full
+        physical motivation and honesty flag. Normalized so that
+        integrating this over all T recovers latent_heat_J_per_kg exactly
+        (in the T -> +/-infinity limit; at finite T_bounds the integral is
+        very slightly less, negligibly so for width_K << the T range any
+        caller here actually scans -- e.g. latent_heat_width_K~2K against
+        the ~20-50K T ranges delta_T_adiabatic() is evaluated over
+        elsewhere in this codebase).
+
+        Real Gd5Si2Ge2-type transitions are NOT symmetric/Gaussian in
+        detail (Levin, Caplin & Cohen, Appl. Phys. Lett. 89, 212505 (2006)
+        directly measure real latent-heat PEAK SHAPES via microcalorimetry
+        that are asymmetric/multi-featured, not a clean Gaussian) -- this
+        is a deliberately simple single-Gaussian proxy for the INTEGRATED
+        latent heat (the physically important number for a bulk 0-D C_p
+        denominator), not a claim about the real peak's detailed shape.
+        Returns 0 identically when latent_heat_J_per_kg=0.0 (the default
+        for every pre-existing FirstOrderMCEMaterial instance in this
+        module)."""
+        T = np.atleast_1d(np.asarray(T, dtype=float))
+        sigma = max(self.latent_heat_width_K, 1e-6)
+        return (self.latent_heat_J_per_kg / (sigma * np.sqrt(2 * np.pi))
+                * np.exp(-0.5 * ((T - T_center) / sigma) ** 2))
+
+    def _field_dependent_transition_T(self, H, T_bounds=None, n=2001):
+        """Locates the field-H transition temperature as the T of steepest
+        |d(DeltaS_M)/dT| over a scan -- i.e. where THIS model's own
+        equilibrium-m root-selection actually jumps at this field, which is
+        NOT self.Tc except at H=0 (this is precisely the mechanism this
+        module's own honesty flag #3 already documents: "this Landau
+        expansion's delta_T_adiabatic(T) does NOT peak at T=Tc -- it peaks
+        systematically ABOVE Tc" -- because the field-induced transition
+        itself shifts up with field, not because of any smooth broadening).
+        A latent-heat spike fixed at self.Tc (an earlier version of this
+        method) would therefore sit at the WRONG temperature for any H>0 --
+        confirmed by direct computation, not merely argued: for
+        GD5SI2GE2_FIRST_ORDER at 7T, self.Tc=276.0K but the actual
+        discontinuity is at ~286.3K, a 10.3K miss that leaves a fixed-Tc
+        Gaussian almost completely off the relevant temperature range (its
+        width_K~2K means essentially zero density 10K away) -- verified to
+        change delta_T_adiabatic's 7T peak by <0.01K when using a fixed-Tc
+        Gaussian, vs. a genuine ~5K reduction (24.2K -> 19.0K) when centered
+        here instead. Only called when latent_heat_J_per_kg != 0.0 (see
+        delta_T_adiabatic() below) -- this scan is O(n) extra work per call,
+        deliberately NOT incurred by any pre-existing material (all default
+        to latent_heat_J_per_kg=0.0)."""
+        if T_bounds is None:
+            T_bounds = (max(self.Tc - 60.0, 1.0), self.Tc + 60.0)
+        Ts = np.linspace(*T_bounds, n)
+        dS = self.delta_S_isothermal(Ts, H, 0.0)
+        slopes = np.abs(np.diff(dS))
+        i = int(np.argmax(slopes))
+        return 0.5 * (Ts[i] + Ts[i + 1])
+
+    def total_heat_capacity(self, T, H_final=0.0):
+        """lattice_heat_capacity(T) + latent_heat_capacity(T, T_center),
+        where T_center is the H_final-dependent transition location (see
+        _field_dependent_transition_T() above) -- the denominator
+        delta_T_adiabatic() uses below. Identical to lattice_heat_capacity(T)
+        alone whenever latent_heat_J_per_kg=0.0 (see that field's own
+        comment), and in that case _field_dependent_transition_T() is not
+        even called (short-circuited for performance -- see
+        delta_T_adiabatic())."""
+        T = np.atleast_1d(np.asarray(T, dtype=float))
+        if self.latent_heat_J_per_kg == 0.0:
+            return self.lattice_heat_capacity(T)
+        T_center = self._field_dependent_transition_T(H_final)
+        return self.lattice_heat_capacity(T) + self.latent_heat_capacity(T, T_center)
+
     def delta_T_adiabatic(self, T, H_final, H_initial=0.0):
         T = np.atleast_1d(np.asarray(T, dtype=float))
         dS = self.delta_S_isothermal(T, H_final, H_initial)
-        C = self.lattice_heat_capacity(T)
+        C = self.total_heat_capacity(T, H_final)
         return self.dTad_correction * (-T * dS / C)
 
 
@@ -262,6 +368,62 @@ GD5SI2GE2_FIRST_ORDER = FirstOrderMCEMaterial(
     # treated: a placeholder pending a targeted re-read of Provenzano et
     # al. (2004) Figure 3 ("Comparison of hysteresis losses") for the
     # actual J/kg value, not a literature-measured number.
+)
+
+# Phase 26: latent-heat-enabled variant of GD5SI2GE2_FIRST_ORDER -- a
+# SEPARATE, explicitly-opted-in instance (see latent_heat_J_per_kg's own
+# field comment above for why GD5SI2GE2_FIRST_ORDER itself is untouched).
+#
+# latent_heat_J_per_kg=4968.0: derived from Xu, Zhang, et al.'s direct
+# calorimetric latent-heat measurement of a Gd5Si2Ge2-type compound
+# (arXiv:1012.2102 -- fixed heating power P=2.84mW applied for
+# Delta_t=11.6s across the transition of a 6.5mg sample gives
+# Delta_Q_L=32.944mJ; at that sample's TC=267.5K this gives
+# Delta_S=Delta_Q_L/(m*TC)=18.9 J/(kg K), "nicely consistent with the
+# plateau of DeltaS 19.0 J/kg K determined by magnetic measurement" --
+# i.e. for THIS compound family, the paper's own direct measurement shows
+# the latent-heat entropy and the field-induced DeltaS_M plateau are
+# essentially the SAME magnitude, not merely "some fraction" of it).
+# Applying that same L=TC*DeltaS_M relation to THIS module's own
+# TC=276.0K/peak DeltaS_M~18 J/(kg K) calibration target (not to the
+# paper's own 267.5K/19.0 J/kg K sample, which is a related but different
+# specific composition) gives L=276.0*18.0=4968 J/kg -- an application of
+# a directly-measured relationship from the literature to this repo's own
+# already-calibrated numbers, not an independently-measured figure for
+# this exact instance.
+#
+# latent_heat_width_K=2.1233: FWHM/2.3548, using the SAME 5K thermal
+# hysteresis width already cited above (Biswas et al. 2019) as a proxy for
+# the real transition's broadening scale -- reused, not independently
+# measured for the latent-heat peak shape specifically (Levin, Caplin &
+# Cohen's own microcalorimetry, cited in latent_heat_capacity()'s
+# docstring, shows the real peak is asymmetric and narrower than this in
+# places -- this Gaussian approximation is deliberately simple, see that
+# docstring).
+#
+# Result (core/giguere_validation.py's run_latent_heat_validation()):
+# peak DeltaT_ad at 7T drops from GD5SI2GE2_FIRST_ORDER's 24.17K to
+# 19.01K -- a real, physically-motivated ~36% closure of the gap to
+# Giguere et al.'s directly-measured 10.0K, NOT a full fix. The
+# remaining ~9K gap is consistent with (not necessarily fully explained
+# by) this repo's other already-documented limitations for this same
+# transition: the underlying (A,B,C) calibration target itself is the
+# "indirect" Maxwell-relation DeltaS_M (Giguere et al.'s own paper shows
+# that method alone overestimates DeltaT_ad by 1.49x vs. direct
+# measurement, independent of any C_p treatment), the single-Gaussian
+# latent-heat SHAPE is a simplification of a real asymmetric peak, and a
+# 0-D model has no route to the sample-specific microstructural effects
+# (nucleation, grain size) Levin et al. show materially affect the real
+# latent-heat signature. Do NOT re-tune latent_heat_width_K to force a
+# closer match to 10.0K -- sigma~7K numerically gets within ~1K of the
+# target (verified), but that value has no independent citation and would
+# be curve-fitting the answer, not physics; this module's whole point is
+# to avoid exactly that.
+GD5SI2GE2_FIRST_ORDER_LATENT_HEAT = dataclasses.replace(
+    GD5SI2GE2_FIRST_ORDER,
+    name="Gd5Si2Ge2 (first-order Landau model, with latent-heat C_p spike)",
+    latent_heat_J_per_kg=276.0 * 18.0,
+    latent_heat_width_K=5.0 / 2.3548,
 )
 
 # --- La(Fe,Si)13Hy (itinerant-electron metamagnetic giant-MCE family) ---

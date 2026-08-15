@@ -32,6 +32,13 @@ in the repository in one pass, in dependency order, so a single
     8b. First-order Landau model demo  (core/first_order_mce.py)
     8c. Giguere et al. (1999) direct-measurement cross-check + Pecharsky &
         Gschneidner (1997) peak-ratio check (core/giguere_validation.py)
+    8f. Phase 26: latent-heat C_p spike for the first-order Landau model --
+        checks GD5SI2GE2_FIRST_ORDER_LATENT_HEAT against both of step 8c's
+        own cross-checks (core/giguere_validation.py's
+        run_latent_heat_validation(); see core/first_order_mce.py and
+        ROADMAP.md's Phase 26 entry for the full derivation/citations and
+        for why neither GD5SI2GE2_FIRST_ORDER nor DTAD_CORRECTION_FACTOR's
+        default behavior was swapped out for this new instance)
     9.  Sobol sensitivity analysis     (core/sensitivity.py)
     10. RSM surrogate fit              (core/rsm.py)
     11. NSGA-III design optimization   (core/optimize.py, Phase 15: material +
@@ -1001,6 +1008,11 @@ def main():
         ("8c. Giguere et al. (1999) direct-measurement cross-check (core/giguere_validation.py)",
          lambda: (giguere_validation.run_validation(),
                   giguere_validation.run_pecharsky_ratio_check())),
+        ("8f. Phase 26: latent-heat C_p spike for the first-order Landau model -- "
+         "does GD5SI2GE2_FIRST_ORDER_LATENT_HEAT narrow the Giguere 7T gap and the "
+         "Pecharsky & Gschneidner peak-ratio gap? (core/giguere_validation.py, "
+         "core/first_order_mce.py)",
+         lambda: giguere_validation.run_latent_heat_validation()),
         ("9. Sobol global sensitivity analysis (constant-loss model)",
          lambda: sensitivity.run_sobol(out_path="results/sobol_results_phase2_constant.txt",
                                         use_state_dependent_losses=False)),
@@ -1065,6 +1077,7 @@ def main():
     thermal_diode_rows = None
     curie_shift_v2_result = None
     astronautics_giguere_result = None
+    latent_heat_result = None
 
     for name, fn in stages:
         _banner(name)
@@ -1119,6 +1132,8 @@ def main():
                         verbose=False)
                 elif name.startswith("8d."):
                     material_rows = fn()
+                elif name.startswith("8f."):
+                    latent_heat_result = fn()
                 elif name.startswith("9b."):
                     sobol_state_dependent_Si = fn()
                 elif name.startswith("9."):
@@ -1221,13 +1236,15 @@ def main():
                               material_rows, pareto_rows, pb_best_cop_row,
                               pp_best_cop_row, hysteresis_result,
                               magnet_geometry_result, fluid_mce_result,
-                              passive_regen_result, failures, curie_shift_v2_result, astronautics_giguere_result, magnet_geometry_multiseed_result)
+                              passive_regen_result, failures, curie_shift_v2_result, 
+                              astronautics_giguere_result, magnet_geometry_multiseed_result, latent_heat_result)
 
 
 def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, material_rows,
                               pareto_rows, pb_best_cop_row, pp_best_cop_row,
                               hysteresis_result, magnet_geometry_result, fluid_mce_result,
-                              passive_regen_result, failures, curie_shift_v2_result, astronautics_giguere_result, magnet_geometry_multiseed_result):
+                              passive_regen_result, failures, curie_shift_v2_result, 
+                              astronautics_giguere_result, magnet_geometry_multiseed_result, latent_heat_result):
     """Final, well-structured overview of every implemented analysis and
     its headline metric, printed once at the very end of the run so a
     reader does not have to scroll back through 13 stages of log output
@@ -1315,6 +1332,19 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
                     "honesty flag that DTAD_CORRECTION_FACTOR was never shown to transfer from "
                     "Gd5Si2Ge2 to La(Fe,Si)13Hy; see core/cascade.py's "
                     "run_astronautics_giguere_correction_sensitivity() docstring")
+
+    if latent_heat_result and _ok("8f."):
+        logger.info(f"  - Phase 26 latent-heat C_p spike (step 8f, core/first_order_mce.py's "
+                    f"GD5SI2GE2_FIRST_ORDER_LATENT_HEAT): 7T peak DeltaT_ad raw="
+                    f"{latent_heat_result['peak_dTad_7T_raw_K']:.2f}K -> latent-heat="
+                    f"{latent_heat_result['peak_dTad_7T_latent_heat_K']:.2f}K vs. Giguere's "
+                    f"direct 10.0K target ({latent_heat_result['gap_closed_pct']:.1f}% of the "
+                    f"gap closed, NOT a full fix, NOT tuned to hit 10.0K) -- a genuine, "
+                    f"literature-grounded partial improvement on BOTH this module's cross-checks "
+                    f"(also narrows, but does not resolve, the Pecharsky & Gschneidner peak-ratio "
+                    f"gap; see results/giguere_validation.txt and ROADMAP.md's Phase 26 entry for "
+                    f"why neither GD5SI2GE2_FIRST_ORDER nor DTAD_CORRECTION_FACTOR's default "
+                    f"behavior was swapped out for this new instance)")
 
     logger.info("Material family ranking (Gd / Gd5Si2Ge2 / GD- / LAFESIH- / MNFEPSI-tuned families)")
     if material_rows and _ok("8d."):
