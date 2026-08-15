@@ -255,6 +255,13 @@ MCM_COST_PER_KG_BY_FAMILY = {
     # for (Mn,Fe)2(P,Si), rather than inventing a number the qualitative
     # literature only implies should be lower.
     "Ga1-xCMn3+x": COST_MCM_PER_KG,
+    # Phase 25: Mn1-xCuxCoGe (core/first_order_mce.py's MNCUCOGE_FIRST_ORDER).
+    # No $/kg digit located for this exact composition either. Mn/Co/Ge (and
+    # a small Cu fraction) are all non-precious, non-rare-earth elements --
+    # qualitatively cheap, like (Mn,Fe)2(P,Si) above -- so the SAME
+    # conservative Gd-price placeholder convention is used rather than
+    # inventing a lower number the qualitative chemistry only suggests.
+    "Mn1-xCuxCoGe": COST_MCM_PER_KG,
 }
 
 

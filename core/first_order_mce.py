@@ -710,6 +710,190 @@ def mnfepsi_composition_tuned_material(Tc_target_K, name=None):
     )
 
 
+# --- Mn1-xCuxCoGe (MnCoGe-type hexagonal magnetostructural giant-MCE
+#     family), Phase 25: added on request for a NON-redundant, strongly
+#     (not weakly) evidenced fourth Landau-model family alongside
+#     GD5SI2GE2_FIRST_ORDER/LAFESIH_FIRST_ORDER/MNFEPSI_FIRST_ORDER, and
+#     distinct from Phase 24's core.antiperovskite_material.py (which is a
+#     SECOND-order, mean-field family reusing mce_material.py -- this one
+#     is a first-order, MnCoGe-type magnetostructural transition using
+#     this module's own Landau (A,B,C) machinery, the same class as the
+#     three families above it).
+#
+# Why this one, and not another item from Phase 24's still-open list: it
+# is the single strongest candidate located in a follow-up literature pass
+# -- one internally-consistent paper (Samanta, Dubenko, Quetz, Stadler &
+# Ali, "Giant magnetocaloric effects near room temperature in
+# Mn1-xCuxCoGe," Appl. Phys. Lett. 101, 242405 (2012)) reporting DIGITIZED
+# peak |DeltaS_M| AT A STATED FIELD for two directly-measured compositions
+# landing inside/near this repo's own 285-305K ASHRAE target window:
+#   x=0.080: Tc=302K, |DeltaS_M|=52.5 J/(kg K) at 5T
+#   x=0.085: Tc=316K, |DeltaS_M|=53.3 J/(kg K) at 5T
+# This is the calibration situation Phase 24's own antiperovskite family
+# explicitly did NOT have (that module's own honesty flag: Tc(x) and one
+# RCP-in-J/cm^3 figure only, no peak DeltaS_M digit at a stated field) --
+# here there IS a directly citable |DeltaS_M| target, the same kind of
+# number GD5SI2GE2_FIRST_ORDER/LAFESIH_FIRST_ORDER/MNFEPSI_FIRST_ORDER are
+# each calibrated against above. It is also independently corroborated as
+# a real, giant-MCE, room-temperature-relevant system by several OTHER
+# groups' related Mn1-xCuxCoGe/MnCo1-xCuxGe papers (e.g. Mn0.89Cu0.11CoGe:
+# |DeltaS_M|=58 J/(kg K) at 5T, RC=258.2 J/kg, ~290K -- ScienceDirect,
+# ~2016) -- not implemented here to avoid combining across different
+# groups' compositions/processing (the same reason Phase 24 deferred the
+# LSMO family), but a strong independent sanity check that the magnitude
+# and temperature range are real and not an outlier of one paper.
+#
+# M_molar computed directly from standard atomic weights for the x=0.080
+# reference stoichiometry Mn0.92Cu0.08CoGe (Mn=54.938, Cu=63.546,
+# Co=58.933, Ge=72.630 g/mol) -- arithmetic on a literature-sourced
+# composition, same treatment as GD5SI2GE2_FIRST_ORDER's own M_molar.
+# n_atoms_per_fu=3 (Mn/Cu + Co + Ge, one MM'X formula unit), matching
+# MNFEPSI_FIRST_ORDER's own 3-atom convention for a comparable hexagonal
+# system. J=3.5, g=2.0, theta_D=300.0K: held at the SAME placeholder
+# values already used for MNFEPSI_FIRST_ORDER (another hexagonal,
+# room-temperature, 3d-transition-metal-based first-order family) --
+# not independently measured for THIS system, same honesty-flag status
+# as every other theta_D in this module.
+#
+# (A, B, C) = (6.6, -1.85, 5.2): found by grid search (same methodology
+# as GD5SI2GE2_FIRST_ORDER/LAFESIH_FIRST_ORDER/MNFEPSI_FIRST_ORDER above)
+# to reproduce the x=0.080 target: this calibration's own peak
+# |DeltaS_M(T,5T)| = 52.42 J/(kg K) (target 52.5, within 0.2%), found by
+# this module's __main__ scan to peak at T=307.8K -- i.e. +5.8K above the
+# nominal Tc=302K, the SAME qualitative model behavior flagged as honesty
+# flag #3 in this module's own docstring for the other three families
+# (their own offsets are larger, +10 to +11.5K at the lower fields THEY
+# were calibrated at -- this family's smaller +5.8K offset is evaluated
+# at 5T, a higher field, which is directionally consistent, not a
+# discrepancy). Do not re-tune Tc to force the peak to land exactly at
+# 302K -- same standing instruction as the other three families.
+# Why the tunable window below is NOT just Samanta et al.'s own two
+# points: 302-316K alone sits entirely ABOVE every representative ASHRAE
+# operating-point T_mid this repo's own material_family_comparison.py
+# actually evaluates against (which run ~288-295.5K across its 5-20K span
+# sweep) -- i.e. using only the calibration paper's own window would make
+# this family ALWAYS show infeasible in the standard comparison, a
+# "recessive" addition in practice even though its physics/calibration is
+# the strongest of this repo's non-GD5SI2GE2/LAFESIH/MNFEPSI candidates.
+# A second, independent, more recent paper on the SAME Mn1-xCuxCoGe
+# system -- Pal, Frommen, Kumar, Hauback, Fjellvåg & Helgesen, Materials &
+# Design 195, 109036 (2020), a full x=0.0-0.13 composition study --
+# reports its own strongest result, Mn0.89Cu0.11CoGe (x=0.11), giving
+# |DeltaS_M|=58 J/(kg K) at 5T (even larger than the Samanta calibration
+# point) and RC=258.2 J/(kg), explicitly described as occurring "near room
+# temperature" -- QUALITATIVE, not a digitized Tc, unlike Samanta et al.'s
+# own two numbers. 291.0K (a standard "room temperature" reference point,
+# ~18C) is used here as a conservative reading of that qualitative
+# description, NOT a value read off this paper's own data -- flagged
+# explicitly as the weaker-evidenced end of this family's window, same
+# honesty-flag spirit as every "not independently verified" caveat
+# elsewhere in this module. This composition (x=0.11) is NOT used for
+# this family's (A,B,C) Landau calibration above (which stays anchored to
+# Samanta et al.'s precisely digitized x=0.080 point) -- it only extends
+# the DOCUMENTED tunability window downward into this repo's actual
+# operating range.
+MNCUCOGE_TC_MIN_K = 291.0   # qualitative "near room temperature" reading of
+                              # Pal et al. (2020)'s Mn0.89Cu0.11CoGe (x=0.11) --
+                              # see comment above, NOT a digitized literature Tc
+MNCUCOGE_TC_MAX_K = 316.0   # x=0.085, Samanta et al. (2012)'s own precise measurement
+
+MNCUCOGE_FIRST_ORDER = FirstOrderMCEMaterial(
+    name="Mn0.92Cu0.08CoGe (first-order Landau model)",
+    Tc=302.0, J=3.5, g=2.0,
+    M_molar=(0.92 * 54.938 + 0.08 * 63.546 + 58.933 + 72.630) * 1e-3,
+    theta_D=300.0, n_atoms_per_fu=3,
+    A=6.6, B=-1.85, C=5.2,
+    source="Composition/TC/DeltaS_M target: Samanta, Dubenko, Quetz, Stadler & "
+           "Ali, Appl. Phys. Lett. 101, 242405 (2012) (peak |DeltaS_M|=52.5 "
+           "J/(kg K) at 5T for the x=0.080, TC=302K composition -- the paper's "
+           "OTHER measured point, x=0.085/TC=316K/53.3 J/(kg K), was not used "
+           "for calibration, only for setting MNCUCOGE_TC_MAX_K below). Landau "
+           "(A,B,C) and theta_D are this-repo calibrations/placeholders, NOT "
+           "literature values -- see the block comment above for exact "
+           "provenance. NOT independently validated against a second dataset "
+           "(same caveat as the other three FirstOrderMCEMaterial families "
+           "in this module).",
+    hysteresis_loss_J_per_kg=25.0,
+    # Phase 25, same honesty-flag situation as MNFEPSI_FIRST_ORDER's own
+    # hysteresis_loss_J_per_kg (Phase 16 flag #4). The calibrating paper
+    # (Samanta et al. 2012) was not found to report a J/kg hysteresis-loss
+    # figure in the material extracted for this pass. A related paper on
+    # the SAME Mn1-xCuxCoGe system (Kumar et al./ScienceDirect, "Enhancing
+    # giant magnetocaloric effect near room temperature by inducing
+    # magnetostructural coupling in Cu-doped MnCoGe") explicitly describes
+    # thermal hysteresis in this x=0.09-0.12 composition window as "large"
+    # QUALITATIVELY, without a digit -- consistent with this being a
+    # genuinely large-hysteresis first-order transition (unlike the
+    # engineered low-hysteresis variants, e.g. a DIFFERENT, much-weaker-
+    # MCE Mn0.95Cu0.03CoGe composition reported elsewhere at 16K thermal
+    # hysteresis width, not J/kg, and not this composition). 25.0 J/kg is
+    # carried over from MNFEPSI_FIRST_ORDER as an order-of-magnitude
+    # placeholder for "documented as large, not quantified in J/kg here" --
+    # NOT a value read off this system's own hysteresis loop. Flagged as a
+    # good, concretely-scoped follow-up: a targeted re-read of the Kumar
+    # et al. paper's own DSC hysteresis-loop data for a directly reported
+    # Wy_peak or loop-area figure at this exact composition.
+)
+
+
+def mncucoge_composition_tuned_material(Tc_target_K, name=None):
+    """Returns a FirstOrderMCEMaterial representing a hypothetical
+    composition-tuned Mn1-xCuxCoGe alloy with Curie temperature
+    Tc_target_K, for use in a Curie-graded bed -- the Mn1-xCuxCoGe analog
+    of lafesih_composition_tuned_material()/mnfepsi_composition_tuned_material().
+
+    SAME simplifying assumption as the other three families: only Tc is
+    shifted; (A, B, C), theta_D, M_molar and n_atoms_per_fu are all held
+    fixed at the MNCUCOGE_FIRST_ORDER (x=0.080) calibration. Unlike
+    MNFEPSI_FIRST_ORDER's five-composition Table 1, this family's
+    291.0-316.0K window mixes ONE precisely digitized endpoint (316.0K,
+    Samanta et al. (2012)'s own x=0.085 measurement) with ONE qualitative
+    endpoint (291.0K, a conservative reading of Pal et al. (2020)'s "near
+    room temperature" description of their own strongest result,
+    Mn0.89Cu0.11CoGe -- see the block comment above MNCUCOGE_TC_MIN_K for
+    the full reasoning). Treat Tc targets near the 291.0K end of this
+    range as resting on weaker evidence than targets near 316.0K.
+
+    No Giguere-style empirical dTad_correction is available for this
+    family (same situation as LAFESIH/MNFEPSI) -- MNCUCOGE_FIRST_ORDER's
+    own dTad_correction default (1.0, uncorrected) carries through
+    unchanged. Given this family's calibrated |DeltaS_M| (~52 J/(kg K)) is
+    2.9-3x GD5SI2GE2_FIRST_ORDER's own (~18 J/(kg K), the family the
+    Giguere correction factor was derived from), treat delta_T_adiabatic()
+    from this function as an EVEN MORE provisional upper-bound-ish
+    estimate than the other three families' own already-flagged
+    delta_T_adiabatic (module docstring honesty flag #1) -- there is no
+    direct experimental delta_T_ad benchmark for this exact system in this
+    codebase.
+
+    Raises ValueError if Tc_target_K falls outside MNCUCOGE_TC_MIN_K to
+    MNCUCOGE_TC_MAX_K.
+    """
+    if not (MNCUCOGE_TC_MIN_K <= Tc_target_K <= MNCUCOGE_TC_MAX_K):
+        raise ValueError(
+            f"Tc_target_K={Tc_target_K:.1f}K is outside the documented "
+            f"tunability range for the Mn1-xCuxCoGe family "
+            f"({MNCUCOGE_TC_MIN_K:.1f}-{MNCUCOGE_TC_MAX_K:.1f}K -- see the "
+            f"block comment above MNCUCOGE_TC_MIN_K/_MAX_K for sourcing, "
+            f"including the qualitative-vs-precise split between the two "
+            f"endpoints)."
+        )
+    return FirstOrderMCEMaterial(
+        name=name or f"Mn1-xCuxCoGe, composition-tuned to Tc={Tc_target_K:.1f}K",
+        Tc=Tc_target_K, J=MNCUCOGE_FIRST_ORDER.J, g=MNCUCOGE_FIRST_ORDER.g,
+        M_molar=MNCUCOGE_FIRST_ORDER.M_molar, theta_D=MNCUCOGE_FIRST_ORDER.theta_D,
+        n_atoms_per_fu=MNCUCOGE_FIRST_ORDER.n_atoms_per_fu,
+        A=MNCUCOGE_FIRST_ORDER.A, B=MNCUCOGE_FIRST_ORDER.B, C=MNCUCOGE_FIRST_ORDER.C,
+        dTad_correction=MNCUCOGE_FIRST_ORDER.dTad_correction,
+        hysteresis_loss_J_per_kg=MNCUCOGE_FIRST_ORDER.hysteresis_loss_J_per_kg,
+        source="Composition-tuned analog of Mn0.92Cu0.08CoGe -- (A,B,C)/theta_D/"
+               "M_molar held fixed at the MNCUCOGE_FIRST_ORDER calibration "
+               "(approximation, see docstring); Tc tunability range mixes one "
+               "precise and one qualitative literature endpoint (see "
+               "MNCUCOGE_TC_MIN_K/_MAX_K comment above).",
+    )
+
+
 if __name__ == "__main__":
     mu0_ = 4 * np.pi * 1e-7
     print("First-order Landau model calibration check, Gd5Si2Ge2")

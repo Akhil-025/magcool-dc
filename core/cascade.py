@@ -56,8 +56,10 @@ from core.first_order_mce import (composition_tuned_material,
                                     LAFESIH_TC_MIN_K, LAFESIH_TC_MAX_K,
                                     mnfepsi_composition_tuned_material,
                                     MNFEPSI_TC_MIN_K, MNFEPSI_TC_MAX_K,
+                                    mncucoge_composition_tuned_material,
+                                    MNCUCOGE_TC_MIN_K, MNCUCOGE_TC_MAX_K,
                                     GD5SI2GE2_FIRST_ORDER, LAFESIH_FIRST_ORDER,
-                                    MNFEPSI_FIRST_ORDER)
+                                    MNFEPSI_FIRST_ORDER, MNCUCOGE_FIRST_ORDER)
 from core.antiperovskite_material import (ga1xcmn3x_composition_tuned_material,
                                             GA1XCMN3X_TC_MIN_K, GA1XCMN3X_TC_MAX_K,
                                             GA1XCMN3X_REF)
@@ -130,6 +132,21 @@ GA1XCMN3X_FAMILY = GradedFamily(
     tuned_fn=ga1xcmn3x_composition_tuned_material,
     tc_min=GA1XCMN3X_TC_MIN_K, tc_max=GA1XCMN3X_TC_MAX_K,
     reference_material=GA1XCMN3X_REF, fallback_material=GADOLINIUM,
+)
+
+# Phase 25: fifth pluggable family, Mn1-xCuxCoGe (see the block comment
+# above core/first_order_mce.py's MNCUCOGE_FIRST_ORDER for the full
+# literature-verification writeup). Unlike GA1XCMN3X_FAMILY (a SECOND-
+# order family reusing mce_material.py), this is a first-order Landau
+# family using the SAME machinery as GD_FAMILY/LAFESIH_FAMILY/
+# MNFEPSI_FAMILY below -- so, unlike GA1XCMN3X_FAMILY, its
+# reference_material really is the same kind of calibrated-to-a-digitized-
+# DeltaS_M-target object the other three first-order families use.
+MNCUCOGE_FAMILY = GradedFamily(
+    name="Mn1-xCuxCoGe",
+    tuned_fn=mncucoge_composition_tuned_material,
+    tc_min=MNCUCOGE_TC_MIN_K, tc_max=MNCUCOGE_TC_MAX_K,
+    reference_material=MNCUCOGE_FIRST_ORDER, fallback_material=GADOLINIUM,
 )
 
 
@@ -212,6 +229,8 @@ def _family_name(family):
         return "MNFEPSI"
     if family is GA1XCMN3X_FAMILY:
         return "GA1XCMN3X"
+    if family is MNCUCOGE_FAMILY:
+        return "MNCUCOGE"
     return None
 
 
@@ -224,6 +243,8 @@ def _resolve_family(family_name):
         return MNFEPSI_FAMILY
     if family_name == "GA1XCMN3X":
         return GA1XCMN3X_FAMILY
+    if family_name == "MNCUCOGE":
+        return MNCUCOGE_FAMILY
     return None
 
 

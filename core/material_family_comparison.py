@@ -37,6 +37,15 @@ This module runs all seven candidates --
                                 docstring for the honesty flag on why its
                                 Tc-tunability is literature-grounded but
                                 its DeltaS_M/DeltaT_ad magnitude is not)
+    8. Mn1-xCuxCoGe (magnetostructural, tuned)
+                               (MNCUCOGE_FAMILY, Phase 25 -- a
+                                literature-measured, first-order Landau
+                                family calibrated against a directly
+                                digitized peak |DeltaS_M| target, unlike
+                                GA1XCMN3X_FAMILY; see the block comment
+                                above core/first_order_mce.py's
+                                MNCUCOGE_FIRST_ORDER for the full
+                                literature-verification writeup)
 through the SAME fixed ASHRAE operating point(s) and the SAME cascade logic
 (core.cascade.run_cascade, 1-4 stage), and outputs a ranked table of Qc,
 COP, and whether each tunable family's own documented Tc window
@@ -67,7 +76,7 @@ from core.mce_material import GADOLINIUM
 from core.first_order_mce import GD5SI2GE2_FIRST_ORDER
 from core.cascade import (
     run_cascade, GD_FAMILY, LAFESIH_FAMILY, MNFEPSI_FAMILY, GA1XCMN3X_FAMILY,
-    _target_composition_for_peak,
+    MNCUCOGE_FAMILY, _target_composition_for_peak,
 )
 from core.nanocomposite_material import NANOCOMPOSITE_FAMILY
 from core.baseline_cooling import vapor_compression_cop, liquid_cooling_cop
@@ -81,7 +90,7 @@ SPANS_K = (5.0, 10.0, 15.0, 20.0)   # ASHRAE-range representative sweep
 REPRESENTATIVE_SPAN_K = 10.0        # matches main.py's steps 5/6/9/11 anchor
 
 TUNABLE_FAMILIES = (GD_FAMILY, LAFESIH_FAMILY, MNFEPSI_FAMILY, NANOCOMPOSITE_FAMILY,
-                     GA1XCMN3X_FAMILY)
+                     GA1XCMN3X_FAMILY, MNCUCOGE_FAMILY)
 
 
 def _tuned_candidate(family, T_mid_K, mu0H_max=MU0H_MAX):
@@ -157,9 +166,10 @@ def run_analysis(out_csv="results/material_family_comparison.csv",
         writer.writerows(rows)
 
     lines = []
-    lines.append("Seven-way material family comparison at the ASHRAE operating point "
+    lines.append("Eight-way material family comparison at the ASHRAE operating point "
                  "(Phase 22 item 2 adds the nanocomposite candidate; Phase 24 adds "
-                 "the Ga1-xCMn3+x antiperovskite candidate)")
+                 "the Ga1-xCMn3+x antiperovskite candidate; Phase 25 adds the "
+                 "Mn1-xCuxCoGe candidate)")
     lines.append(f"(T_cold={T_COLD_C:.0f}C={T_COLD_K:.2f}K, spans={list(SPANS_K)}K, "
                  f"mu0H={MU0H_MAX:.1f}T, {MASS_PER_STAGE:.0f}kg/stage, 1-4 stage cascade)")
     lines.append("=" * 100)
