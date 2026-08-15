@@ -510,5 +510,136 @@ def run_geometric_cost_pareto_sensitivity(
             "text": text}
 
 
+def run_magnet_geometry_multiseed_stability_check(
+        seeds=(1, 2, 3), pop_size=40, n_gen=25,
+        out_path="results/magnet_geometry_multiseed_stability.txt"):
+    """Paper-Mining Pass review item 4: "two Pareto sensitivity checks
+    (hysteresis reversal, magnet-geometry mean-field direction) both ran
+    at reduced NSGA-III settings (pop=32/gen=15) and both produced results
+    that don't hold up or don't match expectation ... rerunning both at
+    the production 40/25 settings ... seems like the natural next step."
+
+    core/hysteresis_sensitivity.py's own multiseed check
+    (`run_hysteresis_multiseed_stability_check()`) already exists and
+    already found its own reduced-setting finding was NOT stable at
+    production settings/multiple seeds -- see
+    results/hysteresis_multiseed_stability.txt. This function is the
+    direct analog for THIS module's own reduced-setting finding (Phase 19's
+    "does the geometric magnet-mass cost term pull the merged Pareto
+    front's mean mu0H_max_T down relative to the flat-ratio baseline?",
+    run at pop_size=32/n_gen=15/seed=1 in
+    `run_geometric_cost_pareto_sensitivity()`, which found NO -- the mean
+    field did not move down as expected).
+
+    Reruns `run_geometric_cost_pareto_sensitivity()` once per seed in
+    `seeds` at (pop_size, n_gen), writing each seed's FLAT/GEOMETRIC fronts
+    to a single pair of SCRATCH csv paths every seed overwrites in turn
+    (same reasoning as the hysteresis module's own multiseed check: N
+    seeds' worth of intermediate fronts are not worth keeping on disk --
+    the seed-by-seed mean-field numbers, the actual deliverable here, are
+    captured in memory and written to `out_path` instead).
+
+    Returns a dict with per-seed results and a `stable` boolean -- True
+    iff every seed's GEOMETRIC run's mean mu0H_max_T is <= its own FLAT
+    run's mean (i.e. the "geometric cost pulls the mean field down"
+    DIRECTION the original run's own docstring named as the expected
+    outcome holds at every seed, not necessarily by the same margin).
+    """
+    per_seed = []
+    scratch_flat = "results/_scratch_magnet_geometry_multiseed_flat.csv"
+    scratch_geometric = "results/_scratch_magnet_geometry_multiseed_geometric.csv"
+    for seed in seeds:
+        result = run_geometric_cost_pareto_sensitivity(
+            pop_size=pop_size, n_gen=n_gen, seed=seed, out_path=None,
+            out_csv_flat=scratch_flat, out_csv_geometric=scratch_geometric,
+            verbose=False)
+        rows_flat = result["rows_flat"]
+        rows_geometric = result["rows_geometric"]
+        fields_flat = [r["mu0H_max_T"] for r in rows_flat]
+        fields_geometric = [r["mu0H_max_T"] for r in rows_geometric]
+        mean_flat = sum(fields_flat) / len(fields_flat) if fields_flat else float("nan")
+        mean_geometric = (sum(fields_geometric) / len(fields_geometric)
+                           if fields_geometric else float("nan"))
+        per_seed.append({
+            "seed": seed,
+            "mean_flat_T": mean_flat,
+            "mean_geometric_T": mean_geometric,
+            "front_size_flat": len(rows_flat),
+            "front_size_geometric": len(rows_geometric),
+        })
+        print(f"  seed={seed}: mean mu0H_max_T FLAT={mean_flat:.2f}T -> "
+              f"GEOMETRIC={mean_geometric:.2f}T  "
+              f"(front size FLAT={len(rows_flat)}, GEOMETRIC={len(rows_geometric)})")
+
+    for scratch in (scratch_flat, scratch_geometric):
+        try:
+            os.remove(scratch)
+        except OSError:
+            pass
+
+    stable = all(s["mean_geometric_T"] <= s["mean_flat_T"] + 1e-9 for s in per_seed)
+
+    lines = []
+    lines.append("Phase 19 open item (Paper-Mining Pass review item 4, and this module's")
+    lines.append("own honesty flag on run_geometric_cost_pareto_sensitivity()): does the")
+    lines.append("'geometric cost term does NOT pull the mean field down' finding at")
+    lines.append("pop_size=32/n_gen=15/seed=1 hold at production pop_size/n_gen settings")
+    lines.append("and across multiple seeds, or was it search noise at the smaller setting?")
+    lines.append("")
+    lines.append(f"Settings: pop_size={pop_size}, n_gen={n_gen}, seeds={list(seeds)}")
+    lines.append("")
+    lines.append(f"{'seed':>6} {'mean_FLAT_T':>12} {'mean_GEOM_T':>12} "
+                  f"{'front_FLAT':>11} {'front_GEOM':>11}")
+    lines.append("-" * 56)
+    for s in per_seed:
+        lines.append(f"{s['seed']:>6} {s['mean_flat_T']:>11.2f} {s['mean_geometric_T']:>11.2f}  "
+                      f"{s['front_size_flat']:>10} {s['front_size_geometric']:>11}")
+    lines.append("-" * 56)
+    lines.append("")
+    if stable:
+        lines.append("RESULT: STABLE (direction reversed from the original single-seed")
+        lines.append("reduced-setting run). At every seed checked, the merged front's mean")
+        lines.append("mu0H_max_T under the GEOMETRIC magnet-mass cost term is <= its own FLAT")
+        lines.append("run's mean -- i.e. at production settings the nonlinear magnet-mass")
+        lines.append("cost DOES consistently discourage very-high-field designs, the direction")
+        lines.append("the original module docstring named as expected. The single-seed,")
+        lines.append("reduced-setting 'FINDING: does NOT pull the mean field down' result was")
+        lines.append("evidently an artifact of that smaller pop_size=32/n_gen=15 setting or")
+        lines.append("that one seed, not a settled property of the model.")
+    else:
+        lines.append("RESULT: NOT STABLE (or does not reverse cleanly). At least one seed's")
+        lines.append("GEOMETRIC run had a mean mu0H_max_T HIGHER than its own FLAT run -- the")
+        lines.append("'geometric cost pulls mean field down' expectation does NOT hold")
+        lines.append("universally across seeds even at production settings. Treat the")
+        lines.append("direction of the mean-field effect as seed-dependent / not reliably")
+        lines.append("signed, not as a settled result in either direction -- see the per-seed")
+        lines.append("table above for which seed(s) disagree. This is the SAME kind of")
+        lines.append("outcome core/hysteresis_sensitivity.py's own multiseed check found for")
+        lines.append("its analogous Phase 16 comparison (results/hysteresis_multiseed_")
+        lines.append("stability.txt) -- NSGA-III search noise at this problem's scale appears")
+        lines.append("large enough to flip BOTH of this repo's reduced-setting Pareto")
+        lines.append("sensitivity findings, not just one of them.")
+    lines.append("")
+    lines.append("Caveat carried over unchanged from this module's own honesty flags 1-2:")
+    lines.append("the geometric magnet-mass relation itself is standard closed-form Halbach-")
+    lines.append("cylinder physics (not fitted), but the underlying MCM_COST_PER_KG_BY_FAMILY")
+    lines.append("$/kg figures and the ~2T 'sweet spot' literature claim were not")
+    lines.append("independently re-derived by this repo -- this check resolves the")
+    lines.append("NSGA-III-search-noise question, not the underlying-cost-data-quality")
+    lines.append("question.")
+
+    if out_path:
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        with open(out_path, "w") as f:
+            f.write("\n".join(lines) + "\n")
+
+    print()
+    print("\n".join(lines))
+    if out_path:
+        print(f"\nWrote {out_path}")
+
+    return {"per_seed": per_seed, "stable": stable}
+
+
 if __name__ == "__main__":
     run_magnet_geometry_analysis()

@@ -1567,6 +1567,84 @@ def run_astronautics_cycle_type_sensitivity(apply_correction=None, verbose=True)
             "both_feasible": both_feasible, "ericsson_improves": improved}
 
 
+def run_astronautics_giguere_correction_sensitivity(cycle_type="brayton", verbose=True):
+    """Paper-Mining Pass review item 2: "the Astronautics graded-bed
+    reproduction (-81.1%) is the single worst number in the suite, and a
+    likely fix already exists in the repo" -- giguere_validation.py found
+    the first-order Landau model overestimates DeltaT_ad by ~2.42x at 7T
+    and ships DTAD_CORRECTION_FACTOR (~0.41) for exactly this. The review
+    asked whether validate_astronautics_graded_bed() actually applies that
+    correction to its 6 La(Fe,Si)13Hy stages.
+
+    Checked directly (not assumed): it does NOT, by design --
+    validate_astronautics_graded_bed()'s own docstring and
+    lafesih_composition_tuned_material()'s own docstring
+    (core/first_order_mce.py) both already state DTAD_CORRECTION_FACTOR is
+    a Gd5Si2Ge2-specific empirical factor "NOT ... shown to transfer to
+    this different first-order compound family -- applying it here would
+    be fabricating a validation that doesn't exist." That is a documented
+    design decision, not an oversight -- but validate_astronautics_graded_bed()
+    DOES already expose an `apply_correction` override for exactly this
+    experiment, unexercised anywhere in main.py's pipeline. This function
+    runs it: apply_correction=None (baseline, current -81.1%) vs.
+    apply_correction=DTAD_CORRECTION_FACTOR (the Gd5Si2Ge2-fit value,
+    applied here to LAFESIH_FAMILY as a deliberately-labeled EXPERIMENT,
+    not a validated correction), and reports whether COP error shrinks --
+    while keeping the existing honesty flag about cross-family transfer
+    front and center, not quietly dropped just because the number itself
+    looks better.
+    """
+    from core.giguere_validation import DTAD_CORRECTION_FACTOR
+
+    baseline = validate_astronautics_graded_bed(apply_correction=None, cycle_type=cycle_type)
+    corrected = validate_astronautics_graded_bed(
+        apply_correction=DTAD_CORRECTION_FACTOR, cycle_type=cycle_type)
+
+    both_feasible = bool(baseline.get("feasible") and corrected.get("feasible"))
+    improved = None
+    if both_feasible:
+        improved = bool(abs(corrected["COP_error_pct"]) < abs(baseline["COP_error_pct"]))
+
+    if verbose:
+        print("Astronautics_rotary_2014 6-layer graded-bed reproduction: "
+              "uncorrected (baseline) vs. Giguere-corrected "
+              f"(DTAD_CORRECTION_FACTOR={DTAD_CORRECTION_FACTOR:.4f}, "
+              f"cycle_type={cycle_type})")
+        if both_feasible:
+            print(f"  uncorrected: COP_cascade={baseline['COP_cascade']}  "
+                  f"COP_error={baseline['COP_error_pct']}%")
+            print(f"  corrected:   COP_cascade={corrected['COP_cascade']}  "
+                  f"COP_error={corrected['COP_error_pct']}%")
+            if improved:
+                print(f"  FINDING: applying the Giguere correction narrows the error "
+                      f"({baseline['COP_error_pct']}% -> {corrected['COP_error_pct']}%). "
+                      f"This does NOT establish that DTAD_CORRECTION_FACTOR transfers to "
+                      f"La(Fe,Si)13Hy -- it was fit to a Gd5Si2Ge2-specific direct-"
+                      f"measurement comparison (core/giguere_validation.py) and no "
+                      f"equivalent direct-measurement dataset for La(Fe,Si)13Hy was "
+                      f"located in this repo's corpus (see "
+                      f"lafesih_composition_tuned_material()'s own honesty flag, "
+                      f"core/first_order_mce.py) -- but a smaller error IS a smaller "
+                      f"error, and this experiment (unlike leaving the option unexercised) "
+                      f"actually shows what applying it would do, as an explicitly-labeled "
+                      f"sensitivity check rather than an adopted correction.")
+            else:
+                print(f"  FINDING: applying the Giguere correction does NOT narrow the "
+                      f"error ({baseline['COP_error_pct']}% -> {corrected['COP_error_pct']}%) "
+                      f"-- consistent with the existing honesty flag that this factor was "
+                      f"never shown to transfer to La(Fe,Si)13Hy. The -81.1% baseline error "
+                      f"is not explained by the same DeltaT_ad-overestimate mechanism "
+                      f"giguere_validation.py found for Gd5Si2Ge2; the single-Tc-per-stage "
+                      f"approximation of the real 6-real-layer device (see this function's "
+                      f"own docstring) remains the more likely dominant cause.")
+        else:
+            print("  Not comparable: one or both apply_correction runs did not calibrate.")
+
+    return {"baseline": baseline, "corrected": corrected,
+            "dtad_correction_factor": DTAD_CORRECTION_FACTOR,
+            "both_feasible": both_feasible, "correction_improves": improved}
+
+
 if __name__ == "__main__":
     from core.first_order_mce import GD5SI2GE2_FIRST_ORDER
 

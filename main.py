@@ -23,6 +23,10 @@ in the repository in one pass, in dependency order, so a single
     7.  Cascade staging comparison     (core/cascade.py)
     7b. Curie-graded cascade           (core/cascade.py, ROADMAP.md Phase 7 item)
     7c. Astronautics graded-bed check  (core/cascade.py, ROADMAP.md Phase 9 addendum)
+    7d. Extending the graded-bed structural fix to the remaining STRUCTURAL
+        devices (core/cascade.py, Paper-Mining Pass review item 1 follow-up)
+    7e. Does the Giguere DeltaT_ad correction narrow the Astronautics graded-bed
+        COP error? (core/cascade.py, Paper-Mining Pass review item 2)
     8.  Giant-MCE materials analysis   (core/giant_mce_analysis.py)
     8d. Material family comparison     (core/material_family_comparison.py, Track A2 item)
     8b. First-order Landau model demo  (core/first_order_mce.py)
@@ -38,6 +42,8 @@ in the repository in one pass, in dependency order, so a single
         diode (core/thermal_diode.py, core/thermal_diode_analysis.py, Phase 18)
     11d. Magnet-geometry (Halbach-cylinder) field-vs-mass cost model
         (core/magnet_geometry.py, Phase 19)
+    11e. Magnet-geometry Pareto sensitivity, production-settings multi-seed
+        stability check (core/magnet_geometry.py, Paper-Mining Pass review item 4)
     12. Figure generation (34 figures) (plots.py -> results/figures/*.png, *.pdf)
     13. Design-recommendations synthesis (core/design_recommendations.py) --
         consolidates steps 3c/7b/8d/9b/11's already-computed results into
@@ -941,7 +947,8 @@ def main():
         ("1. Material-level model validation vs. Dan'kov et al. (1998)",
          lambda: (validation.run_validation(),
                   validation.run_giguere_gd_extension(),
-                  validation.run_curie_shift_check())),
+                  validation.run_curie_shift_check(),
+                  validation.run_curie_shift_check_v2())),
         ("1b. Inhomogeneous/polycrystalline Tc-broadening sensitivity "
          "(core/inhomogeneous_broadening.py, Phase 22 item 1)",
          lambda: inhomogeneous_broadening.run_inhomogeneous_broadening_analysis()),
@@ -979,6 +986,10 @@ def main():
          "devices (DTU_MagQueen_2018, Risoe_DTU_Gd_2011, Cooltech_2013_rotary) "
          "(calibration_failure_diagnostics.txt / Paper-Mining Pass review item 1 follow-up)",
          run_remaining_structural_devices_graded_validation),
+        ("7e. Does the Giguere DeltaT_ad correction (giguere_validation.py, ~2.42x "
+         "overestimate factor) narrow the Astronautics_rotary_2014 graded-bed "
+         "-81.1% COP error? (core/cascade.py, Paper-Mining Pass review item 2)",
+         lambda: cascade.run_astronautics_giguere_correction_sensitivity()),
         ("8. Giant-MCE materials analysis (Gd vs Gd5Si2Ge2)",
          lambda: giant_mce_analysis.run_analysis()),
         ("8d. Six-way material family comparison (Gd, Gd5Si2Ge2-fixed, GD/LAFESIH/MNFEPSI-tuned, LAFESIH-nanocomposite; Track A2 item + Phase 22 item 2)",
@@ -1011,6 +1022,9 @@ def main():
          "(core/magnet_geometry.py, Phase 19)",
          None),  # handled specially below, result (magnet_geometry_result) captured
                  # for the executive summary
+        ("11e. Magnet-geometry Pareto sensitivity: production-settings, multi-seed "
+         "stability check (core/magnet_geometry.py, Paper-Mining Pass review item 4)",
+         lambda: magnet_geometry.run_magnet_geometry_multiseed_stability_check()),
         ("12. Figure generation: 34 figures covering validation, AMR curves, "
          "cascade/graded staging, sensitivity, RSM, NSGA-III, economics, emissions, "
          "Tc-broadening, nanocomposite robustness, thermal-diode, fluid-MCE, passive "
@@ -1044,17 +1058,23 @@ def main():
     pp_best_cop_row = None
     hysteresis_result = None
     magnet_geometry_result = None
+    magnet_geometry_multiseed_result = None
     fluid_mce_result = None
     passive_regen_result = None
     cycle_type_result = None
     thermal_diode_rows = None
+    curie_shift_v2_result = None
+    astronautics_giguere_result = None
 
     for name, fn in stages:
         _banner(name)
         t0 = time.time()
         try:
             with contextlib.redirect_stdout(_StreamToLogger(logger)):
-                if name.startswith("2."):
+                if name.startswith("1."):
+                    curie_shift_v2_result = fn()[-1]  # (run_validation(), run_giguere_gd_extension(),
+                                                        # run_curie_shift_check(), run_curie_shift_check_v2())
+                elif name.startswith("2."):
                     system_validation_results = validation_system.run_system_validation()
                     validation_system.run_field_sensitivity_check()
                     validation_system.run_capacity_only_calibration_check()
@@ -1085,6 +1105,8 @@ def main():
                     graded_rows = run_graded_cascade_comparison(cascade_rows_gd)
                 elif name.startswith("7c."):
                     astro_result = fn()
+                elif name.startswith("7e."):
+                    astronautics_giguere_result = fn()
                 elif name.startswith("3c."):
                     fn()
                     # Cheap (sub-second), non-printing re-sweep purely to capture
@@ -1112,6 +1134,8 @@ def main():
                     # printed, file-writing version of this same sweep.
                     thermal_diode_rows = thermal_diode_analysis.sweep_frequency_with_and_without_diode(
                         verbose=False)
+                elif name.startswith("11e."):
+                    magnet_geometry_multiseed_result = fn()
                 elif name.startswith("11d."):
                     magnet_geometry.run_magnet_geometry_analysis()
                     magnet_geometry_result = magnet_geometry.run_geometric_cost_pareto_sensitivity()
@@ -1143,6 +1167,7 @@ def main():
                         pp_best_cop_row=pp_best_cop_row,
                         cycle_type_result=cycle_type_result,
                         thermal_diode_rows=thermal_diode_rows,
+                    
                     )
                 elif name.startswith("14."):
                     fluid_mce_result = fluid_mce_analysis.run_fluid_mce_analysis()
@@ -1184,6 +1209,8 @@ def main():
                      "magnet_geometry_pareto_sensitivity.txt, "
                      "pareto_front_magnet_flat.csv, pareto_front_magnet_geometric.csv "
                      "(Phase 19), "
+                     "magnet_geometry_multiseed_stability.txt "
+                     "(Paper-Mining Pass review item 4), "
                      "fluid_mce_analysis.txt (Phase 20), "
                      "passive_regenerator_analysis.txt (Phase 21), "
                      "geometry_optimization_analysis.txt, graded_cascade_comparison.csv, "
@@ -1194,13 +1221,13 @@ def main():
                               material_rows, pareto_rows, pb_best_cop_row,
                               pp_best_cop_row, hysteresis_result,
                               magnet_geometry_result, fluid_mce_result,
-                              passive_regen_result, failures)
+                              passive_regen_result, failures, curie_shift_v2_result, astronautics_giguere_result, magnet_geometry_multiseed_result)
 
 
 def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, material_rows,
                               pareto_rows, pb_best_cop_row, pp_best_cop_row,
                               hysteresis_result, magnet_geometry_result, fluid_mce_result,
-                              passive_regen_result, failures):
+                              passive_regen_result, failures, curie_shift_v2_result, astronautics_giguere_result, magnet_geometry_multiseed_result):
     """Final, well-structured overview of every implemented analysis and
     its headline metric, printed once at the very end of the run so a
     reader does not have to scroll back through 13 stages of log output
@@ -1220,6 +1247,22 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
     logger.info("  - System-level: calibrated against 16 published AMR prototype/benchmark rows "
                 "(data/amr_experimental_benchmarks.csv), including a 6-layer Curie-graded "
                 "La(Fe,Si)13Hy reproduction of Astronautics_rotary_2014")
+    if curie_shift_v2_result and _ok("1."):
+        status = curie_shift_v2_result["status"]
+        if status == "fit_succeeded":
+            logger.info(f"  - Phenomenological Curie-shift patch (step 1, Paper-Mining Pass "
+                        f"review item 3): fit SUCCEEDED, curie_shift_K_per_T="
+                        f"{curie_shift_v2_result['curie_shift_K_per_T']:.2f} reproduces a "
+                        f"{curie_shift_v2_result['fitted_slope_K_per_T']:.2f} K/T peak-shift "
+                        f"rate on GADOLINIUM_FIELD_SHIFTED (plain GADOLINIUM unchanged)")
+        else:
+            logger.info("  - Phenomenological Curie-shift patch (step 1, Paper-Mining Pass "
+                        "review item 3): implemented and tested, confirmed NOT to reproduce "
+                        "Dan'kov et al.'s ~6 K/T shift for a specific, code-confirmed structural "
+                        "reason (the H=0 reference entropy DeltaS_M(T,H) is measured against is "
+                        "structurally blind to a field-only Tc shift) -- see this function's own "
+                        "printed diagnostic above and core/validation.py's "
+                        "calibrate_curie_shift()/diagnose_curie_shift_block() docstrings")
     if _ok("2c."):
         logger.info("  - Calibration-failure root cause (step 2c, Paper-Mining Pass review item "
                      "1): checks, per NO-CALIBRATION-FOUND row, whether span already exceeds "
@@ -1260,6 +1303,18 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
                         f"(results/cascade_comparison.csv, results/graded_cascade_comparison.csv)")
     else:
         logger.info("  - unavailable (stage failed or was skipped)")
+    if astronautics_giguere_result and _ok("7e."):
+        base_err = astronautics_giguere_result["baseline"].get("COP_error_pct")
+        corr_err = astronautics_giguere_result["corrected"].get("COP_error_pct")
+        improves = astronautics_giguere_result["correction_improves"]
+        logger.info(f"  - Astronautics_rotary_2014 Giguere-correction sensitivity (step 7e, "
+                    f"Paper-Mining Pass review item 2): uncorrected COP_error={base_err}% -> "
+                    f"Giguere-corrected COP_error={corr_err}% "
+                    f"({'narrows the error' if improves else 'does NOT narrow the error'}) "
+                    f"-- {'consistent with' if not improves else 'contrary to'} the existing "
+                    "honesty flag that DTAD_CORRECTION_FACTOR was never shown to transfer from "
+                    "Gd5Si2Ge2 to La(Fe,Si)13Hy; see core/cascade.py's "
+                    "run_astronautics_giguere_correction_sensitivity() docstring")
 
     logger.info("Material family ranking (Gd / Gd5Si2Ge2 / GD- / LAFESIH- / MNFEPSI-tuned families)")
     if material_rows and _ok("8d."):
@@ -1355,6 +1410,18 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
                     "publication-quality answer rather than a directional sensitivity check")
     else:
         logger.info("  - unavailable (stage failed or was skipped)")
+
+    if magnet_geometry_multiseed_result and _ok("11e."):
+        per_seed = magnet_geometry_multiseed_result["per_seed"]
+        stable = magnet_geometry_multiseed_result["stable"]
+        seed_summary = "; ".join(
+            f"seed{s['seed']}: {s['mean_flat_T']:.2f}T->{s['mean_geometric_T']:.2f}T"
+            for s in per_seed)
+        logger.info(f"  - Magnet-geometry Pareto sensitivity, production-settings multi-seed "
+                    f"stability check (step 11e, Paper-Mining Pass review item 4): "
+                    f"{'STABLE' if stable else 'NOT STABLE'} ({seed_summary}) -- "
+                    f"{'the geometric cost term consistently pulls mean field down at every seed checked' if stable else 'at least one seed reverses direction, so the mean-field effect is seed-dependent / not reliably signed'} "
+                    "-- see results/magnet_geometry_multiseed_stability.txt")
 
     logger.info("Consolidated design recommendations (step 13)")
     logger.info("  - Ranks all COP-maximization levers above by demonstrated Sobol "

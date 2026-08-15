@@ -60,11 +60,61 @@ class MagnetocaloricMaterial:
     theta_D: float       # Debye temperature, K (lattice heat capacity)
     n_atoms_per_fu: int = 1   # atoms per formula unit contributing lattice modes
     source: str = ""
+    curie_shift_K_per_T: float = 0.0
+    # Phenomenological field-shift of the Curie point, d(Tc_eff)/d(mu0*H),
+    # K per Tesla. Added directly in response to run_curie_shift_check()'s
+    # (core/validation.py) documented null result: the plain Brillouin
+    # mean-field construction below has NO mechanism for the ordering
+    # temperature itself to move with applied field (DeltaS_M(T,H) is built
+    # from the same free-energy form at every field, so its peak-location
+    # symmetry cannot shift under that construction alone -- see that
+    # function's docstring for the full argument). This parameter does NOT
+    # emerge from the Brillouin physics; it is a deliberate, explicit patch:
+    # the molecular-field constant used when evaluating a NONZERO applied
+    # field is derived from an effective Tc_eff(H) = Tc + curie_shift_K_per_T
+    # * mu0*H rather than the fixed zero-field Tc (see _lambda_for_field()
+    # below). Default 0.0 exactly reproduces this class's original behavior
+    # for every material that doesn't opt in -- GADOLINIUM, GD5SI2GE2 and
+    # LACAMNO3 below are all UNCHANGED by this addition. A separate,
+    # explicitly-shifted instance (GADOLINIUM_FIELD_SHIFTED, see below) is
+    # what core/validation.py's calibration/sensitivity check actually
+    # exercises, precisely so this addition cannot silently change any
+    # existing result that depends on the plain GADOLINIUM instance.
+    #
+    # Whether Tc_eff(H) is the physically "correct" mechanism behind
+    # Dan'kov et al.'s reported ~6 K/T shift is NOT established here --
+    # real explanations in the literature (de Oliveira & von Ranke, Phys.
+    # Rep. 489 (2010) 89-159, already cited by run_curie_shift_check())
+    # invoke short-range-correlation/critical-fluctuation physics well
+    # outside a Weiss mean-field treatment. This is a phenomenological knob
+    # fit to reproduce the reported SHIFT RATE, not a first-principles
+    # derivation of it -- see core/validation.py's calibrate_curie_shift()
+    # for the fit and its own honest accounting of what this trades away.
 
     def __post_init__(self):
         self.N = NA / self.M_molar          # spins per kg
         # Weiss molecular field constant from Tc (mean-field relation)
         self.lam = (3 * kB * self.Tc) / (
+            self.N * (self.g ** 2) * (muB ** 2) * self.J * (self.J + 1) * mu0
+        )
+
+    def _lambda_for_field(self, H):
+        """Molecular-field constant to use when evaluating field H.
+
+        Returns the fixed self.lam unchanged (bit-for-bit) whenever
+        curie_shift_K_per_T is 0.0 -- the default, and the value every
+        pre-existing material in this module's library uses. Only
+        materials that explicitly opt into a nonzero curie_shift_K_per_T
+        get a field-dependent, Tc_eff(H)-derived molecular-field constant
+        instead. H is expected to be a scalar (A/m) -- every call site in
+        this repo passes a scalar applied field, never a per-point array
+        (confirmed by inspection of every magnetization()/entropy_magnetic()
+        call site in core/), so no array-broadcast handling is implemented.
+        """
+        if self.curie_shift_K_per_T == 0.0:
+            return self.lam
+        Tc_eff = max(self.Tc + self.curie_shift_K_per_T * (mu0 * float(H)), 1.0)
+        return (3 * kB * Tc_eff) / (
             self.N * (self.g ** 2) * (muB ** 2) * self.J * (self.J + 1) * mu0
         )
 
@@ -122,11 +172,12 @@ class MagnetocaloricMaterial:
         T_safe = np.maximum(T, 1e-6)
         Msat = self.N * self.g * muB * self.J
         c = (self.g * muB * self.J * mu0) / (kB * T_safe)
+        lam_H = self._lambda_for_field(H)
         M = np.full_like(T_safe, Msat * 0.5)
         for _ in range(max_iter):
-            x = c * (H + self.lam * M)
+            x = c * (H + lam_H * M)
             F = M - Msat * self._brillouin(x, self.J)
-            Fp = 1.0 - Msat * self._brillouin_deriv(x, self.J) * c * self.lam
+            Fp = 1.0 - Msat * self._brillouin_deriv(x, self.J) * c * lam_H
             Fp_safe = np.where(np.abs(Fp) > 1e-12, Fp, 1e-12)
             M_new = np.clip(M - F / Fp_safe, 0.0, Msat)
             if np.max(np.abs(M_new - M)) < tol * Msat:
@@ -172,7 +223,8 @@ class MagnetocaloricMaterial:
         """Magnetic entropy per kg, J/(kg K), from Brillouin free energy."""
         T = np.atleast_1d(np.asarray(T, dtype=float))
         M = self.magnetization(T, H)
-        x = (self.g * muB * self.J * mu0 * (H + self.lam * M)) / (kB * np.maximum(T, 1e-6))
+        lam_H = self._lambda_for_field(H)
+        x = (self.g * muB * self.J * mu0 * (H + lam_H * M)) / (kB * np.maximum(T, 1e-6))
         a = (2 * self.J + 1) / (2 * self.J)
         b = 1 / (2 * self.J)
         term = self._log_sinh_ratio(a, b, x)
@@ -329,4 +381,34 @@ LACAMNO3 = MagnetocaloricMaterial(
     n_atoms_per_fu=5,
     source="Guo et al., Appl. Phys. Lett. 78, 1142 (1997); Phan & Yu, "
            "J. Magn. Magn. Mater. 308 (2007) 325-340 (review)",
+)
+
+# GADOLINIUM_FIELD_SHIFTED: identical to GADOLINIUM in every parameter
+# except curie_shift_K_per_T, which core.validation.calibrate_curie_shift()
+# fits to reproduce Dan'kov et al. (1998)'s reported ~6 K/T Curie-point
+# field-shift rate over their own stated 2-7.5 T range (see that module's
+# docstring). Deliberately kept as a SEPARATE instance rather than mutating
+# GADOLINIUM in place -- every other module in this repo (amr_cycle.py,
+# cascade.py, plots.py, validation_system.py, ...) imports GADOLINIUM
+# directly and its existing calibration/validation numbers (run_validation(),
+# the whole system-level benchmark suite) all assume the ORIGINAL,
+# curie_shift_K_per_T=0.0 behavior. curie_shift_K_per_T=0.0 here as a
+# placeholder value only; core.validation.calibrate_curie_shift() overwrites
+# it via dataclasses.replace() when the fit is actually run, and
+# core/validation.py's own module-level constant
+# GADOLINIUM_FIELD_SHIFTED_RATE_K_PER_T records whatever rate the last fit
+# converged to. See core/validation.py's run_curie_shift_check_v2() for the
+# resulting peak-shift comparison AND the honest accounting of what this
+# phenomenological patch trades away elsewhere (it is a Tc_eff(H) knob, not
+# new physics -- see the curie_shift_K_per_T field docstring above).
+GADOLINIUM_FIELD_SHIFTED = MagnetocaloricMaterial(
+    name="Gd (polycrystalline, phenomenological Curie-shift patch)",
+    Tc=GADOLINIUM.Tc, J=GADOLINIUM.J, g=GADOLINIUM.g, M_molar=GADOLINIUM.M_molar,
+    theta_D=GADOLINIUM.theta_D, n_atoms_per_fu=GADOLINIUM.n_atoms_per_fu,
+    source=GADOLINIUM.source + " -- with an added phenomenological "
+           "curie_shift_K_per_T fit to Dan'kov et al. (1998)'s reported Curie-"
+           "point field-shift rate (see core/validation.py's "
+           "calibrate_curie_shift()); NOT part of the original calibration "
+           "and NOT used by any other module in this repo.",
+    curie_shift_K_per_T=0.0,  # overwritten by calibrate_curie_shift()
 )

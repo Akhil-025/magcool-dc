@@ -1,0 +1,17 @@
+============================================================================================
+CALIBRATION-FAILURE ROOT-CAUSE DIAGNOSTIC (Paper-Mining Pass review item 1)
+============================================================================================
+11 benchmark row(s) did not calibrate within mdot in [1e-6,5] kg/s. Checking directly whether raising that upper bound would have helped, per row:
+  Astronautics_rotary_2014         span=  11.0K  dTad_noload=   0.02K  margin(2*dTad-span)=  -10.96K  -> structural (span exceeds achievable no-load dTad)
+  DTU_Eriksen_MAGGIE_2016          span=  15.5K  dTad_noload=   5.94K  margin(2*dTad-span)=   -3.62K  -> structural (span exceeds achievable no-load dTad)
+  Risoe_DTU_Gd_2011                span=  30.0K  dTad_noload=   3.10K  margin(2*dTad-span)=  -23.80K  -> structural (span exceeds achievable no-load dTad)
+  Lozano_POLO_UFSC_2016_r1         span=   7.1K  dTad_noload=   3.17K  margin(2*dTad-span)=   -0.75K  -> structural (span exceeds achievable no-load dTad)
+  Lozano_POLO_UFSC_2016_r2         span=   7.9K  dTad_noload=   3.23K  margin(2*dTad-span)=   -1.44K  -> structural (span exceeds achievable no-load dTad)
+  Lozano_POLO_UFSC_2016_r3         span=   7.1K  dTad_noload=   3.17K  margin(2*dTad-span)=   -0.75K  -> structural (span exceeds achievable no-load dTad)
+  Lozano_POLO_UFSC_2016_r5         span=   6.5K  dTad_noload=   3.13K  margin(2*dTad-span)=   -0.24K  -> structural (span exceeds achievable no-load dTad)
+  ChubuToshiba_Gd_2016_4T          span=  26.0K  dTad_noload=  12.97K  margin(2*dTad-span)=   -0.06K  -> structural (span exceeds achievable no-load dTad)
+  ChubuToshiba_Gd_2016_2T          span=  24.0K  dTad_noload=   7.38K  margin(2*dTad-span)=   -9.24K  -> structural (span exceeds achievable no-load dTad)
+  Cooltech_2013_rotary             span=  42.0K  dTad_noload=   1.50K  margin(2*dTad-span)=  -38.99K  -> structural (span exceeds achievable no-load dTad)
+  DTU_MagQueen_2018                span=  25.0K  dTad_noload=   0.01K  margin(2*dTad-span)=  -24.97K  -> structural (span exceeds achievable no-load dTad)
+--------------------------------------------------------------------------------------------
+CONCLUSION: 11/11 failures are STRUCTURAL -- span exceeds twice the field/T_mid's own no-load dTad, so Qc_model(mdot)=0 for EVERY mdot (verified directly from cooling_capacity()'s own dTad_noload term, not assumed); widening the calibration search's mdot upper bound above 5 kg/s CANNOT change the outcome for these rows, including the largest/most data-center-relevant devices (Astronautics_rotary_2014, DTU_MagQueen_2018, Risoe_DTU_Gd_2011, Cooltech_2013_rotary). 0/11 would have calibrated with a wider search window (required mdot reported per-row above) -- for those rows the default [1e-6,5] kg/s bound genuinely was too narrow. 0/11 remain unresolved even at a much wider search and need separate investigation rather than a bound change.
