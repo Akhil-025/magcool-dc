@@ -1724,3 +1724,282 @@ Fix. `plot_hysteresis_sensitivity(precomputed=None)` and `plot_magnet_geometry_p
 Verified, not just asserted: a direct before/after timing check (`core/plots.py`, `pop_size=8/n_gen=3` for speed) showed `plot_hysteresis_sensitivity()` drop from ~5.0s (fresh NSGA-III rerun) to ~0.36s (chart rendering only) when `hysteresis_result` is supplied. At the pipeline's own production settings this removes roughly 25-30s from a full `python main.py` run (fig33's ~9s rerun plus fig34's ~19s two-rerun cost), with `results/figures/fig33_*`/`fig34_*` unchanged in content since the input data is identical, only its provenance (reused vs. recomputed) changed.
 
 Backward compatibility. Both functions' `precomputed=None` default reproduces the exact pre-fix behavior for every existing caller — `python plots.py` standalone, and `tests/test_plots.py`'s generic `fn()`-with-no-args parametrization — unchanged. No new test was needed for the same reason Phase 23's fig08 change needed none: the existing generic figure-smoke-test already exercises the no-argument fallback path for both functions, and the reused-data path is exercised for every other figure already following this pattern; a spot check (see above) additionally confirmed the reused path is actually taken and is actually faster, not just non-crashing. Full suite (`tests/test_plots.py`, `tests/test_hysteresis_sensitivity.py`, `tests/test_magnet_geometry.py`, `tests/test_main.py`): 66/66 passing, zero regressions.
+## Phase 24 — Ga1-xCMn3+x antiperovskite material family, and a full verification pass on a user-supplied "10 realistic materials" document — done (1 of 10 items implemented; 9 deferred/rejected, each with a stated reason)
+
+Motivation. The user supplied a document (no citations of its own) proposing
+10 "realistic, physically viable magnetocaloric materials" for data-center
+AMR cooling, plus four areas of model-logic change (material property
+definitions, hysteresis-loss integration, cost/BOM, NSGA-III search-space
+registration). Per this repo's own standing rule (see every prior phase's
+own honesty flags): no number goes into the codebase without being checked
+against a real source first. This phase is that check, item by item,
+followed by implementing the one candidate that came out of it as a
+genuinely new, literature-grounded, non-redundant addition.
+
+**Verification methodology.** Each of the document's 10 items was searched
+against the primary literature (not re-derived from the document's own
+prose) before any code was written. Results below, in the document's own
+numbering.
+
+1. **(Mn,Fe,V)2(P,Si), V-substituted Fe2P-type silicides — CONFIRMED, but
+   already covered by this repo's existing MNFEPSI_FAMILY.** Lai, Huang,
+   You, Maschek, Zhou, van Dijk & Brück, "Giant magnetocaloric effect for
+   (Mn,Fe,V)2(P,Si) alloys with low hysteresis" (ScienceDirect, 2023/2024)
+   directly confirms the document's own headline number: V-substitution of
+   Fe (y=0.02) in Mn1.17-xFe0.73-yV0.02P0.5Si0.5 gives thermal hysteresis as
+   low as 0.6K, with |DeltaS_M|~9.2 J/kg at 1T. A second paper (Ghorai et
+   al., Phys. Rev. B 107, 104409 (2023), and the Delft "Tuning the
+   magneto-elastic transition of (Mn,Fe,V)2(P,Si) alloys to low magnetic
+   field applications" paper) confirms the same direction independently.
+   This is real. It is also a COMPOSITION VARIANT of the same Fe2P-type
+   (Mn,Fe)2(P,Si) system core/first_order_mce.py's MNFEPSI_FIRST_ORDER /
+   MNFEPSI_FAMILY already implements -- not a new material family. **Not
+   wired in this phase**: the located sources report thermal hysteresis
+   width (ΔT_hys, in K) for the V-substituted composition, not a hysteresis
+   LOSS figure in J/kg (the unit `hysteresis_loss_J_per_kg` needs, per
+   MNFEPSI_FIRST_ORDER's own existing honesty flag on this exact gap).
+   Converting a ΔT_hys width to a J/kg loop-area loss needs the local
+   entropy/latent-heat jump for THIS specific composition, which was not
+   located in this pass. Flagged here as a good, concretely-scoped Phase 25
+   follow-up (a targeted re-read of Lai et al. 2023/2024 and Ghorai et al.
+   2023 for a directly reported Wy_peak or hysteresis-loop-area number),
+   not attempted here to avoid inventing the conversion.
+
+2. **Melt-spun, grain-refined La(Fe,Co,Si)13Hy — plausible, real technique,
+   not independently re-verified with a specific number this pass.**
+   Rapid solidification / melt-spinning to refine La(Fe,Si)13-family grain
+   size and cut hysteresis is an established technique in the magnetocaloric
+   literature (Katter et al. and others). This repo's own LAFESIH_FAMILY
+   already models the La(Fe,Si)13Hy system's Tc-tunability; grain
+   engineering would be a hysteresis-only refinement of the SAME family
+   (analogous to item 1's relationship to MNFEPSI_FAMILY), not a new
+   candidate. **Not implemented**: no specific J/kg hysteresis-reduction
+   figure for this exact technique was pulled and checked in this pass;
+   listed as a Phase 25 candidate alongside item 1.
+
+3. **"GaCMn3" — the document's claim is WRONG as stated, replaced with the
+   real, literature-grounded match — IMPLEMENTED this phase.** The document
+   asserted GaCMn3 has a "sharp first-order transition around 296K" with
+   RCP~2.1 J/cm^3 at 2T. Checked directly: the STOICHIOMETRIC compound
+   Mn3GaC undergoes its large-MCE antiferromagnetic<->ferromagnetic
+   transition at Tt=159-165K (Lewis et al.; Wang et al., Europhys. Lett. 85,
+   47004 (2009); multiple independent sources agree), not 296K. A
+   carbon-deficient variant (GaC0.78Mn3) does reach Tc~295K, but its own
+   reported entropy change there is only 3.7 J/kg/K at 5T -- far below
+   giant-MCE magnitude, and its own Tc-tunability across a composition
+   range is not characterized in the accessible literature. The number the
+   document actually quoted (RCP=2.1 J/cm^3) IS real, but belongs to a
+   DIFFERENT, correctly-cited composition series -- Ga1-xCMn3+x (x=0, 0.06,
+   0.07, 0.08; Wang, Tong, Sun et al., J. Appl. Phys. 105, 083907 (2009),
+   arXiv:0905.1777) -- and occurs at 45 kOe = 4.5T, not 2T. That paper
+   reports Tc tunable from 250.0K (x=0) to 323.5K (x=0.08) via Mn-excess
+   doping, and explicitly states "no observable hysteresis during cooling
+   and warming... indicates the existence of a second-order transition"
+   -- i.e. this family is both room-temperature-tunable AND genuinely
+   hysteresis-free, unlike every other giant-MCE (first-order) family
+   already in this repo. This is the material actually implemented this
+   phase -- see below.
+
+4. **Ce-doped La1-xCex(Fe,Si)13Hy — plausible, real technique, not
+   independently re-verified with a specific number this pass.** Partial
+   Ce-for-La substitution to lower the hydrogenation pressure needed for
+   La(Fe,Si)13Hy processing is a real, published technique (Fujita/Fujieda-
+   group and related work). Like items 1-2, this is a processing/
+   composition refinement of the EXISTING LAFESIH_FAMILY, not a new
+   tunable family -- the document's own framing ("allows precise
+   Curie-temperature tuning ... without relying on pure, expensive
+   Lanthanum") is a cost/manufacturing claim, not a new Tc-vs-composition
+   relationship distinct from what lafesih_composition_tuned_material()
+   already models via with_Tc()-style Tc substitution. **Not implemented**:
+   no specific number was pulled and checked this pass.
+
+5. **Fe5Si3-family silicides, N/P-doped for room temperature — CONFIRMED
+   real, but not room-temperature as a clean baseline the way the document
+   implied.** Cao et al., "Magnetocaloric Effect in Lightly-Doped Fe5Si3
+   Single Crystals," Adv. Phys. Res. (2023) confirms: elemental/binary
+   Fe5Si3's desired high-MCE structure is metastable only from 1098-1303K;
+   Mn+P co-doping (Fe4.83Mn0.16Si2.91P0.09) stabilizes a first-order
+   magneto-elastic transition down to 348K -- above, not within, this
+   repo's 285-305K ASHRAE target range, and the source paper does not
+   report a composition series reaching lower. The document's specific
+   claim ("Fe4N-Doped Fe5Si3... shifts Tc from high ranges down to
+   290-300K") was not found in this search pass -- the closest verified
+   result (Cao et al.) uses Mn+P codoping, lands at 348K, and does not
+   mention nitrogen doping at all. **Not implemented**: the document's
+   specific N-doping/290-300K claim could not be confirmed, and the
+   confirmed alternative (Cao et al.'s 348K composition) sits outside this
+   repo's operating range, so there is no verified data point to add.
+
+6. **La0.7Sr0.3MnO3 (LSMO) and doped variants — CONFIRMED real and
+   promising, genuinely NOT redundant with any family already in this
+   repo, but NOT implemented this phase (deferred to Phase 25).** Multiple
+   independent papers confirm: LSMO-family manganites undergo a
+   second-order (zero-hysteresis) transition, are corrosion-resistant, and
+   their Tc is composition-tunable across almost exactly this repo's
+   ASHRAE target window via A/B-site doping -- e.g. La0.7Sr0.15Ca0.15Mn0.95
+   Fe0.05O3: Tc=289.5K; …Ni0.05O3: Tc=300K (Applied Physics A, 2025);
+   La0.6Ca0.3Sr0.1MnO3: Tc=304K, |DeltaS_M|=5.26 J/(kg K) at 5T (PMC9078686,
+   2022); undoped La0.7Sr0.3MnO3 itself can run as high as ~367-369K
+   depending on preparation/pressure (iScience, 2025; HAL hal-01016988).
+   This is a genuinely distinct family from GA1XCMN3X_FAMILY (implemented
+   below) -- different chemistry, different Tc-doping mechanism, its own
+   citable Tc(x) table across at least 3 real compositions. **Why deferred
+   rather than implemented alongside GA1XCMN3X_FAMILY this pass**: the
+   located sources give Tc(composition) and peak DeltaS_M at 5T for SPECIFIC
+   named compositions but not a single paper's own internally consistent
+   Tc(x) SERIES the way Wang et al. (2009) gives one for Ga1-xCMn3+x (item
+   3) or Hanggai et al. (2026) already gives this repo's own MNFEPSI_FAMILY
+   -- building a defensible tuned_fn()-style composition interpolation
+   would mean combining Tc/DeltaS_M numbers across several different
+   papers' different dopants (Fe vs Ni vs Ca vs Sr vs pressure), which is a
+   weaker evidentiary basis than this phase's other candidate. Recorded
+   here, not silently dropped, as a good next-phase item with its own
+   citation trail already assembled above.
+
+7. **Polymer-bonded La(Fe,Si)13 matrix composites — real, established
+   engineering technique; out of scope for this repo's material-property
+   models.** Embedding MCM particles in an epoxy/metallic binder to prevent
+   cyclic mechanical fatigue is a genuine, published AMR engineering
+   practice (Bahl et al. and others). It is a REGENERATOR MECHANICAL/
+   PACKAGING consideration (bed integrity, pressure-drop, particle
+   crumbling), not a magnetic-property or Tc-tunability claim -- none of
+   this repo's material property models (mce_material.py,
+   first_order_mce.py, this phase's antiperovskite_material.py) represent
+   mechanical durability or particle-bed structural fatigue at all, so
+   there is no existing numeric slot for it to land in. **Not implemented**,
+   consistent with Phase 22 item 3's own precedent for declining to build a
+   model where the plan/evidence doesn't support a specific numeric
+   deliverable.
+
+8. **(Mn,Fe)2(P,Si,B), boron-doped — CONFIRMED real, already covered by
+   this repo's existing MNFEPSI_FAMILY.** Multiple sources (the PMC5344570
+   "Tuneable Giant Magnetocaloric Effect in (Mn,Fe)2(P,Si) Materials by
+   Co-B and Ni-B Co-Doping" review; "Structural and magnetocaloric
+   properties of (Mn,Fe)2(P,Si) materials with added nitrogen") confirm:
+   boron substitution on the P/Si site is a real, well-studied way to cut
+   thermal hysteresis in this same Fe2P-type system, at the cost of a
+   strong TC increase that complicates independent TC tuning. Exactly the
+   same "real technique, same underlying family, no J/kg figure located"
+   situation as items 1-2 above -- not a new material family. **Not
+   implemented** for the same hysteresis-unit-conversion reason as item 1.
+
+9. **Multi-phase La(Fe,Si)13Hy blends — ALREADY IMPLEMENTED, before this
+   document existed.** This is exactly core/nanocomposite_material.py's
+   `WeightedMaterialEnsemble` / `NANOCOMPOSITE_FAMILY` (Phase 22 item 2,
+   closed well before this phase started) -- a triangular-weighted blend of
+   three composition-tuned LAFESIH_FAMILY phases spread around a per-span
+   Tc target, already wired into material_family_comparison.py's
+   TUNABLE_FAMILIES and validated with its own robustness check
+   (results/nanocomposite_robustness.txt). No new work needed; noted here
+   only so this verification pass covers all 10 of the document's items
+   explicitly rather than silently skipping the one that turned out to
+   already exist.
+
+10. **Mn1.2Fe0.8P0.55Ge0.45, Ge-stabilized Fe2P-type — plausible direction
+    (Ge-for-Si substitution in Fe2P-type Mn-Fe-P-(Si,Ge) systems is a real,
+    published substitution axis), not independently re-verified with this
+    exact composition/number in this pass.** Same relationship to
+    MNFEPSI_FAMILY as items 1 and 8 (a substitution variant of the same
+    Fe2P-type system, not a new family). **Not implemented**: this specific
+    composition and its claimed field range were not located and checked
+    against a primary source this pass.
+
+**What was actually built this phase.** Item 3's corrected match --
+Ga1-xCMn3+x -- is the one candidate from this document that is (a) a
+genuinely new material family not already covered by GD_FAMILY/
+LAFESIH_FAMILY/MNFEPSI_FAMILY/NANOCOMPOSITE_FAMILY, (b) backed by one
+internally-consistent paper's own directly-measured Tc(x) series spanning
+almost exactly the ASHRAE target range, and (c) confirmed second-order/
+hysteresis-free by that same paper, not merely assumed. New module
+core/antiperovskite_material.py: `GA1XCMN3X_REF` (the x=0.07, Tc=296.5K
+reference composition) and `ga1xcmn3x_composition_tuned_material()`, built
+by reusing core.mce_material.MagnetocaloricMaterial's existing `with_Tc()`
+method (Phase 22 item 1) rather than writing new mean-field machinery --
+appropriate specifically because this is a second-order family, unlike
+GD_FAMILY/LAFESIH_FAMILY/MNFEPSI_FAMILY's first-order Landau treatment.
+
+**HONESTY FLAG on calibration** (see the module's own docstring for the
+full version): GADOLINIUM and LACAMNO3 each have (J, g, theta_D) chosen so
+the model's own DeltaS_M/DeltaT_ad reproduces a directly digitized
+literature target. No such digit-for-digit target exists for THIS family
+in the sources located here -- Wang et al. (2009) report Tc(x) and one RCP
+figure in J/cm^3 (not a peak DeltaS_M in J/(kg K), and RCP is an integrated
+area, not a peak value), and converting it would need this alloy's density,
+which was not located either. So J=1.5 and theta_D=380K are explicitly
+flagged, illustrative placeholders (same rough order as this repo's other
+3d-transition-metal room-temperature MCE compounds), NOT fitted values --
+unlike every other calibrated material in this repo. Only (a) this
+family's Tc and its 250.0-323.5K tunable window, and (b) its second-order/
+zero-hysteresis character, are literature-grounded; its absolute Qc/COP
+magnitude in material_family_comparison.py should be read as weaker
+evidence than GD_FAMILY/LAFESIH_FAMILY/MNFEPSI_FAMILY's own numbers.
+
+Integration points (all four of the document's requested areas, for this
+one candidate). (1) Material property definitions:
+core/antiperovskite_material.py, as above. (2) Hysteresis-loss
+integration: NOT applicable in the usual sense -- this family reuses
+MagnetocaloricMaterial (no hysteresis_loss_J_per_kg field at all, same as
+GADOLINIUM/LACAMNO3), and this is directly literature-confirmed rather than
+just a byproduct of the model's mathematical form (Wang et al.'s own "no
+observable hysteresis" finding). (3) Economics: core/economics.py's
+`MCM_COST_PER_KG_BY_FAMILY` gains a `"Ga1-xCMn3+x"` entry -- Wang et al.
+describe the raw materials only qualitatively as "inexpensive and
+innoxious," no $/kg digit given, so it is left at the Gd-price placeholder,
+the SAME conservative convention `(Mn,Fe)2(P,Si)` already uses for the
+identical missing-digit situation. (4) Optimizer search space:
+core/cascade.py gains `GA1XCMN3X_FAMILY` (a `GradedFamily`, registered in
+`_family_name()`/`_resolve_family()` for the Phase 16 process-pool path
+too); core/material_family_comparison.py's `TUNABLE_FAMILIES` and
+core/optimize.py's `_material_candidates()` both pick it up automatically
+through their existing generic loops -- no new main.py pipeline stage was
+needed, since both of those are already invoked generically by main.py's
+existing steps.
+
+Tests added: tests/test_antiperovskite_material.py (12 new -- reference
+material reproduces Wang et al.'s own x=0.07 Tc exactly; the Tc window
+matches the paper's measured endpoints; all four of the paper's own
+measured Tc points [250.0, 281.5, 296.5, 323.5]K are reproduced exactly by
+`ga1xcmn3x_composition_tuned_material()`; tuning preserves every other
+parameter; out-of-range Tc raises ValueError; boundary Tc values do not
+raise; the material has no hysteresis_loss_J_per_kg field at all
+[consistent with the second-order class]; DeltaT_ad is finite and peaks
+near Tc; the `name=` override works). tests/test_material_family_comparison.py
+and tests/test_plots.py updated: the "six candidates" cardinality guards
+(from Phase 22 item 2) became "seven candidates" guards; core/plots.py's
+`colors6` list (fig26, material-family-comparison bar chart) extended to
+`colors7`.
+
+Verified, not just asserted: `build_comparison_table()` run end-to-end
+across all four representative spans (5/10/15/20K) with the new family
+included -- it correctly reports `in_range=True` at every span (its wide
+73.5K window comfortably covers this repo's whole ASHRAE sweep) and
+correctly falls through to `1stage_COP=None`/only feasible at a 4-stage
+cascade at the narrowest (5K) span, consistent with its own honestly-
+uncalibrated (not artificially inflated) DeltaS_M magnitude rather than
+silently always winning or always losing. tests/test_antiperovskite_material.py
+(12/12), tests/test_material_family_comparison.py (8/8),
+tests/test_economics.py + tests/test_mce_material.py (23/23), and the
+targeted fig26/material-family subset of tests/test_plots.py (2/2) all
+independently re-run and passing after every integration edit.
+
+What this phase deliberately did NOT do: did not implement 9 of the
+document's 10 named materials (items 1-2, 4-5, 7-10 above) -- each has its
+own stated reason (already covered by an existing family with no located
+J/kg hysteresis figure to add; a real technique with no specific number
+checked this pass; a claim that could not be confirmed as stated; a
+mechanical/packaging consideration with no numeric model to extend). Did
+not implement item 6 (LSMO) despite confirming it is real and promising --
+its own evidentiary basis (Tc/DeltaS_M scattered across several different
+papers' different dopants, not one internally-consistent composition
+series) was judged weaker than item 3's, and building a tuned_fn() from it
+here would mean interpolating across sources in a way this repo's existing
+families do not. Did not attempt a general hysteresis-loss-vs-composition
+model for the MNFEPSI system (items 1/8/10 all bear on this) -- the
+specific J/kg-vs-K unit-conversion gap is the same one MNFEPSI_FIRST_ORDER's
+own pre-existing honesty flag already named, and closing it needs a
+targeted re-read of Lai et al. (2023/2024)/Ghorai et al. (2023) for a
+directly reported loss figure, not attempted here. Did not modify any
+EXISTING material's calibration (GADOLINIUM, LACAMNO3, GD5SI2GE2_FIRST_ORDER,
+LAFESIH_FIRST_ORDER, MNFEPSI_FIRST_ORDER, NANOCOMPOSITE_FAMILY) -- this
+phase only adds a new, independent, clearly-flagged-as-uncalibrated
+candidate alongside them.

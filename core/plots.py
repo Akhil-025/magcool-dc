@@ -1229,19 +1229,21 @@ def plot_material_family_comparison(precomputed=None):
     rep = [r for r in rows if r['span_K'] == material_family_comparison.REPRESENTATIVE_SPAN_K]
 
     labels = [r['candidate'].replace(' (', '\n(') for r in rep]
-    colors6 = [COLOR_MAIN, COLOR_POWER, '#85bb65', '#e8a33d', '#7b52ab', '#c2585d']
-    # Phase 22 item 2 added a 6th candidate (nanocomposite); colors6 must
-    # cover exactly as many entries as `rep` -- checked in
+    colors7 = [COLOR_MAIN, COLOR_POWER, '#85bb65', '#e8a33d', '#7b52ab', '#c2585d',
+               '#2f9599']
+    # Phase 22 item 2 added a 6th candidate (nanocomposite); Phase 24 added a
+    # 7th (Ga1-xCMn3+x antiperovskite). colors7 must cover exactly as many
+    # entries as `rep` -- checked in
     # tests/test_plots.py::test_plot_material_family_comparison_color_count_matches_candidates.
-    colors6 = colors6[:len(rep)] if len(rep) <= len(colors6) else (
-        colors6 * (len(rep) // len(colors6) + 1))[:len(rep)]
+    colors7 = colors7[:len(rep)] if len(rep) <= len(colors7) else (
+        colors7 * (len(rep) // len(colors7) + 1))[:len(rep)]
     qc_vals = [r['1stage_Qc_W'] or 0.0 for r in rep]
     cop_vals = [r['1stage_COP'] or 0.0 for r in rep]
     hatches = ['' if r['in_range'] else '//' for r in rep]
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 5.5))
-    bars0 = axes[0].bar(labels, qc_vals, color=colors6, alpha=0.85, edgecolor='white')
-    bars1 = axes[1].bar(labels, cop_vals, color=colors6, alpha=0.85, edgecolor='white')
+    bars0 = axes[0].bar(labels, qc_vals, color=colors7, alpha=0.85, edgecolor='white')
+    bars1 = axes[1].bar(labels, cop_vals, color=colors7, alpha=0.85, edgecolor='white')
     for bars in (bars0, bars1):
         for bar, hatch in zip(bars, hatches):
             bar.set_hatch(hatch)

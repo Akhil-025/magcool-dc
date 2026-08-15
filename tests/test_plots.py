@@ -105,17 +105,18 @@ def test_figure_set_covers_every_function_in_run_all():
 
 def test_plot_material_family_comparison_color_count_matches_candidates(_redirect_plot_output):
     """Phase 22 item 2 added a 6th material-family candidate (the
-    nanocomposite blend). plot_material_family_comparison()'s colors6
-    list must cover at least as many entries as build_comparison_table()
-    returns for the representative span, or matplotlib's bar(color=...)
-    raises a length-mismatch error -- this is the regression guard
-    core/plots.py's own comment above colors6 points to."""
+    nanocomposite blend); Phase 24 added a 7th (Ga1-xCMn3+x antiperovskite).
+    plot_material_family_comparison()'s colors7 list must cover at least as
+    many entries as build_comparison_table() returns for the representative
+    span, or matplotlib's bar(color=...) raises a length-mismatch error --
+    this is the regression guard core/plots.py's own comment above colors7
+    points to."""
     from core import material_family_comparison
 
     rows = material_family_comparison.build_comparison_table()
     rep = [r for r in rows
            if r['span_K'] == material_family_comparison.REPRESENTATIVE_SPAN_K]
-    assert len(rep) == 6
+    assert len(rep) == 7
 
     # Must not raise (this is the actual regression check: an earlier
     # length mismatch here raises inside matplotlib's bar()).

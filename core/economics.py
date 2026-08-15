@@ -247,6 +247,14 @@ MCM_COST_PER_KG_BY_FAMILY = {
     "(Mn,Fe)2(P,Si)": COST_MCM_PER_KG,           # proxy: no $/kg source found
                                                    # (qualitatively "low cost"
                                                    # in the literature only)
+    # Phase 24: Ga1-xCMn3+x antiperovskite (core/antiperovskite_material.py).
+    # Wang et al. (2009) describe the raw materials (Ga, C, Mn) only
+    # qualitatively as "inexpensive and innoxious" -- no $/kg digit is given,
+    # same situation as (Mn,Fe)2(P,Si) above. Left at the Gd price as the
+    # SAME conservative (not artificially cheap) placeholder convention used
+    # for (Mn,Fe)2(P,Si), rather than inventing a number the qualitative
+    # literature only implies should be lower.
+    "Ga1-xCMn3+x": COST_MCM_PER_KG,
 }
 
 

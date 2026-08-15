@@ -8,11 +8,13 @@ from core.material_family_comparison import (
 from core.cascade import GD_FAMILY, LAFESIH_FAMILY, MNFEPSI_FAMILY
 
 
-def test_build_comparison_table_covers_all_six_candidates_per_span():
+def test_build_comparison_table_covers_all_seven_candidates_per_span():
+    # Updated for Phase 24 (adds GA1XCMN3X_FAMILY, the Ga1-xCMn3+x
+    # antiperovskite candidate) -- was 6 candidates as of Phase 22 item 2.
     rows = build_comparison_table(spans_K=(10.0,))
     candidates = {r["candidate"] for r in rows}
-    assert len(candidates) == 6
-    assert len(rows) == 6
+    assert len(candidates) == 7
+    assert len(rows) == 7
 
 
 def test_fixed_candidates_use_the_same_material_across_spans():

@@ -58,6 +58,9 @@ from core.first_order_mce import (composition_tuned_material,
                                     MNFEPSI_TC_MIN_K, MNFEPSI_TC_MAX_K,
                                     GD5SI2GE2_FIRST_ORDER, LAFESIH_FIRST_ORDER,
                                     MNFEPSI_FIRST_ORDER)
+from core.antiperovskite_material import (ga1xcmn3x_composition_tuned_material,
+                                            GA1XCMN3X_TC_MIN_K, GA1XCMN3X_TC_MAX_K,
+                                            GA1XCMN3X_REF)
 
 _LOSS_MODEL = StateDependentLossModel()
 USE_NTU_THERMAL_MODEL = True
@@ -106,6 +109,27 @@ MNFEPSI_FAMILY = GradedFamily(
     tuned_fn=mnfepsi_composition_tuned_material,
     tc_min=MNFEPSI_TC_MIN_K, tc_max=MNFEPSI_TC_MAX_K,
     reference_material=MNFEPSI_FIRST_ORDER, fallback_material=GADOLINIUM,
+)
+
+# Phase 24: fourth pluggable family, Ga1-xCMn3+x (see
+# core/antiperovskite_material.py for the full literature-verification
+# writeup -- this is NOT the material a user-supplied "10 materials"
+# document named ("GaCMn3" at ~296K), which turned out on checking to be
+# a wrong Tc for the stoichiometric compound; this is the real,
+# literature-measured, second-order, hysteresis-free, Tc-tunable
+# composition series that document was gesturing toward).
+# reference_material's Tc/peak-vs-Tc offset is only used to SEED
+# _target_composition_for_peak()'s root-find below -- for a second-order
+# mean-field material built via with_Tc(), that offset is expected to be
+# ~0 (unlike the first-order Landau families' own +10-11K offset), and
+# the root-finder recomputes the true offset numerically regardless, so
+# using GA1XCMN3X_REF here (rather than needing a separate calibrated
+# "first_order"-style reference object) is not a special case.
+GA1XCMN3X_FAMILY = GradedFamily(
+    name="Ga1-xCMn3+x",
+    tuned_fn=ga1xcmn3x_composition_tuned_material,
+    tc_min=GA1XCMN3X_TC_MIN_K, tc_max=GA1XCMN3X_TC_MAX_K,
+    reference_material=GA1XCMN3X_REF, fallback_material=GADOLINIUM,
 )
 
 
@@ -186,6 +210,8 @@ def _family_name(family):
         return "LAFESIH"
     if family is MNFEPSI_FAMILY:
         return "MNFEPSI"
+    if family is GA1XCMN3X_FAMILY:
+        return "GA1XCMN3X"
     return None
 
 
@@ -196,6 +222,8 @@ def _resolve_family(family_name):
         return LAFESIH_FAMILY
     if family_name == "MNFEPSI":
         return MNFEPSI_FAMILY
+    if family_name == "GA1XCMN3X":
+        return GA1XCMN3X_FAMILY
     return None
 
 

@@ -60,7 +60,8 @@ Phase 15 additions
 2. **Material as a design variable**: implemented as OPTION (b) from the
    Phase 15 plan -- NSGA-III is run SEPARATELY per material family
    (`MATERIAL_CANDIDATES` below: Gd, plus each of `core.cascade`'s
-   composition-tunable GD_FAMILY/LAFESIH_FAMILY/MNFEPSI_FAMILY, each
+   composition-tunable GD_FAMILY/LAFESIH_FAMILY/MNFEPSI_FAMILY/
+   GA1XCMN3X_FAMILY (Phase 24), each
    tuned so its OWN peak lands at this module's fixed operating point's
    midpoint temperature -- same `_target_composition_for_peak` machinery
    `material_family_comparison.py` already uses, so no new numerics are
@@ -145,7 +146,7 @@ from core.amr_cycle import AMRSystem
 from core.loss_model import StateDependentLossModel
 from core.economics import material_cost, bom_cost, bom_cost_geometric
 from core.cascade import (GD_FAMILY, LAFESIH_FAMILY, MNFEPSI_FAMILY,
-                            _target_composition_for_peak)
+                            GA1XCMN3X_FAMILY, _target_composition_for_peak)
 
 T_COLD_K = 291.0
 SPAN_K = 10.0
@@ -214,7 +215,7 @@ def _material_candidates(T_mid_K=T_MID_K, mu0H_max_for_tuning=2.0):
     economics.MCM_COST_PER_KG_BY_FAMILY.
     """
     candidates = [("Gd", GADOLINIUM, "Gd")]
-    for family in (GD_FAMILY, LAFESIH_FAMILY, MNFEPSI_FAMILY):
+    for family in (GD_FAMILY, LAFESIH_FAMILY, MNFEPSI_FAMILY, GA1XCMN3X_FAMILY):
         tc = _target_composition_for_peak(T_mid_K, mu0H_max_for_tuning, family)
         in_range = family.tc_min <= tc <= family.tc_max
         if not in_range:
