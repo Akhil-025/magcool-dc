@@ -2273,3 +2273,329 @@ directly-measured near-1:1 relationship, not assumed to generalize). The
 document's other three proposed upgrades (eddy-loss geometry coupling,
 Qc floor + pump efficiency, layered beds in NSGA-III) were not touched --
 deferred at the user's own explicit choice this pass.
+
+## Phase 27 — Geometry-explicit intragranular eddy-current loss (document item #2) — done
+
+**Why this one next.** Of the second document's three still-open items,
+the user chose eddy-loss geometry coupling as "the most tractable, clean
+physics." Before writing code, the claim was checked: TRUE that
+`loss_model.StateDependentLossModel`'s `k_eddy*f**2*mu0H**2` term has no
+particle/plate-size dependence at all -- confirmed by inspection, and by
+noting that `core.thermal.pumping_power_packed_bed()`/`particle_diameter`
+(Phase 15) already exists for the HYDRAULIC side of geometry, with no
+analog on the eddy-current side.
+
+**An important distinction the document's framing glossed over.** The
+existing `k_eddy` is NOT a generic "eddy loss" placeholder waiting to be
+made geometry-aware -- it is explicitly documented (this module's own
+docstring, citing Kitanovski et al. 2015 Ch. 6) as representing eddy
+losses in the magnet/regenerator SUPPORT STRUCTURE, CORE-calibrated
+(NNLS fit) from real AMR devices' aggregate parasitic power. Coupling
+THAT term to MCM particle size would conflate two physically distinct
+loss channels. What the document actually wants -- eddy-current
+self-heating WITHIN the MCM particles/plates themselves as they cut
+through dB/dt -- is a separate, additive mechanism, implemented here as
+such rather than as a rescaling of the existing fitted coefficient.
+
+**What was implemented.**
+  - `core.thermal.intragranular_eddy_power(frequency, mu0H,
+    particle_diameter, mass_regenerator, sigma_e)`: the classical
+    thin-slab/lamination eddy-current-loss formula, Pe_volume = (pi^2/6) *
+    sigma_e * L^2 * f^2 * Bmax^2, multiplied by V_MCM = mass_regenerator /
+    RHO_GD (solid volume only, no porosity factor -- eddy dissipation only
+    occurs in the solid). The pi^2/6 coefficient and formula are directly
+    cited from a magnetic-refrigeration-device patent's own worked Gd
+    example ("Magnetic structure and magnetic air-conditioning and
+    heating device using same") -- standard textbook lamination physics,
+    not something specific to that patent, corroborated by using it on
+    the same Gd system the patent itself demonstrates it on.
+  - `core.thermal.GD_SIGMA_E_S_PER_M = 7.6e5` S/m: TWO independently
+    cross-checked sources agreeing within ~4% -- periodictable.org's
+    tabulated Gd resistivity (1310 nOhm*m -> sigma=7.63e5 S/m) and the
+    same patent's own stated 0.736e6 S/m used for its own Gd eddy-loss
+    worked example. 7.6e5 S/m is their midpoint.
+  - `StateDependentLossModel.parasitic_power()`'s new
+    `intragranular_eddy_power_W` parameter (default 0.0, preserves every
+    pre-existing call site bit-for-bit): ADDED to (not swapped in place
+    of) the CORE-calibrated `k_eddy*f**2*mu0H**2` term -- deliberately
+    DIFFERENT handling from `pumping_power_override`'s REPLACE semantics
+    (Phase 15), because these are two physically simultaneous loss
+    channels (support structure + MCM self-heating), not two competing
+    estimates of the same channel. `RotaryDriveLossModel.parasitic_power()`
+    updated to pass the new parameter through to `super()` unchanged.
+  - `AMRSystem._geometry_eddy_power_W()`: mirrors the existing
+    `_geometry_pumping_power_W()` (Phase 15) exactly -- returns 0.0 when
+    `particle_diameter` is `None` (pre-Phase-27 behavior, unchanged),
+    else computes the geometry-explicit term and passes it into
+    `parasitic_power()` alongside the existing pumping-power override,
+    in `run()`.
+
+**Honesty flag: the formula is derived for a PLATE, applied here to
+packed-sphere `particle_diameter` too.** Classical eddy-current theory
+gives a sphere a different numeric prefactor than a thin slab -- no
+independently-citable sphere-specific coefficient was located, so this
+function's packed-bed output should be read as an order-of-magnitude
+approximation, not a validated sphere-specific result. The f^2/H^2/L^2
+SCALING (the part that actually matters for the optimizer's geometry
+trade-off) is robust across both geometries; the absolute prefactor is
+not. Documented directly in `intragranular_eddy_power()`'s own docstring,
+not just here.
+
+**Result -- a real, honest finding that complicates the document's own
+premise.** At realistic packed-bed particle diameters (Tusek et al.
+2013's own optimum range, 0.07-0.17mm, already used elsewhere in this
+repo's `geometry_analysis.py`), the new intragranular term is
+milliwatt-scale -- roughly 4-5 ORDERS OF MAGNITUDE smaller than a typical
+CORE-calibrated support-structure `k_eddy` term at the same
+field/frequency (checked directly: ratio < 1e-3, confirmed by
+`test_intragranular_eddy_power_negligible_at_realistic_particle_sizes`).
+Even at a 100mm (10cm) solid-block scale -- far larger than any real
+packed-bed particle, closer to the document's own "solid 1kg block of
+Gd" comparison point -- the term only reaches ~10% of the support-structure
+`k_eddy` contribution at 2T/2Hz. This means the document's own stated
+motivation ("give the optimizer a physical reason to prefer smaller,
+electrically segmented MCM structures") mostly does NOT materialize at
+the particle sizes any real packed-bed AMR actually uses -- not because
+the physics is wrong, but because intragranular eddy self-heating is
+genuinely a minor loss channel at sub-mm scale for a material with Gd's
+conductivity. The mechanism is now available and wired in (so the
+optimizer WILL see it, and it becomes relevant at the multi-cm scale a
+purely-hydraulic/heat-transfer optimum would never reach for other
+reasons anyway), but its practical effect on any existing result in this
+repo (all of which use particle diameters in the sub-mm range) is
+expected to be negligible. This was checked, not assumed.
+
+**Wiring is otherwise complete and self-contained.** No changes to
+`cascade.py`, `optimize.py`, `economics.py`, or any material file --
+`AMRSystem` already exposes `particle_diameter` as a constructor
+argument used throughout the optimizer/cascade code paths (Phase 15), so
+this term activates automatically wherever a caller already sets
+`particle_diameter`, with no further wiring needed.
+
+**Tests.** New `tests/test_intragranular_eddy_loss.py` (10 tests: zero at
+zero diameter, quadratic scaling in diameter/frequency/field, linear
+scaling in mass, negligible-at-realistic-sizes check, default-unchanged
+regression guard, additive-not-replacing semantics, `AMRSystem` wiring
+with/without `particle_diameter`, and an end-to-end `run()` regression
+check). Full suite (`tests/`) re-run after this phase: 421 passed (394
+non-cascade + 27 `test_cascade.py`, run in batches per that file's own
+runtime), 0 failed, 0 regressions.
+
+**Not done in this phase.** No sphere-specific eddy-current coefficient
+was derived or researched further (see honesty flag above) -- flagged as
+a concretely-scoped follow-up if the plate-vs-sphere prefactor gap turns
+out to matter for some future analysis. The document's other two items
+(#3 Qc floor + pump efficiency, #4 layered beds in NSGA-III) remain
+untouched.
+
+## Phase 28 — Pump/motor efficiency (document item #3, half 1) — done; Qc floor (item #3, half 2) — found already resolved, not implemented
+
+**The Qc-floor half: investigated first, found already resolved by
+existing design, not a live bug.** The document's claim ("Stage 3c found
+free single-objective COP optimization is degenerate -- drives mdot, Qc
+toward zero") is TRUE as a description of
+`geometry_analysis.check_free_mdot_cop_is_degenerate()`'s own diagnostic
+(a deliberately-simplified single-objective, unbounded-mdot study) but
+does NOT describe the actual production optimizer: `core/optimize.py`'s
+`AMRDesignProblem` already (a) bounds `fluid_mdot` to [0.02, 0.5] kg/s,
+never literally 0, and (b) treats COP_electrical and Qc as two SEPARATE,
+competing NSGA-III objectives (`n_obj=3`: -COP, -Qc, cost) rather than
+optimizing COP alone -- exactly the design choice
+`check_free_mdot_cop_is_degenerate()`'s own docstring says this repo made
+BECAUSE of this exact degeneracy. Adding an explicit hard Qc floor
+constraint on top, as the document proposes, would be redundant with (and
+arguably in tension with) the existing multi-objective Pareto-front
+approach, which already exposes the full COP-vs-Qc trade-off to the user
+rather than hardcoding a single cutoff. Not implemented, since the
+diagnosed problem is not actually present in the code path that matters.
+Flagged as a case where checking the claim against the ACTUAL production
+code path (not just the cited diagnostic function) changed the answer
+from "implement this" to "already resolved, differently than proposed."
+
+**The pump/motor efficiency half: implemented.** Multiple existing
+docstrings already flagged "no pump/motor efficiency" as a known,
+explicit limitation (`core/thermal.py`, `core/geometry_analysis.py`,
+`core/plots.py`) -- confirmed real and unaddressed by direct inspection.
+  - `AMRSystem.PUMP_MOTOR_EFFICIENCY_LITERATURE = 0.6`: two independent
+    industry sources agree small (fractional-scale, lab/prototype-
+    appropriate) centrifugal pumps run 50-70% wire-to-water efficiency
+    (Pumps & Systems: "typical efficiencies are 55 percent for small
+    pumps"; Linquip: "smaller pumps typically fall into the range of 50
+    to 70 percent") -- 0.6 is their midpoint, and independently
+    corroborates (rather than being derived from) the document's own
+    separately-proposed 0.5-0.7 range for this exact parameter -- a
+    genuine cross-check, not circular reasoning.
+  - New `pump_motor_efficiency` parameter on `AMRSystem.__init__`,
+    applied in `_geometry_pumping_power_W()` by dividing the idealized
+    hydraulic pumping power by it before returning as the
+    `pumping_power_override` -- i.e. converting idealized hydraulic power
+    into an estimate of electrical power actually drawn, the physically
+    correct quantity for something that ultimately feeds COP_electrical.
+  - **Why this does NOT apply to `loss_model`'s generic
+    `k_pump*mdot**2` term**: that coefficient is CORE-calibrated (NNLS
+    fit) against real AMR devices' own directly-reported ELECTRICAL
+    parasitic power -- any real device's own pump/motor inefficiency is
+    ALREADY baked into the fitted k_pump value by construction, since the
+    fit target IS electrical power, not idealized hydraulic power.
+    Applying an efficiency factor there too would double-count the same
+    physical loss -- the same "identify the right layer" care Phase 27's
+    eddy-loss addition took for the analogous k_eddy distinction.
+    `geometry_analysis.py`'s own direct calls to
+    `pumping_power_packed_bed()`/`pumping_power_parallel_plate()` (its
+    Table-3-comparison diagnostics) are untouched -- they don't go
+    through `AMRSystem` at all, and that module's own docstring already
+    states its "augmented COP" is intentionally idealized, not a
+    production estimate.
+
+**Explicit decision: the default is 1.0 (idealized, unchanged), NOT
+0.6.** Every existing `optimize.py` NSGA-III run always sets
+`particle_diameter` (it's a design variable, bounds [0.05, 2.0]mm), so a
+0.6 default would have silently changed every production Pareto front
+this repo has ever generated -- a break from the "opt-in, default
+preserves old behavior" discipline every prior phase (15, 16, 24-27) has
+followed. `PUMP_MOTOR_EFFICIENCY_LITERATURE` is available as a class
+constant for any caller (most naturally `optimize.py`) to opt into
+explicitly. Verified directly: a system built with the default gives
+byte-for-byte identical `_geometry_pumping_power_W()` to one explicitly
+passing `pump_motor_efficiency=1.0`
+(`test_default_behavior_unchanged_from_pre_phase28`); opting into 0.6
+leaves Qc and W_mag unchanged and strictly decreases COP_electrical
+(`test_opting_into_literature_efficiency_decreases_cop`).
+
+**Tests.** New `tests/test_pump_motor_efficiency.py` (6 tests: default is
+1.0, default-unchanged regression guard, literature constant value,
+opting in increases pumping power by exactly 1/0.6x, opting in decreases
+COP while leaving Qc/W_mag unchanged, and a check that the term is fully
+inert when `particle_diameter` is `None`). Full suite (`tests/`) re-run
+after this phase: 427 passed (400 non-cascade + 27 `test_cascade.py`, run
+in batches per that file's own runtime), 0 failed, 0 regressions.
+
+**Not done in this phase.** `optimize.py` was NOT changed to actually
+pass `pump_motor_efficiency=AMRSystem.PUMP_MOTOR_EFFICIENCY_LITERATURE` --
+the capability exists and is tested, but no production Pareto front in
+this repo currently uses it (left as a deliberate, visible choice for the
+user rather than an invisible default flip -- see the decision note
+above). The document's #4 item (layered beds in NSGA-III) remains
+untouched.
+
+## Phase 29 — Layered/graded beds exposed to NSGA-III (document item #4) — done
+
+**The last of the four items from the second user-supplied document.**
+The claim was TRUE and simple to confirm: `core/optimize.py`'s
+`AMRDesignProblem` only ever searches a single material at a single
+uniform Tc, even though Curie-graded multi-layer beds already exist
+(`core/cascade.py::run_graded_cascade()`, Phase 7/9) and this repo's own
+Astronautics reproduction and `compare_graded_cascade()` sweep already
+explore up to 6 layers -- the NSGA-III co-optimizer just never had access
+to that dimension.
+
+**Design choice: n_layers is NOT a 6th continuous variable rounded to an
+integer inside one NSGA-III run.** It is instead treated exactly like
+`material`/`family_name` already are in `AMRDesignProblem`: a FIXED
+per-problem-instance choice. `run_layered_optimization()` loops over
+`n_layers=1..6` (`LAYERED_N_LAYERS_RANGE`, matching the range this repo's
+own `compare_graded_cascade()`/Astronautics reproduction already use for
+the same question elsewhere), running a separate NSGA-III search per
+layer-count and merging every layer-count's Pareto front with every
+material's, through the exact same `_pareto_filter()`-style global
+non-dominance logic already established for material choice (module
+docstring item 2, "option (b): separate-then-merge"). This is a direct,
+deliberate reuse of that existing architectural decision applied to a
+second discrete design choice, not a new one -- a native mixed-variable
+pymoo formulation was considered and rejected for the identical reasons
+already documented for material choice.
+
+**What was implemented.**
+  - `core/cascade.py::run_graded_cascade()`: extended with
+    `particle_diameter`, `blow_fraction`, `pump_motor_efficiency`
+    parameters (defaults None/0.5/1.0, all threaded through to every
+    per-stage `AMRSystem` unchanged from THAT class's own individual
+    defaults) -- confirmed by test to reproduce every pre-Phase-29 call's
+    result exactly when omitted
+    (`test_run_graded_cascade_default_unaffected_by_new_params`). Without
+    this, a layered-bed NSGA-III search would have been silently
+    restricted to a strict subset of `AMRDesignProblem`'s own single-stage
+    design space (no geometry/blow-fraction/pump-efficiency dimensions at
+    all), which would have biased any single-vs-layered comparison built
+    on top of both.
+  - `core/optimize.py::LayeredAMRDesignProblem`: the graded-cascade analog
+    of `AMRDesignProblem`. Same 7 continuous design variables and same 3
+    objectives (-COP, -Qc, cost), but `_evaluate()` calls
+    `run_graded_cascade()` for `self.n_layers` stages instead of a single
+    `AMRSystem.run()`. `mass_per_stage` (design variable index 3) is the
+    PER-STAGE mass; `cost_index()` is charged for the TOTAL system mass
+    (`mass_per_stage * n_layers`), matching what a real multi-layer bed
+    would actually cost in raw MCM.
+  - Infeasible cascades (`run_graded_cascade()`'s own `feasible=False`, or
+    `Qc_W<=0`) are penalized with a large but FINITE `F`
+    (`_INFEASIBLE_PENALTY = (0.0, 0.0, 1.0e7)`) rather than left as
+    NaN/inf, so NSGA-III's crowding-distance/reference-direction machinery
+    stays well-defined -- confirmed by direct test
+    (`test_layered_problem_infeasible_point_gets_penalty`).
+  - `run_layered_optimization_for_n_layers()` / `run_layered_optimization()`
+    / `_layered_pareto_filter()`: the layered-bed analogs of
+    `run_optimization_for_material()` / `run_optimization()` /
+    `_pareto_filter()`. Kept as separate functions/CSV schema
+    (`_LAYERED_ROW_FIELDNAMES`, `family`/`n_layers`/`COP_cascade` columns
+    instead of `material`/`COP_electrical`) rather than generalizing the
+    existing material-search functions, matching this repo's own stated
+    preference (see e.g. the two nearly-identical
+    `*_composition_tuned_material()` helpers in `core/first_order_mce.py`)
+    for small, obviously-correct duplication over a shared helper with an
+    implicit cross-context schema contract.
+
+**Honest runtime note.** Each `LayeredAMRDesignProblem._evaluate()` call
+runs `run_graded_cascade()` for `n_layers` stages, each involving its own
+Curie-target root-find (`_target_composition_for_peak()`) plus a full
+`AMRSystem.run()` -- markedly more expensive per NSGA-III individual than
+`AMRDesignProblem`'s single `AMRSystem.run()` call, consistent with this
+repo's own pre-existing note that `run_graded_cascade()`/
+`compare_graded_cascade()` are already "the single slowest stage in the
+full pipeline." A tiny smoke-scale run (n_layers=(1,2), pop_size=8,
+n_gen=2) took ~32s in this environment; a production-scale run analogous
+to `run_optimization()`'s own 40/25 defaults across all 6 layer counts
+would be expected to take considerably longer than the material
+co-optimization's own already-documented runtime. `pop_size`/`n_gen`
+defaults were left matching `run_optimization_for_material()`'s own
+40/25 (not reduced further) since this is a user-facing default, not a
+test default -- tests themselves use much smaller values
+(`pop_size=8, n_gen=2` for the one NSGA-III smoke test in this phase's own
+test file, mirroring `test_optimize.py`'s own convention of trading
+search quality for test speed).
+
+**Tests.** New `tests/test_layered_optimization.py` (10 tests: default-
+unchanged regression guard and geometry/pump-efficiency wiring for
+`run_graded_cascade()`'s three new parameters; `LayeredAMRDesignProblem`
+bounds/dims; direct single-point `_evaluate()` check without running a
+full search; infeasible-point penalty check; `_layered_pareto_filter()`
+basic dominance and empty-input behavior;
+`LAYERED_N_LAYERS_RANGE==( 1,2,3,4,5,6)`; and one small end-to-end NSGA-III
+smoke test). Full suite (`tests/`) re-run after this phase, in batches per
+each slow file's own established runtime (matching every prior phase's
+own verification convention): 437 passed, 0 failed, 0 regressions.
+
+**Not done in this phase.** `family`/`family_name` in
+`run_layered_optimization()` default to a single fixed choice (GD_FAMILY
+via `family=None`), NOT a further material x n_layers cross-product --
+that would be `len(_material_candidates()) * len(LAYERED_N_LAYERS_RANGE)`
+separate NSGA-III runs, left as a documented, concretely-scoped follow-up
+rather than attempted here to keep this phase's own scope and runtime
+bounded. No change was made to `main.py`'s own pipeline to call
+`run_layered_optimization()` as a new stage -- it exists as a standalone,
+directly-callable function (same status `run_optimization()` itself had
+before being wired into `main.py`), left for the user to invoke
+explicitly or wire in later.
+
+---
+
+**All four items from the second user-supplied document (Phases 26-29)
+are now addressed**, with one (the Tc(H) mean-field limitation, Phase 26)
+confirmed as a genuine dead end rather than fixed, one (the Qc floor,
+Phase 28) found already resolved by existing design rather than needing
+new code, and two (latent heat, Phase 26; eddy-loss geometry, Phase 27;
+pump efficiency, Phase 28; layered beds, this phase) implemented with
+real, literature-grounded, honestly-caveated partial or full
+improvements -- consistent with this repo's standing practice of
+verifying a claim against the actual code before writing anything, and
+reporting what was and was not achieved rather than treating "implement
+this" as a mandate to force a claimed number to match.

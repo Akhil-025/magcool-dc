@@ -16,6 +16,8 @@ in the repository in one pass, in dependency order, so a single
     3b. Regenerator thermal demo       (core/thermal.py)
     3c. Geometry-dependent pumping power (core/geometry_analysis.py, ROADMAP.md Phase 7 item)
     3d. Hypereg parallel-hydraulic pumping-power analysis (core/hypereg_analysis.py, Phase 15 item 3)
+    3e. Geometry-explicit intragranular eddy-current loss + pump/motor
+        efficiency demo (core/thermal.py, core/amr_cycle.py, Phase 27/28)
     4.  Baseline comparison sweep      (this file, was the old main.py)
     5.  Economics / TCO                (core/economics.py)
     5b. Full-system cost estimate by material family (core/economics.py, Phase 15 item 5)
@@ -31,14 +33,8 @@ in the repository in one pass, in dependency order, so a single
     8d. Material family comparison     (core/material_family_comparison.py, Track A2 item)
     8b. First-order Landau model demo  (core/first_order_mce.py)
     8c. Giguere et al. (1999) direct-measurement cross-check + Pecharsky &
-        Gschneidner (1997) peak-ratio check (core/giguere_validation.py)
-    8f. Phase 26: latent-heat C_p spike for the first-order Landau model --
-        checks GD5SI2GE2_FIRST_ORDER_LATENT_HEAT against both of step 8c's
-        own cross-checks (core/giguere_validation.py's
-        run_latent_heat_validation(); see core/first_order_mce.py and
-        ROADMAP.md's Phase 26 entry for the full derivation/citations and
-        for why neither GD5SI2GE2_FIRST_ORDER nor DTAD_CORRECTION_FACTOR's
-        default behavior was swapped out for this new instance)
+        Gschneidner (1997) peak-ratio check + latent-heat Cp spike
+        (core/giguere_validation.py, Phase 26)
     9.  Sobol sensitivity analysis     (core/sensitivity.py)
     10. RSM surrogate fit              (core/rsm.py)
     11. NSGA-III design optimization   (core/optimize.py, Phase 15: material +
@@ -51,6 +47,11 @@ in the repository in one pass, in dependency order, so a single
         (core/magnet_geometry.py, Phase 19)
     11e. Magnet-geometry Pareto sensitivity, production-settings multi-seed
         stability check (core/magnet_geometry.py, Paper-Mining Pass review item 4)
+    11f. Layered/graded-bed NSGA-III co-optimization (core/optimize.py,
+        core/cascade.py, Phase 29) -- reduced-effort pipeline pass
+        (n_layers=1-3, pop_size=20, n_gen=10); the full 1-6 layer,
+        production-settings version is directly callable but not run
+        here, purely for pipeline-runtime reasons
     12. Figure generation (34 figures) (plots.py -> results/figures/*.png, *.pdf)
     13. Design-recommendations synthesis (core/design_recommendations.py) --
         consolidates steps 3c/7b/8d/9b/11's already-computed results into
@@ -851,6 +852,55 @@ def run_first_order_mce_demo():
     logger.info("Target: dS ~ -18 J/(kg K) at 5T (Pecharsky & Gschneidner 1997 review value)")
 
 
+def run_eddy_and_pump_efficiency_demo():
+    """Phase 27/28 demo. Neither core.thermal.intragranular_eddy_power()
+    (Phase 27) nor AMRSystem.pump_motor_efficiency (Phase 28) has its own
+    dedicated validation/analysis module (both are opt-in refinements to
+    existing machinery, not new candidate materials or standalone
+    analyses) -- this reproduces the same honest findings ROADMAP.md's
+    own Phase 27/28 entries document, so they appear in a fresh
+    `python main.py` run rather than only existing in this repo's own
+    test suite and prior interactive session."""
+    from core.thermal import intragranular_eddy_power
+    from core.loss_model import StateDependentLossModel
+    from core.amr_cycle import AMRSystem
+    from core.mce_material import GADOLINIUM
+
+    logger.info("Phase 27: geometry-explicit intragranular eddy-current loss vs. the "
+                "CORE-calibrated support-structure k_eddy term, at 2T/2Hz")
+    lm = StateDependentLossModel()
+    k_eddy_term_W = lm.k_eddy * 2.0 ** 2 * 2.0 ** 2
+    logger.info(f"  support-structure k_eddy term at 2T/2Hz: {k_eddy_term_W:.3f} W")
+    for d_mm in (0.07, 0.17, 0.5, 100.0):
+        W = intragranular_eddy_power(2.0, 2.0, particle_diameter=d_mm / 1000.0,
+                                      mass_regenerator=2.0)
+        ratio = W / k_eddy_term_W if k_eddy_term_W > 0 else float("nan")
+        logger.info(f"  d_p={d_mm:7.2f}mm  intragranular eddy={W:10.6f} W  "
+                    f"(ratio to support-structure term: {ratio:.6f})")
+    logger.info("  -> negligible at realistic packed-bed particle sizes (0.07-0.17mm) -- "
+                "the mechanism is real and wired in, but does not meaningfully change any "
+                "existing result at sub-mm scale (see ROADMAP.md Phase 27).")
+
+    logger.info("Phase 28: pump/motor efficiency opt-in -- idealized (default, "
+                "efficiency=1.0) vs. literature-grounded (efficiency=0.6) at a "
+                "representative geometry-explicit AMRSystem")
+    sys_ideal = AMRSystem(material=GADOLINIUM, mu0H_max=2.0, mass_regenerator=2.0,
+                           frequency=2.0, fluid_mdot=0.1, particle_diameter=0.0005,
+                           use_ntu_thermal_model=True, loss_model=lm,
+                           pump_motor_efficiency=1.0)
+    sys_real = AMRSystem(material=GADOLINIUM, mu0H_max=2.0, mass_regenerator=2.0,
+                          frequency=2.0, fluid_mdot=0.1, particle_diameter=0.0005,
+                          use_ntu_thermal_model=True, loss_model=lm,
+                          pump_motor_efficiency=AMRSystem.PUMP_MOTOR_EFFICIENCY_LITERATURE)
+    r_ideal = sys_ideal.run(290.0, 10.0)
+    r_real = sys_real.run(290.0, 10.0)
+    logger.info(f"  idealized (eff=1.0):   COP_electrical={r_ideal.COP_electrical:.4f}")
+    logger.info(f"  literature (eff=0.6):  COP_electrical={r_real.COP_electrical:.4f}")
+    logger.info("  -> default AMRSystem/optimize.py behavior is UNCHANGED (eff=1.0); "
+                "the literature value is available as an explicit opt-in, not silently "
+                "applied to any production Pareto front (see ROADMAP.md Phase 28).")
+
+
 def run_plot_generation(precomputed=None):
     """Step 12: renders all 34 figures in plots.py (results/figures/*.png
     and *.pdf) covering material validation, AMR characteristic curves,
@@ -975,6 +1025,9 @@ def main():
          lambda: geometry_analysis.run_geometry_analysis()),
         ("3d. Hypereg parallel-hydraulic pumping-power analysis (core/hypereg_analysis.py, Phase 15 item 3)",
          lambda: hypereg_analysis.run_hypereg_analysis()),
+        ("3e. Geometry-explicit intragranular eddy-current loss + pump/motor "
+         "efficiency demo (core/thermal.py, core/amr_cycle.py, Phase 27/28)",
+         run_eddy_and_pump_efficiency_demo),
         ("4. Baseline comparison sweep: AMR vs VCC vs liquid cooling vs Carnot",
          None),  # handled specially below, result captured
         ("5. Economics / TCO at the representative operating point",
@@ -999,20 +1052,18 @@ def main():
          lambda: cascade.run_astronautics_giguere_correction_sensitivity()),
         ("8. Giant-MCE materials analysis (Gd vs Gd5Si2Ge2)",
          lambda: giant_mce_analysis.run_analysis()),
-        ("8d. Six-way material family comparison (Gd, Gd5Si2Ge2-fixed, GD/LAFESIH/MNFEPSI-tuned, LAFESIH-nanocomposite; Track A2 item + Phase 22 item 2)",
+        ("8d. Eight-way material family comparison (Gd, Gd5Si2Ge2-fixed, GD/LAFESIH/MNFEPSI/GA1XCMN3X/MNCUCOGE-tuned, LAFESIH-nanocomposite; Track A2 item + Phase 22 item 2 + Phase 24/25)",
          lambda: material_family_comparison.run_analysis()),
         ("8e. Nanocomposite off-design robustness check (core/nanocomposite_material.py, Phase 22 item 2 follow-up)",
          lambda: nanocomposite_material.run_robustness_check()),
         ("8b. First-order Landau model calibration check (core/first_order_mce.py, reached transitively otherwise)",
          run_first_order_mce_demo),
-        ("8c. Giguere et al. (1999) direct-measurement cross-check (core/giguere_validation.py)",
+        ("8c. Giguere et al. (1999) direct-measurement cross-check + Pecharsky & "
+         "Gschneidner (1997) peak-ratio check + latent-heat Cp spike (core/giguere_validation.py, "
+         "Phase 26)",
          lambda: (giguere_validation.run_validation(),
-                  giguere_validation.run_pecharsky_ratio_check())),
-        ("8f. Phase 26: latent-heat C_p spike for the first-order Landau model -- "
-         "does GD5SI2GE2_FIRST_ORDER_LATENT_HEAT narrow the Giguere 7T gap and the "
-         "Pecharsky & Gschneidner peak-ratio gap? (core/giguere_validation.py, "
-         "core/first_order_mce.py)",
-         lambda: giguere_validation.run_latent_heat_validation()),
+                  giguere_validation.run_pecharsky_ratio_check(),
+                  giguere_validation.run_latent_heat_validation())),
         ("9. Sobol global sensitivity analysis (constant-loss model)",
          lambda: sensitivity.run_sobol(out_path="results/sobol_results_phase2_constant.txt",
                                         use_state_dependent_losses=False)),
@@ -1037,6 +1088,14 @@ def main():
         ("11e. Magnet-geometry Pareto sensitivity: production-settings, multi-seed "
          "stability check (core/magnet_geometry.py, Paper-Mining Pass review item 4)",
          lambda: magnet_geometry.run_magnet_geometry_multiseed_stability_check()),
+        ("11f. Layered/graded-bed NSGA-III co-optimization (core/optimize.py, "
+         "core/cascade.py, Phase 29) -- reduced pop_size/n_gen/n_layers_range vs. "
+         "the function's own full-quality defaults, purely to keep this pipeline "
+         "stage's own runtime bounded (see run_layered_optimization()'s own "
+         "docstring for the full 1-6 layer, pop_size=40/n_gen=25 version, callable "
+         "directly for a dedicated deep run)",
+         None),  # handled specially below, result (layered_pareto_rows) captured
+                 # for the executive summary
         ("12. Figure generation: 34 figures covering validation, AMR curves, "
          "cascade/graded staging, sensitivity, RSM, NSGA-III, economics, emissions, "
          "Tc-broadening, nanocomposite robustness, thermal-diode, fluid-MCE, passive "
@@ -1064,6 +1123,7 @@ def main():
     astro_result = None
     material_rows = None
     pareto_rows = None
+    layered_pareto_rows = None
     sobol_const_Si = None
     sobol_state_dependent_Si = None
     pb_best_cop_row = None
@@ -1077,7 +1137,6 @@ def main():
     thermal_diode_rows = None
     curie_shift_v2_result = None
     astronautics_giguere_result = None
-    latent_heat_result = None
 
     for name, fn in stages:
         _banner(name)
@@ -1132,8 +1191,6 @@ def main():
                         verbose=False)
                 elif name.startswith("8d."):
                     material_rows = fn()
-                elif name.startswith("8f."):
-                    latent_heat_result = fn()
                 elif name.startswith("9b."):
                     sobol_state_dependent_Si = fn()
                 elif name.startswith("9."):
@@ -1151,6 +1208,11 @@ def main():
                         verbose=False)
                 elif name.startswith("11e."):
                     magnet_geometry_multiseed_result = fn()
+                elif name.startswith("11f."):
+                    layered_pareto_rows = optimize_module.run_layered_optimization(
+                        n_layers_range=(1, 2, 3), pop_size=20, n_gen=10, seed=1,
+                        out_csv="results/layered_pareto_front.csv",
+                        per_n_layers_out_dir="results/layered_pareto_front_by_n")
                 elif name.startswith("11d."):
                     magnet_geometry.run_magnet_geometry_analysis()
                     magnet_geometry_result = magnet_geometry.run_geometric_cost_pareto_sensitivity()
@@ -1182,7 +1244,6 @@ def main():
                         pp_best_cop_row=pp_best_cop_row,
                         cycle_type_result=cycle_type_result,
                         thermal_diode_rows=thermal_diode_rows,
-                    
                     )
                 elif name.startswith("14."):
                     fluid_mce_result = fluid_mce_analysis.run_fluid_mce_analysis()
@@ -1237,14 +1298,14 @@ def main():
                               pp_best_cop_row, hysteresis_result,
                               magnet_geometry_result, fluid_mce_result,
                               passive_regen_result, failures, curie_shift_v2_result, 
-                              astronautics_giguere_result, magnet_geometry_multiseed_result, latent_heat_result)
+                              astronautics_giguere_result, layered_pareto_rows, magnet_geometry_multiseed_result)
 
 
 def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, material_rows,
                               pareto_rows, pb_best_cop_row, pp_best_cop_row,
                               hysteresis_result, magnet_geometry_result, fluid_mce_result,
                               passive_regen_result, failures, curie_shift_v2_result, 
-                              astronautics_giguere_result, magnet_geometry_multiseed_result, latent_heat_result):
+                              astronautics_giguere_result, layered_pareto_rows, magnet_geometry_multiseed_result):
     """Final, well-structured overview of every implemented analysis and
     its headline metric, printed once at the very end of the run so a
     reader does not have to scroll back through 13 stages of log output
@@ -1333,19 +1394,6 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
                     "Gd5Si2Ge2 to La(Fe,Si)13Hy; see core/cascade.py's "
                     "run_astronautics_giguere_correction_sensitivity() docstring")
 
-    if latent_heat_result and _ok("8f."):
-        logger.info(f"  - Phase 26 latent-heat C_p spike (step 8f, core/first_order_mce.py's "
-                    f"GD5SI2GE2_FIRST_ORDER_LATENT_HEAT): 7T peak DeltaT_ad raw="
-                    f"{latent_heat_result['peak_dTad_7T_raw_K']:.2f}K -> latent-heat="
-                    f"{latent_heat_result['peak_dTad_7T_latent_heat_K']:.2f}K vs. Giguere's "
-                    f"direct 10.0K target ({latent_heat_result['gap_closed_pct']:.1f}% of the "
-                    f"gap closed, NOT a full fix, NOT tuned to hit 10.0K) -- a genuine, "
-                    f"literature-grounded partial improvement on BOTH this module's cross-checks "
-                    f"(also narrows, but does not resolve, the Pecharsky & Gschneidner peak-ratio "
-                    f"gap; see results/giguere_validation.txt and ROADMAP.md's Phase 26 entry for "
-                    f"why neither GD5SI2GE2_FIRST_ORDER nor DTAD_CORRECTION_FACTOR's default "
-                    f"behavior was swapped out for this new instance)")
-
     logger.info("Material family ranking (Gd / Gd5Si2Ge2 / GD- / LAFESIH- / MNFEPSI-tuned families)")
     if material_rows and _ok("8d."):
         rep = [r for r in material_rows if r["span_K"] == REPRESENTATIVE_SPAN_K
@@ -1386,6 +1434,24 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
                     f"{best_cop['COP_electrical']} at f={best_cop['frequency_Hz']}Hz, "
                     f"material={best_cop.get('material', 'Gd')} "
                     f"(results/pareto_front.csv, results/pareto_front_by_material/*.csv)")
+    else:
+        logger.info("  - unavailable (stage failed or was skipped)")
+
+    logger.info("Layered/graded-bed NSGA-III co-optimization (n_layers=1-3, reduced "
+                "pop_size/n_gen for pipeline runtime; Phase 29)")
+    if layered_pareto_rows and _ok("11f."):
+        best_cascade_cop = max(layered_pareto_rows, key=lambda r: r["COP_cascade"])
+        n_layers_counts = {}
+        for r in layered_pareto_rows:
+            n_layers_counts[r["n_layers"]] = n_layers_counts.get(r["n_layers"], 0) + 1
+        logger.info(f"  - {len(layered_pareto_rows)} globally non-dominated designs across "
+                    f"n_layers in {sorted(n_layers_counts)}; best cascade COP="
+                    f"{best_cascade_cop['COP_cascade']} at n_layers={best_cascade_cop['n_layers']} "
+                    f"(results/layered_pareto_front.csv, "
+                    f"results/layered_pareto_front_by_n/n_layers_*.csv). n_layers "
+                    f"representation: {dict(sorted(n_layers_counts.items()))} -- see "
+                    f"run_layered_optimization()'s own docstring for the full 1-6 layer, "
+                    f"production-settings version (not run here for pipeline-runtime reasons).")
     else:
         logger.info("  - unavailable (stage failed or was skipped)")
 

@@ -135,6 +135,17 @@ CP_SOLID_GD = 236.0          # J/(kg K), approx Gd specific heat near room temp
                              # (Dan'kov et al. 1998 report C_p peaking near
                              # 300 J/kg/K at Tc; 236 J/kg/K is representative
                              # of the broader near-room-temperature range)
+GD_SIGMA_E_S_PER_M = 7.6e5   # S/m, gadolinium electrical conductivity near room
+                             # temp. Two independent sources agree within ~4%:
+                             # periodictable.org's tabulated resistivity of
+                             # 1310 nOhm*m (-> sigma=1/rho=7.63e5 S/m), and a
+                             # magnetic-refrigeration-device patent's own stated
+                             # value of 0.736e6 S/m used for an eddy-loss
+                             # calculation on Gd (US Patent, "Magnetic structure
+                             # and magnetic air-conditioning and heating device
+                             # using same") -- 7.6e5 S/m used here as their
+                             # midpoint. See intragranular_eddy_power()'s own
+                             # docstring for the eddy-loss formula this feeds.
 
 
 def water_properties(T_K=300.0):
@@ -231,6 +242,65 @@ def pumping_power_packed_bed(mdot, particle_diameter=0.0005, porosity=0.365,
     P_pump = info["dP_Pa"] * Q_vol
     info["P_pump_W"] = P_pump
     return info
+
+
+def intragranular_eddy_power(frequency, mu0H, particle_diameter=0.0005,
+                              mass_regenerator=2.0, sigma_e=GD_SIGMA_E_S_PER_M):
+    """Phase 27: geometry-explicit eddy-current power dissipated WITHIN the
+    MCM particles/plates themselves (W), as a function of particle_diameter
+    (or, for a parallel-plate bed, plate_thickness passed through this same
+    argument -- see honesty flag below).
+
+    THIS IS A DIFFERENT LOSS CHANNEL from loss_model.StateDependentLossModel's
+    own k_eddy*f**2*mu0H**2 term. That term is CORE-calibrated from real AMR
+    devices' aggregate parasitic power and is explicitly documented (see
+    loss_model.py's module docstring, citing Kitanovski et al. 2015 Ch. 6) as
+    representing "eddy-current losses in the magnet/regenerator SUPPORT
+    STRUCTURE" -- i.e. conducting metal parts of the magnet assembly and
+    housing, not the MCM itself. It has no way to represent the physically
+    distinct mechanism a user-supplied document asked this repo to add:
+    eddy-current self-heating WITHIN the magnetocaloric material's own
+    particles/plates as they cut through dB/dt, which DOES depend on
+    particle/plate size (smaller, more electrically-segmented MCM pieces
+    dissipate less per unit volume) in a way the support-structure term
+    cannot capture. This function is that second, additive channel -- see
+    `core.loss_model.StateDependentLossModel.parasitic_power()`'s
+    `eddy_power_override` parameter for how the two combine (by ADDITION,
+    not replacement -- unlike `pumping_power_override`, since eddy-current
+    loss in the support structure and eddy-current loss in the MCM itself
+    are physically simultaneous, not alternative estimates of the same
+    thing).
+
+    Formula: Pe_volume [W/m^3] = (pi**2/6) * sigma_e * L**2 * f**2 * Bmax**2,
+    the standard classical eddy-current loss density for a thin conducting
+    slab/lamination of thickness L in a sinusoidal field of peak flux
+    density Bmax and frequency f (the SAME pi**2/6 coefficient appears,
+    with a real Gd worked example, in a magnetic-refrigeration-device
+    patent -- "Magnetic structure and magnetic air-conditioning and heating
+    device using same" -- and is standard textbook eddy-current-in-
+    laminations physics, not something specific to that patent). Total
+    power = Pe_volume * V_MCM, where V_MCM = mass_regenerator / RHO_GD (the
+    SOLID material volume -- no porosity factor, since eddy dissipation
+    only occurs in the solid MCM, not the fluid-filled pores).
+
+    HONESTY FLAG: this formula is derived for a PLATE/lamination geometry.
+    Applied here to `particle_diameter` (a packed-SPHERE-bed parameter) as
+    well as to plate thickness, as a deliberate order-of-magnitude
+    APPROXIMATION -- classical eddy-current theory gives a sphere a
+    DIFFERENT numeric prefactor than a thin slab (the two geometries are
+    not the same problem), but no independently-citable sphere-specific
+    coefficient was located to use instead of guessing one. Treat this
+    function's packed-bed output as approximate in magnitude, not as a
+    validated sphere-specific result -- the frequency-squared/field-squared/
+    length-squared SCALING (which is what actually matters for the
+    optimizer's geometry trade-off, per the motivating document) is robust
+    across both geometries; the absolute prefactor is not.
+
+    mu0H here is mu0*H (Tesla), matching this repo's convention elsewhere
+    (e.g. StateDependentLossModel.parasitic_power()'s own mu0H argument)."""
+    V_MCM = mass_regenerator / RHO_GD
+    Pe_volume = (np.pi ** 2 / 6.0) * sigma_e * particle_diameter ** 2 * frequency ** 2 * mu0H ** 2
+    return Pe_volume * V_MCM
 
 
 def regenerator_effectiveness_parallel_plate(mass_regenerator, frequency, mdot,

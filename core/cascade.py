@@ -748,7 +748,9 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
                         mass_per_stage=2.0, frequency=1.0, fluid_mdot=0.08,
                         regenerator_effectiveness=0.85,
                         apply_giguere_correction=True, family=None,
-                        executor=None, cycle_type="brayton"):
+                        executor=None, cycle_type="brayton",
+                        particle_diameter=None, blow_fraction=0.5,
+                        pump_motor_efficiency=1.0):
     """Curie-graded cascade (ROADMAP.md Phase 7 open item; generalized in
     Phase 9): rather than identical stages of one material (run_cascade
     above), each stage is assigned a hypothetical composition-tuned material
@@ -795,7 +797,22 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
     do not claim). Passed unchanged to every per-stage AMRSystem below --
     every stage in a graded cascade shares one physical field-change
     mechanism, so there is no physical reason for cycle_type to vary
-    stage-to-stage."""
+    stage-to-stage.
+
+    Phase 29 addition: `particle_diameter` (m, default None),
+    `blow_fraction` (default 0.5), and `pump_motor_efficiency` (default
+    1.0) are threaded through to every per-stage AMRSystem unchanged from
+    their own individual defaults -- i.e. omitting all three reproduces
+    every pre-Phase-29 call's behavior exactly (same "opt-in, default
+    preserves old behavior" discipline as Phase 15/28's own additions to
+    AMRSystem itself). This exists so `core.optimize.LayeredAMRDesignProblem`
+    can expose the SAME geometry/blow-fraction/pump-efficiency design
+    dimensions to a multi-layer graded-bed search that
+    `AMRDesignProblem` already exposes to a single-material search --
+    without this, a layered-bed NSGA-III search would be silently
+    restricted to a strict subset of the single-stage search's own design
+    space, which would bias any single-vs-layered comparison built on top
+    of both."""
     if family is None:
         family = GD_FAMILY if apply_giguere_correction else GradedFamily(
             name=GD_FAMILY.name,
@@ -848,7 +865,8 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
                         mass_regenerator=mass_per_stage, frequency=frequency,
                         fluid_mdot=fluid_mdot, regenerator_effectiveness=regenerator_effectiveness,
                         loss_model=_LOSS_MODEL, use_ntu_thermal_model=USE_NTU_THERMAL_MODEL,
-                        cycle_type=cycle_type)
+                        cycle_type=cycle_type, particle_diameter=particle_diameter,
+                        blow_fraction=blow_fraction, pump_motor_efficiency=pump_motor_efficiency)
     r1 = stage1.run(T_local, span_per_stage)
     Qc_target = r1.Qc
     if Qc_target <= 0:
@@ -864,7 +882,8 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
                            mass_regenerator=mass_per_stage, frequency=frequency,
                            fluid_mdot=fluid_mdot, regenerator_effectiveness=regenerator_effectiveness,
                            loss_model=_LOSS_MODEL, use_ntu_thermal_model=USE_NTU_THERMAL_MODEL,
-                           cycle_type=cycle_type)
+                           cycle_type=cycle_type, particle_diameter=particle_diameter,
+                           blow_fraction=blow_fraction, pump_motor_efficiency=pump_motor_efficiency)
         r_i = stage.run(T_local, span_per_stage)
         if r_i.Qc > 0:
             scale = Qc_target / r_i.Qc

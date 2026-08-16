@@ -14,7 +14,7 @@ question is not "does the one fixed composition work here" but "can EACH
 family be tuned to a composition that works here, and if so, how does it
 actually perform against Gd and against each other".
 
-This module runs all seven candidates --
+This module runs all eight candidates --
     1. Gd                      (fixed, core.mce_material.GADOLINIUM)
     2. Gd5Si2Ge2 (fixed comp.) (core.first_order_mce.GD5SI2GE2_FIRST_ORDER)
     3. Gd5(SixGe1-x)4(-Ga)     (GD_FAMILY, composition-tuned per span)
@@ -173,7 +173,8 @@ def run_analysis(out_csv="results/material_family_comparison.csv",
     lines.append(f"(T_cold={T_COLD_C:.0f}C={T_COLD_K:.2f}K, spans={list(SPANS_K)}K, "
                  f"mu0H={MU0H_MAX:.1f}T, {MASS_PER_STAGE:.0f}kg/stage, 1-4 stage cascade)")
     lines.append("=" * 100)
-    lines.append("Tunable families (GD_FAMILY, LAFESIH_FAMILY, MNFEPSI_FAMILY) are re-tuned per span")
+    lines.append("Tunable families (GD_FAMILY, LAFESIH_FAMILY, MNFEPSI_FAMILY, "
+                 "GA1XCMN3X_FAMILY, MNCUCOGE_FAMILY) are re-tuned per span")
     lines.append("so their OWN peak lands at that span's T_mid = T_cold + span/2 (see module docstring")
     lines.append("for the +10-11K peak-vs-Tc offset this accounts for). Falls back to plain Gd where")
     lines.append("the required Tc sits outside the family's documented tunability window.")

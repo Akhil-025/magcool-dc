@@ -204,6 +204,35 @@ class AMRCycleResult:
 
 
 class AMRSystem:
+    PUMP_MOTOR_EFFICIENCY_LITERATURE = 0.6
+    # Phase 28 addition. Two independent industry sources agree small
+    # (fractional-scale, lab/prototype-appropriate) centrifugal pumps run
+    # 50-70% wire-to-water efficiency (Pumps & Systems, "How to Define &
+    # Measure Centrifugal Pump Efficiency": "typical efficiencies are 55
+    # percent for small pumps"; Linquip, "Calculation of Pump Efficiency":
+    # "smaller pumps typically fall into the range of 50 to 70 percent")
+    # -- 0.6 is their midpoint, and independently corroborates (rather than
+    # being derived from) the SAME 0.5-0.7 range a user-supplied document
+    # separately proposed for this exact parameter. See
+    # `_geometry_pumping_power_W()`'s own docstring for exactly where this
+    # is applied and, just as importantly, where it is deliberately NOT
+    # applied.
+    #
+    # NOT the class default: `pump_motor_efficiency` defaults to 1.0 (see
+    # __init__ below) -- i.e. idealized, no pump/motor loss, EXACTLY the
+    # pre-Phase-28 behavior -- matching this repo's own established
+    # discipline (Phase 15/16/24-27) of adding a new, real, literature-
+    # grounded capability as an OPT-IN parameter rather than silently
+    # changing every existing caller's numeric output. Every existing
+    # optimize.py NSGA-III run always sets particle_diameter (it is a
+    # design variable, bounds [0.05,2.0]mm), so changing this default
+    # would silently change every production Pareto front this repo has
+    # ever generated. Callers that want the literature-grounded 0.6 value
+    # (e.g. `optimize.py`, if/when it opts in) must pass
+    # `pump_motor_efficiency=AMRSystem.PUMP_MOTOR_EFFICIENCY_LITERATURE`
+    # explicitly -- see ROADMAP.md's Phase 28 entry for the concrete
+    # follow-up this leaves open.
+
     def __init__(self, material: MagnetocaloricMaterial, mu0H_max: float,
                  mass_regenerator: float, frequency: float,
                  fluid_cp: float = 4186.0, fluid_mdot: float = 0.05,
@@ -215,7 +244,8 @@ class AMRSystem:
                  bed_cross_section_area: float = 0.002,
                  hypereg_n_parallel: int = None,
                  cycle_type: str = "brayton",
-                 thermal_diode=None):
+                 thermal_diode=None,
+                 pump_motor_efficiency: float = 1.0):
         """
         material               : MagnetocaloricMaterial instance
         mu0H_max                : peak applied field, Tesla
@@ -378,6 +408,7 @@ class AMRSystem:
         self.hypereg_n_parallel = hypereg_n_parallel
         self.cycle_type = cycle_type
         self.thermal_diode = thermal_diode
+        self.pump_motor_efficiency = pump_motor_efficiency
         self._last_ntu_info = None
 
     def _cycle_type_factor(self):
@@ -476,7 +507,41 @@ class AMRSystem:
         hydraulic variant (core.thermal.pumping_power_packed_bed_hypereg)
         instead of the conventional series-flow one if hypereg_n_parallel
         is also set -- see results/hypereg_findings.md and
-        core/hypereg_analysis.py."""
+        core/hypereg_analysis.py.
+
+        Phase 28 addition: the value returned here is divided by
+        `self.pump_motor_efficiency` (default 1.0, i.e. no change, unless
+        the caller explicitly opts into a lower value -- see
+        PUMP_MOTOR_EFFICIENCY_LITERATURE's own comment above for the
+        literature-grounded 0.6 figure available for that opt-in) before being returned,
+        converting core.thermal.pumping_power_packed_bed()'s own IDEALIZED
+        hydraulic power (dP * volumetric flow, no pump/motor losses -- see
+        that function's own docstring) into an estimate of the ELECTRICAL
+        power actually drawn to achieve it -- the physically correct
+        quantity for a `pumping_power_override` that ultimately feeds
+        COP_electrical (electrical power in / cooling power out).
+
+        WHY THIS ONLY APPLIES HERE, NOT TO loss_model's generic
+        k_pump*mdot**2 term: that term is CORE-calibrated (NNLS fit) to
+        real AMR devices' own directly-reported ELECTRICAL parasitic power
+        -- i.e. any real device's own pump/motor inefficiency is ALREADY
+        baked into the fitted k_pump coefficient by construction, since the
+        fit target IS electrical power, not idealized hydraulic power.
+        Dividing that term by an efficiency AGAIN would double-count the
+        same physical loss. This only applies to the geometry-explicit
+        path (this function), which starts from a purely idealized
+        hydraulic-power calculation with no efficiency loss represented at
+        all -- confirmed by inspection of pumping_power_packed_bed()'s own
+        docstring ("no pump/motor efficiency is applied").
+
+        geometry_analysis.py's own direct calls to
+        core.thermal.pumping_power_packed_bed()/pumping_power_parallel_plate()
+        (its Table-3-comparison diagnostics) are UNCHANGED by this --
+        those calls do not go through AMRSystem/this method at all, and
+        that module's own docstring already explicitly states its
+        "augmented COP" is idealized-hydraulic and NOT meant to be read as
+        a production electrical-COP estimate; this phase does not touch
+        that intentional idealization."""
         if self.particle_diameter is None:
             return None
         from core.thermal import pumping_power_packed_bed, pumping_power_packed_bed_hypereg
@@ -491,7 +556,24 @@ class AMRSystem:
                 self.mdot_f, particle_diameter=self.particle_diameter,
                 bed_cross_section_area=self.bed_cross_section_area,
                 mass_regenerator=self.m_reg)
-        return info["P_pump_W"]
+        return info["P_pump_W"] / self.pump_motor_efficiency
+
+    def _geometry_eddy_power_W(self):
+        """Phase 27 addition. Returns the geometry-explicit intragranular
+        eddy-current power (W) if particle_diameter is set, else 0.0
+        (meaning "no additional term -- use loss_model's CORE-calibrated
+        k_eddy*f**2*mu0H**2 support-structure term alone, unchanged", the
+        pre-Phase-27 behavior). Unlike `_geometry_pumping_power_W()`
+        (which OVERRIDES the generic k_pump term), this is ADDED on top of
+        k_eddy -- see loss_model.StateDependentLossModel.parasitic_power()'s
+        `intragranular_eddy_power_W` parameter docstring for why the two
+        eddy channels are physically additive rather than alternatives."""
+        if self.particle_diameter is None:
+            return 0.0
+        from core.thermal import intragranular_eddy_power
+        return intragranular_eddy_power(
+            self.f, self.mu0H_max, particle_diameter=self.particle_diameter,
+            mass_regenerator=self.m_reg)
 
     def cooling_capacity(self, T_cold, T_span):
         """Cooling capacity Qc (W) at a given no-load DeltaT_ad and imposed
@@ -554,9 +636,11 @@ class AMRSystem:
         W, eta2 = self.magnetic_work(T_cold, T_span, Qc)
         if self.loss_model is not None:
             pump_override = self._geometry_pumping_power_W()
+            eddy_intragranular = self._geometry_eddy_power_W()
             W_parasitic = self.loss_model.parasitic_power(
                 self.f, self.mu0H_max, self.mdot_f, Qc,
-                pumping_power_override=pump_override)
+                pumping_power_override=pump_override,
+                intragranular_eddy_power_W=eddy_intragranular)
         else:
             W_parasitic = self.parasitic_fraction * Qc
         # Phase 16: hysteresis loss is added HERE, unconditionally, rather

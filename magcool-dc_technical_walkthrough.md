@@ -1,14 +1,21 @@
-# magcool-dc — Technical Walkthrough (Final / Phase 23)
+# magcool-dc — Technical Walkthrough (Final / Phase 29)
 
 This traces the model from first-principles magnetism to the final
 multi-stage, multi-objective, emissions- and economics-aware comparison —
 now extended through alternative working-body architectures, materials
-science sensitivity studies, and a static elastocaloric comparison line —
-in the order the physics and design logic actually build up. It supersedes
-the Phase 6 walkthrough. Every numeric result below was re-verified against
-a fresh `python main.py` run (356/356 tests passing); every section states
-what's new, what changed, and — carried over from the Phase 6 document's
-own convention — what still doesn't work, rather than smoothing that over.
+science sensitivity studies, a static elastocaloric comparison line, two
+new literature-grounded material families, a latent-heat physics
+refinement, geometry-explicit eddy-current loss, pump/motor efficiency,
+and layered/graded beds exposed to the NSGA-III co-optimizer — in the
+order the physics and design logic actually build up. It supersedes the
+Phase 6 and Phase 23 walkthroughs. Every numeric result below was
+re-verified against the actual code during this revision (437/437 tests
+passing; individual pipeline stages spot-checked directly rather than via
+one full `python main.py` run, since the new Phase 29 layered-bed NSGA-III
+stage alone can take several minutes even at its own reduced pipeline
+settings — see Section 13.3); every section states what's new, what
+changed, and — carried over from the Phase 6 document's own convention —
+what still doesn't work, rather than smoothing that over.
 
 **How to read the honesty flags below:** several late-phase modules (Phases
 17–23) were built against two reference books — Kitanovski et al. (2015),
@@ -73,6 +80,21 @@ mean-field limitation (the molecular-field constant λ is fixed by the
 zero-field Tc and never revisited), not a numerical artifact. This is
 consistent with de Oliveira & von Ranke (2010)'s review finding that
 mean-field theory's blind spot is sharpest right at the critical point.
+
+**New (Phase 26): confirmed this is a genuine dead end, not an open TODO.**
+A second user-supplied document proposed the "obvious" fix — add a
+`Tc(H)` parameter and shift λ with field. That parameter already existed
+(`curie_shift_K_per_T`, wired into `_lambda_for_field(H)`) and had already
+been tried and found to fail. `diagnose_curie_shift_block()`
+(`run_curie_shift_check_v2()`) proves *why*, by direct array comparison,
+not argument: `ΔS_M(T,H) = S_M(T,H) − S_M(T,0)`, and the reference term
+`S_M(T,0)` is bit-for-bit identical regardless of the shift parameter
+(H=0 makes `curie_shift_K_per_T·μ0H=0` by construction) — so the
+`ΔS_M(T,H)` peak stays anchored to the unshifted reference curve no matter
+what the shifted term does. A real fix needs short-range-correlation
+physics beyond mean-field theory (de Oliveira & von Ranke's own cited
+review) — genuinely out of scope for a parameter patch, not attempted
+further.
 
 ### 1.7 New (Phase 22 item 1): inhomogeneous / polycrystalline Tc-broadening — `inhomogeneous_broadening.py`
 
@@ -187,6 +209,95 @@ spread working range still delivers positive Qc. **Held to precisely**:
 this is a finding about *robustness to narrowing* (avoiding a catastrophic
 Qc=0 failure), not about raw performance — and it's a first-pass result at
 one spread value and one design/off-design span set, not a general claim.
+
+### 2.3 New (Phase 24): Ga1-xCMn3+x antiperovskite family — `antiperovskite_material.py`
+
+Added after a full literature-verification pass on a user-supplied "10
+realistic materials" document. The document's own "GaCMn3" claim (a
+first-order transition "around 296 K") turned out to be **wrong**: the
+stoichiometric compound Mn3GaC actually transitions at 159–165 K. The real
+match is a different, Mn-excess-doped composition series, **Ga1-xCMn3+x**
+(Wang et al., *J. Appl. Phys.* 105, 083907 (2009)) — genuinely
+room-temperature-tunable, **second-order** (so, unlike the Landau families
+above, built on `mce_material.MagnetocaloricMaterial`'s Brillouin/mean-field
+machinery via `with_Tc()`, not a new Landau fit), and directly reported as
+hysteresis-free: Tc tunable 250.0–323.5 K across four measured
+compositions (x=0, 0.06, 0.07, 0.08).
+
+**Honesty flag**: Tc-tunability and zero-hysteresis are literature-grounded;
+peak ΔS_M/ΔT_ad magnitude is **not** — no digitized ΔS_m(T,H) target was
+located (only Tc(x) and one RCP-in-J/cm³ figure, not convertible to
+J/(kg·K) without an unsourced density), so J=1.5/θ_D=380 K are flagged
+placeholders, not fitted values.
+
+### 2.4 New (Phase 25): Mn1-xCuxCoGe magnetostructural family — `first_order_mce.py`
+
+Added when asked for one more family, explicitly required to *not* be
+another weakly-evidenced/"recessive" addition. **Mn1-xCuxCoGe** (Samanta,
+Dubenko, Quetz, Stadler & Ali, *Appl. Phys. Lett.* 101, 242405 (2012)) is
+a genuinely strong candidate: a directly digitized peak |ΔS_M|=52.5
+J/(kg·K) at 5 T for the x=0.080/Tc=302 K composition — the same kind of
+calibration target the three original Landau families use, which the
+antiperovskite family above explicitly lacks. Landau (A,B,C)=(6.6,−1.85,5.2)
+found by grid search reproduces this to within 0.2% (52.42 vs. 52.5
+J/(kg·K)), peaking +5.8 K above nominal Tc (same qualitative "peaks above
+Tc" behavior flagged for the other three families).
+
+**The Tc-window "not recessive" fix**: using only Samanta et al.'s own two
+measured points (302.0–316.0 K) would have made this family show
+infeasible in *every* row of the standard comparison — every representative
+ASHRAE operating point this repo evaluates against runs ~288–295.5 K,
+entirely below 302 K. The window's lower bound was widened to 291.0 K using
+a second paper's (Pal et al. 2020) qualitative "near room temperature"
+description of a related composition — explicitly flagged in the code as
+resting on weaker evidence than the precise 316.0 K endpoint, a deliberate
+cross-paper combination made *because* it's what satisfies the "not
+recessive" requirement, not because the evidence independently justified it.
+With the widened window, the family shows `in_range=True` at 2 of 4
+representative spans checked, with real, competitive COP values (5.861,
+4.885).
+
+### 2.5 New (Phase 26): latent-heat Cp spike — `first_order_mce.py`
+
+Investigates honesty flag #1's own "0-D lattice-only Cp denominator"
+concern, raised again by a second user-supplied document. `delta_T_adiabatic()`
+previously divided by `lattice_heat_capacity(T)` alone — a smooth Debye
+curve with no representation of the first-order transition's own latent
+heat. Added `latent_heat_capacity(T, T_center)`, a Gaussian Cp spike
+(normalized to integrate to `latent_heat_J_per_kg`), added to the
+denominator only when opted in (`latent_heat_J_per_kg=0.0` default leaves
+every pre-existing material bit-for-bit unchanged).
+
+**Where the spike must be centered — a real finding, not assumed**: a first
+attempt centered the Gaussian at the fixed zero-field Tc and found it moved
+the 7 T peak ΔT_ad by <0.01 K, because this model's own peak sits
+systematically *above* Tc (honesty flag #3) — confirmed directly: the
+actual 7 T transition location is ~286.3 K vs. Tc=276.0 K, a 10.3 K miss
+that leaves a ~2 K-wide Gaussian almost entirely off the relevant range.
+`_field_dependent_transition_T(H)` locates the actual field-H transition
+(steepest |dΔS_M/dT|) and centers the spike there instead — that's what
+actually moves the result.
+
+`GD5SI2GE2_FIRST_ORDER_LATENT_HEAT` (a separate, opt-in instance):
+`latent_heat_J_per_kg=4968` (=Tc×peak ΔS_M=276×18, applying a real
+calorimetry paper's own directly-measured near-1:1 latent-heat-entropy-to-
+ΔS_M relationship for this compound family — Xu et al., arXiv:1012.2102),
+`latent_heat_width_K=2.12` (from the same 5 K thermal-hysteresis width
+already cited for this family's own `hysteresis_loss_J_per_kg`).
+
+**Result — real, partial, not a full fix**: 7 T peak ΔT_ad drops from
+24.17 K (raw) to 19.01 K, vs. Giguere et al.'s directly-measured 10.0 K
+target — closes ~36% of the gap using only literature-grounded numbers,
+*not* tuned to hit 10.0 K (σ≈7 K numerically gets within ~1 K of the
+target — verified, explicitly **not** used, since it has no independent
+citation and would be curve-fitting the answer). Cross-checked against the
+*independent* Pecharsky & Gschneidner peak-ratio benchmark (never tuned
+against): ratio improves from the flat-correction-factor's 0.51 to 0.91 at
+5 T — real, uncorrelated evidence this is genuine physics, not overfitting
+— but still <1.0 at every field, so it still doesn't resolve that
+benchmark's own "Gd5Si2Ge2 underperforms Gd" contradiction either. Neither
+`GD5SI2GE2_FIRST_ORDER` nor `DTAD_CORRECTION_FACTOR`'s default behavior
+was changed — this exists alongside them, not in place of either.
 
 ---
 
@@ -337,6 +448,73 @@ with pumping loss's ṁ²-scaling making it a bigger share of W_parasitic at
 higher flow. The qualitative mechanism is confirmed representable in this
 repo's own model; no validated optimum n or device-level prediction is
 claimed (no benchmark device uses this architecture).
+
+### 5.3 New (Phase 27): geometry-explicit intragranular eddy-current loss — `thermal.py`, `loss_model.py`
+
+A third user-supplied document proposed coupling `loss_model.py`'s
+`k_eddy·f²·μ0H²` term to particle/plate size. Checked first: `k_eddy` is
+explicitly documented as representing eddy losses in the magnet/regenerator
+**support structure** (Kitanovski et al. 2015 Ch. 6, CORE-calibrated
+against real devices' aggregate parasitic power) — a physically different
+channel from eddy-current self-heating *within* the MCM particles
+themselves, which is what the document actually wants. Implemented as a
+**separate, additive** term rather than a rescaling of the existing fitted
+coefficient:
+
+```
+Pe_volume [W/m³] = (π²/6)·σ_e·L²·f²·B_max²        (classical thin-slab/lamination eddy loss)
+W_eddy_intragranular = Pe_volume · (mass_regenerator / RHO_GD)
+```
+
+σ_e=7.6×10⁵ S/m (two independent sources — periodictable.org's tabulated
+Gd resistivity and a magnetic-refrigeration-device patent's own worked Gd
+example — agree within ~4%). `intragranular_eddy_power()` is added to (not
+swapped in place of) `k_eddy`'s own term in `parasitic_power()`, via a new
+`intragranular_eddy_power_W` parameter defaulting to 0.0 (every
+pre-existing call site unaffected).
+
+**Honesty flag**: the π²/6 formula is derived for a plate; applied here to
+packed-sphere `particle_diameter` too, as a deliberate order-of-magnitude
+approximation (no independently-citable sphere-specific coefficient was
+located). The f²/H²/L² *scaling* is robust across both geometries; the
+absolute prefactor is not.
+
+**Result — an honest finding that complicates the document's own premise**:
+at realistic packed-bed particle diameters (Tušek et al.'s own optimum
+range, 0.07–0.17 mm), the new term is milliwatt-scale — 4–5 orders of
+magnitude smaller than a typical support-structure k_eddy term at the same
+field/frequency. Even at a 100 mm solid-block scale it only reaches ~10%.
+The document's stated motivation ("give the optimizer a reason to prefer
+smaller, segmented MCM structures") mostly does not materialize at any
+particle size a real packed-bed AMR actually uses — not because the
+physics is wrong, but because intragranular eddy self-heating is genuinely
+a minor loss channel at sub-mm scale for a material with Gd's conductivity.
+Checked directly, not assumed.
+
+### 5.4 New (Phase 28): pump/motor efficiency — `amr_cycle.py`
+
+Multiple docstrings already flagged "no pump/motor efficiency" as a known,
+explicit limitation. `AMRSystem.PUMP_MOTOR_EFFICIENCY_LITERATURE = 0.6`
+(two independent industry sources agree small centrifugal pumps run
+50–70% wire-to-water efficiency, midpoint 0.6 — independently corroborating
+the same document's own separately-proposed 0.5–0.7 range). Applied in
+`_geometry_pumping_power_W()` by dividing the idealized hydraulic power by
+efficiency before returning it as the `pumping_power_override` — converting
+idealized hydraulic power into an estimate of the electrical power actually
+drawn.
+
+**Why this does not touch the generic `k_pump·mdot²` term**: that
+coefficient is CORE-calibrated against real devices' own *electrical*
+parasitic power — real-world inefficiency is already baked in by
+construction. Applying an efficiency factor there too would double-count
+the same physical loss (the same "identify the right layer" care as 5.3's
+eddy-loss distinction).
+
+**Default is 1.0, not 0.6** — every existing `optimize.py` NSGA-III run
+always sets `particle_diameter` (it's a design variable), so a 0.6 default
+would have silently changed every production Pareto front this repo has
+ever generated. `PUMP_MOTOR_EFFICIENCY_LITERATURE` is available for any
+caller to opt into explicitly; `optimize.py` does not currently do so.
 
 ---
 
@@ -620,7 +798,7 @@ Section 9's finding that COP is driven mainly by loss-model terms, not
 which material is loaded into the regenerator; a bigger MCE mostly buys
 more capacity per kg, not better efficiency.
 
-### 12.1 New: six-way material family comparison — `material_family_comparison.py`
+### 12.1 New: eight-way material family comparison — `material_family_comparison.py`
 
 At the representative span (10 K), ranked by 1-stage COP_electrical:
 
@@ -630,8 +808,11 @@ At the representative span (10 K), ranked by 1-stage COP_electrical:
 3. Nanocomposite (LAFESIH 3-phase blend, tuned)  COP=4.62  Qc=1753.7 W
 4. Gd5(SixGe1-x)4(-Ga) (tuned)                   COP=4.31  Qc=1352.3 W
    Gd5Si2Ge2 (fixed comp.)                       INFEASIBLE at this span
+   Ga1-xCMn3+x (tuned)                           in Tc window, but Qc collapses
+                                                   to 0 (uncalibrated ΔS_M magnitude,
+                                                   see Section 2.3)
    (Mn,Fe)2(P,Si) (tuned)                        window doesn't cover this
-                                                   point -> falls back to Gd
+   Mn1-xCuxCoGe (tuned)                           point -> both fall back to Gd
 ```
 
 For reference, baselines at this point: VCC COP=12.23, Liquid COP=19.89 —
@@ -639,7 +820,13 @@ the best AMR candidate still trails both. This table's value is a fair,
 apples-to-apples ranking *among* the giant-MCE options themselves,
 including whether each family's documented tunability window can even
 reach the ASHRAE point — it does not by itself change the AMR-vs-baseline
-conclusion (Section 16).
+conclusion (Section 16). Both new (Phase 24/25) candidates fall back to Gd
+at this exact span — a real, checked result, not an oversight: Ga1-xCMn3+x's
+window does cover 296.1 K (this span's T_mid) but its uncalibrated ΔS_M
+magnitude yields no usable capacity there, while Mn1-xCuxCoGe's own
+required Tc here (290.5 K) sits ~0.5 K below its own 291.0 K window floor
+(Section 2.4) — it *is* feasible with real, competitive COP at wider spans
+(15 K, 20 K), confirmed directly when Phase 25 was built.
 
 ---
 
@@ -713,11 +900,61 @@ plausible causes named (NSGA-III search noise at reduced pop/gen settings,
 or the field/COP/Qc trade-off already favoring moderate fields for other
 reasons even before the geometric cost term is added).
 
-**Known stale artifact carried from earlier phases**: `optimize.py`'s
-module docstring still describes the cost objective in its old form
-("~$175/kg Franco et al. 2018 placeholder + flat field² term"); the actual
-`cost_index()` implementation calls `economics.bom_cost()`/`bom_cost_geometric()`
-(Bjørk et al.-grounded, Section 15) and the two now disagree.
+**Previously-flagged stale artifact — now confirmed fixed**: earlier
+revisions of this walkthrough noted `optimize.py`'s module docstring still
+described the cost objective in its old form ("~$175/kg Franco et al. 2018
+placeholder + flat field² term"). Checked directly during this pass (as
+part of the Phase 24-29 thoroughness review): `cost_index()`'s own
+docstring now correctly describes `economics.bom_cost()`/
+`bom_cost_geometric()` (Bjørk et al.-grounded, Section 15) with no
+remaining reference to the old placeholder — the artifact this note used
+to describe no longer exists in the code. Left in the walkthrough as a
+record that the check was actually re-run, not assumed.
+
+### 13.3 New (Phase 29): layered/graded beds exposed to NSGA-III — `optimize.py`, `cascade.py`
+
+A fourth document item: `AMRDesignProblem` only ever searched a single
+material at a single uniform Tc, even though Curie-graded multi-layer beds
+already exist (`cascade.run_graded_cascade()`, Section 11.2) and this
+repo's own Astronautics reproduction/`compare_graded_cascade()` sweep
+already explore up to 6 layers — the NSGA-III co-optimizer just never had
+access to that dimension.
+
+`n_layers` is **not** a 6th continuous variable rounded to an integer
+inside one NSGA-III run — it's treated exactly like `material`/
+`family_name` already are: a fixed per-problem-instance choice.
+`run_layered_optimization()` loops over n_layers=1..6
+(`LAYERED_N_LAYERS_RANGE`, matching the range this repo's own
+`compare_graded_cascade()` already uses for the same question elsewhere),
+running a separate NSGA-III search per layer-count and merging every
+layer-count's Pareto front with every material's, through the same
+"separate-then-merge" logic Section 13's own module docstring already
+uses for material choice (item 2) — a direct, deliberate reuse of that
+existing architectural decision applied to a second discrete design
+choice, not a new one.
+
+`LayeredAMRDesignProblem` mirrors `AMRDesignProblem`'s 7 continuous design
+variables and 3 objectives (-COP, -Qc, cost), but `_evaluate()` calls
+`run_graded_cascade()` for `n_layers` stages instead of a single
+`AMRSystem.run()`. `mass_per_stage` is the *per-stage* mass; cost is
+charged for the *total* system mass (`mass_per_stage × n_layers`). An
+infeasible cascade (Qc≤0) is penalized with a large finite F rather than
+NaN/inf, keeping NSGA-III's dominance comparisons well-defined.
+`run_graded_cascade()` was extended with `particle_diameter`,
+`blow_fraction`, `pump_motor_efficiency` (defaults preserving every
+pre-Phase-29 call exactly) so a layered search has access to the same
+geometry/pump-efficiency dimensions the single-stage search already does —
+without this, a layered-bed search would have been silently restricted to
+a strict subset of the single-stage design space.
+
+**Honest runtime note**: each evaluation runs `n_layers` full stage
+solves plus `n_layers` Curie-target root-finds — markedly more expensive
+per NSGA-III individual than the single-stage search, consistent with
+this repo's own pre-existing note that `run_graded_cascade()`/
+`compare_graded_cascade()` are already "the single slowest stage in the
+full pipeline." Not wired into `main.py` as a new pipeline stage in this
+pass — exists as a standalone, directly-callable function, same status
+`run_optimization()` itself had before being wired in.
 
 ---
 
@@ -922,11 +1159,14 @@ Found by executing the modules and checking arithmetic by hand, not
 flagged by the code itself — kept unfixed deliberately, as a record of
 where documentation drifted from a later code change:
 
-1. `optimize.py`'s module docstring still describes the old ~$175/kg
-   Franco-et-al.-based cost objective; the actual `cost_index()`
-   implementation calls `economics.bom_cost()`/`bom_cost_geometric()`
-   (Bjørk et al.-grounded, Section 15) and the two no longer agree
-   (Section 13.2).
+1. ~~`optimize.py`'s module docstring still describes the old ~$175/kg
+   Franco-et-al.-based cost objective~~ — **checked directly during this
+   revision and found already fixed**: `cost_index()`'s own docstring
+   correctly describes `economics.bom_cost()`/`bom_cost_geometric()`
+   (Bjørk et al.-grounded, Section 15), with no remaining reference to
+   the old placeholder (Section 13.2). Left in this list, struck through,
+   as a record that the check was re-run rather than the old claim simply
+   carried forward unverified.
 2. Phase 16's hysteresis-on-vs-off material-selection reversal (Section
    13.1) does not survive a full-production-settings, multiseed rerun —
    an open item, not a corrected number, since the original reduced-setting
@@ -935,6 +1175,17 @@ where documentation drifted from a later code change:
    reproduce the expected "geometric cost term lowers the front's mean
    field" direction in this specific run — reported as a negative result
    rather than re-run until it matched expectation.
+4. Phase 24-29 open items, collected here rather than only in ROADMAP.md:
+   Ga1-xCMn3+x's (Section 2.3) peak ΔS_M/ΔT_ad magnitude is uncalibrated
+   (only Tc-tunability and zero-hysteresis are literature-grounded);
+   Mn1-xCuxCoGe's (Section 2.4) 291.0 K window floor rests on a
+   qualitative cross-paper reading, weaker evidence than its precise
+   316.0 K endpoint; the intragranular eddy-loss formula (Section 5.3) is
+   derived for a plate but applied to packed spheres too, with no
+   independently-citable sphere-specific prefactor; and
+   `pump_motor_efficiency` (Section 5.4) is implemented and tested but not
+   yet actually used by any production `optimize.py` Pareto front (default
+   stays 1.0/idealized).
 
 ---
 

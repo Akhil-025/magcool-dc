@@ -147,7 +147,7 @@ from core.loss_model import StateDependentLossModel
 from core.economics import material_cost, bom_cost, bom_cost_geometric
 from core.cascade import (GD_FAMILY, LAFESIH_FAMILY, MNFEPSI_FAMILY,
                             GA1XCMN3X_FAMILY, MNCUCOGE_FAMILY,
-                            _target_composition_for_peak)
+                            _target_composition_for_peak, run_graded_cascade)
 
 T_COLD_K = 291.0
 SPAN_K = 10.0
@@ -270,15 +270,238 @@ def _row_from_xf(x, f, material_label):
     }
 
 
+# --- Phase 29: layered/graded beds exposed to NSGA-III (document item #4) ---
+#
+# `AMRDesignProblem` above only ever searches a SINGLE material at a SINGLE
+# uniform Tc -- Curie-graded multi-layer beds exist in this repo
+# (core/cascade.py's run_graded_cascade(), Phase 7/9) but were never wired
+# into the NSGA-III co-optimizer at all; this closes that gap.
+#
+# n_layers is NOT a 6th continuous design variable rounded to an integer
+# inside one NSGA-III run. It is instead treated EXACTLY like `material`/
+# `family_name` already are above: a FIXED per-problem-instance choice,
+# with `run_layered_optimization()` looping over n_layers=1..6 and merging
+# every layer-count's own Pareto front with every material's, through the
+# SAME `_pareto_filter()` global non-dominance filter already used for the
+# material co-optimization. This is a direct, deliberate reuse of this
+# module's own documented "option (b): separate-then-merge" reasoning
+# (module docstring item 2) for material choice, applied to a second
+# discrete design choice -- not a new architectural decision. A native
+# mixed-variable pymoo formulation (option (a), searching n_layers jointly
+# with the 7 continuous variables in one run) was considered and rejected
+# for the SAME reasons already given for material choice: pymoo's
+# `ElementwiseProblem` framework used everywhere else in this file expects
+# continuous decision variables, and 1-6 is a small enough discrete set
+# that N separate continuous searches plus a global merge is simpler,
+# easier to test/debug per layer-count, and (per the existing runtime note
+# on run_optimization()) not meaningfully slower in aggregate than one
+# larger mixed-variable run would be.
+LAYERED_N_LAYERS_RANGE = (1, 2, 3, 4, 5, 6)
+# Phase 29: matches this repo's own existing single-stage-vs-Curie-graded
+# comparisons (core/cascade.py's compare_graded_cascade() sweeps
+# stage_counts=(1,2,3,4) by default; this repo's own Astronautics
+# reproduction uses 6 layers) -- 1-6 is not an arbitrary new choice, it is
+# the range this codebase already explores elsewhere for the SAME
+# question (how many Curie-graded layers).
+
+
+class LayeredAMRDesignProblem(ElementwiseProblem):
+    """Phase 29: the Curie-graded-cascade analog of AMRDesignProblem above.
+    Same 7 continuous design variables (mu0H, frequency, mdot,
+    mass_per_stage, regen_effectiveness, blow_fraction,
+    particle_diameter_mm) and same 3 objectives (-COP, -Qc, cost), but
+    `_evaluate()` calls `core.cascade.run_graded_cascade()` (an n_layers-
+    stage Curie-graded bed, family-tuned per stage) instead of a single
+    AMRSystem.run() call. `n_layers` and `family`/`family_name` are FIXED
+    at construction time -- see this section's own module-level comment
+    for why n_layers is not itself a search variable.
+
+    `mass_per_stage` (design variable index 3, same [1.0, 15.0]kg bounds
+    as AMRDesignProblem's own `mass` variable) is the PER-STAGE
+    regenerator mass -- cost_index() is charged for the TOTAL system mass
+    (mass_per_stage * n_layers), matching what a real multi-layer bed
+    would actually cost in raw MCM.
+
+    A cascade whose stage Qc collapses to <=0 (run_graded_cascade()'s own
+    `feasible=False` case -- e.g. a stage's required Tc falls outside the
+    family's documented tunability window and even the Gd fallback can't
+    produce positive capacity there) is penalized with a large finite F
+    rather than left as NaN/inf, so NSGA-III's own dominance comparisons
+    stay well-defined (mirrors how AMRDesignProblem implicitly relies on
+    AMRSystem.run() always returning a finite, if sometimes negative-COP,
+    result)."""
+
+    _INFEASIBLE_PENALTY = (0.0, 0.0, 1.0e7)  # (COP, Qc, cost) -> F=(0, 0, 1e7):
+    # worst-possible-but-finite in every objective, so an infeasible
+    # cascade is always dominated by any feasible one without poisoning
+    # NSGA-III's crowding-distance/reference-direction machinery with inf/nan.
+
+    def __init__(self, n_layers, family=None, family_name="Gd",
+                 apply_giguere_correction=True, use_geometric_magnet_mass=False):
+        self.n_layers = n_layers
+        self.family = family
+        self.family_name = family_name
+        self.apply_giguere_correction = apply_giguere_correction
+        self.use_geometric_magnet_mass = use_geometric_magnet_mass
+        super().__init__(n_var=7, n_obj=3, n_constr=0, xl=_XL, xu=_XU)
+
+    def _evaluate(self, x, out, *args, **kwargs):
+        mu0H, freq, mdot, mass_per_stage, eps, blow_fraction, particle_diameter_mm = x
+        result = run_graded_cascade(
+            T_COLD_K, SPAN_K, self.n_layers, mu0H_max=mu0H,
+            mass_per_stage=mass_per_stage, frequency=freq, fluid_mdot=mdot,
+            regenerator_effectiveness=eps,
+            apply_giguere_correction=self.apply_giguere_correction,
+            family=self.family, cycle_type="brayton",
+            particle_diameter=particle_diameter_mm / 1000.0,
+            blow_fraction=blow_fraction)
+        if not result["feasible"] or result["Qc_W"] <= 0:
+            f1, f2, f3 = self._INFEASIBLE_PENALTY
+        else:
+            f1 = -(result["Qc_W"] / result["W_total_W"]) if result["W_total_W"] > 0 else 0.0
+            f2 = -result["Qc_W"]
+            total_mass = mass_per_stage * self.n_layers
+            f3 = cost_index(mu0H, total_mass, self.family_name, self.use_geometric_magnet_mass)
+        out["F"] = [f1, f2, f3]
+
+
+def _layered_row_from_xf(x, f, n_layers, family_label):
+    return {
+        "family": family_label, "n_layers": n_layers,
+        "mu0H_max_T": round(x[0], 3), "frequency_Hz": round(x[1], 3),
+        "fluid_mdot_kgs": round(x[2], 4), "mass_per_stage_kg": round(x[3], 2),
+        "regen_effectiveness": round(x[4], 3), "blow_fraction": round(x[5], 3),
+        "particle_diameter_mm": round(x[6], 4),
+        "COP_cascade": round(-f[0], 3), "Qc_W": round(-f[1], 2),
+        "cost_index_USD": round(f[2], 1),
+    }
+
+
+_LAYERED_ROW_FIELDNAMES = ["family", "n_layers", "mu0H_max_T", "frequency_Hz",
+                           "fluid_mdot_kgs", "mass_per_stage_kg", "regen_effectiveness",
+                           "blow_fraction", "particle_diameter_mm", "COP_cascade",
+                           "Qc_W", "cost_index_USD"]
+
+
+def run_layered_optimization_for_n_layers(n_layers, family=None, family_name="Gd",
+                                           pop_size=40, n_gen=25, seed=1,
+                                           out_csv=None, use_geometric_magnet_mass=False):
+    """Runs NSGA-III for a single n_layers value -- the layered-bed analog
+    of run_optimization_for_material() above. Same reduced pop_size/n_gen
+    defaults (40/25) for the same runtime-accounting reason: this is meant
+    to be called once per n_layers value in LAYERED_N_LAYERS_RANGE, not
+    once total."""
+    ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=6)
+    algorithm = NSGA3(pop_size=pop_size, ref_dirs=ref_dirs)
+    problem = LayeredAMRDesignProblem(
+        n_layers=n_layers, family=family, family_name=family_name,
+        use_geometric_magnet_mass=use_geometric_magnet_mass)
+    res = pymoo_minimize(problem, algorithm, ("n_gen", n_gen), seed=seed, verbose=False)
+
+    X, F = res.X, res.F
+    family_label = family.name if family is not None else family_name
+    rows = [_layered_row_from_xf(x, f, n_layers, family_label) for x, f in zip(X, F)]
+    if out_csv:
+        _write_csv(rows, out_csv, fieldnames=_LAYERED_ROW_FIELDNAMES)
+    return rows
+
+
+def _layered_pareto_filter(rows):
+    """Same dominance logic as _pareto_filter() above, on
+    [-COP_cascade, -Qc_W, cost_index_USD] instead of
+    [-COP_electrical, -Qc_W, cost_index_USD] -- kept as a separate function
+    (rather than generalizing _pareto_filter() to a configurable objective-
+    key list) because the two row schemas use different field names for
+    the same underlying quantity (COP_electrical vs. COP_cascade), and
+    this repo's own convention elsewhere (see e.g.
+    core.first_order_mce.mncucoge_composition_tuned_material() vs.
+    lafesih_composition_tuned_material()) already prefers small, obviously-
+    correct duplication over a shared helper with an implicit schema
+    contract between unrelated call sites."""
+    if not rows:
+        return rows
+    F = np.array([[-r["COP_cascade"], -r["Qc_W"], r["cost_index_USD"]] for r in rows])
+    n = len(rows)
+    dominated = np.zeros(n, dtype=bool)
+    for i in range(n):
+        if dominated[i]:
+            continue
+        le = np.all(F <= F[i], axis=1)
+        lt = np.any(F < F[i], axis=1)
+        dominators = le & lt
+        if np.any(dominators):
+            dominated[i] = True
+    return [r for r, d in zip(rows, dominated) if not d]
+
+
+def run_layered_optimization(n_layers_range=LAYERED_N_LAYERS_RANGE, family=None,
+                              family_name="Gd", pop_size=40, n_gen=25, seed=1,
+                              out_csv="results/layered_pareto_front.csv",
+                              per_n_layers_out_dir="results/layered_pareto_front_by_n",
+                              use_geometric_magnet_mass=False):
+    """Phase 29: runs NSGA-III separately for each n_layers in
+    n_layers_range (default LAYERED_N_LAYERS_RANGE=1..6), writes each
+    layer-count's own Pareto front to
+    `per_n_layers_out_dir/n_layers_<n>.csv`, then merges all rows and
+    applies a global non-dominance filter (`_layered_pareto_filter()`) --
+    the layered-bed analog of run_optimization()'s own material
+    co-optimization loop, reusing the SAME "separate-then-merge"
+    reasoning (see this section's own module-level comment above
+    LAYERED_N_LAYERS_RANGE).
+
+    `family`/`family_name` default to None/"Gd", i.e. GD_FAMILY's own
+    Curie-graded behavior (run_graded_cascade()'s own default when
+    `family=None` and `apply_giguere_correction=True` -- see that
+    function's docstring) -- a single fixed material family across all
+    layer counts, NOT a further material x n_layers cross-product (that
+    would be `len(_material_candidates()) * len(n_layers_range)` separate
+    NSGA-III runs -- left as a documented, concretely-scoped follow-up,
+    not attempted here to keep this phase's own runtime and scope
+    bounded)."""
+    all_rows = []
+    per_n_rows = {}
+    print(f"Phase 29 layered-bed co-optimization: {len(n_layers_range)} n_layers "
+          f"value(s) -- {', '.join(str(n) for n in n_layers_range)}")
+    for n_layers in n_layers_range:
+        out_path = os.path.join(per_n_layers_out_dir, f"n_layers_{n_layers}.csv") \
+            if per_n_layers_out_dir else None
+        rows = run_layered_optimization_for_n_layers(
+            n_layers, family=family, family_name=family_name,
+            pop_size=pop_size, n_gen=n_gen, seed=seed, out_csv=out_path,
+            use_geometric_magnet_mass=use_geometric_magnet_mass)
+        per_n_rows[n_layers] = rows
+        all_rows.extend(rows)
+        print(f"  n_layers={n_layers}  {len(rows)} Pareto-optimal design(s) found"
+              + (f" -> {out_path}" if out_path else ""))
+
+    merged = _layered_pareto_filter(all_rows)
+    _write_csv(merged, out_csv, fieldnames=_LAYERED_ROW_FIELDNAMES)
+
+    rows = merged
+    print(f"\nMerged across {len(n_layers_range)} n_layers value(s): "
+          f"{len(all_rows)} total designs -> {len(rows)} globally non-dominated "
+          f"design(s) after cross-n_layers Pareto filtering.")
+    print(f"Wrote {out_csv}\n")
+
+    if rows:
+        n_layers_counts = {}
+        for r in rows:
+            n_layers_counts[r["n_layers"]] = n_layers_counts.get(r["n_layers"], 0) + 1
+        print("n_layers representation in the merged, globally non-dominated front:")
+        for n_layers, count in sorted(n_layers_counts.items()):
+            print(f"  n_layers={n_layers}  {count} design(s) ({100*count/len(rows):.0f}%)")
+    return rows
+
+
 _ROW_FIELDNAMES = ["material", "mu0H_max_T", "frequency_Hz", "fluid_mdot_kgs",
                     "mass_regenerator_kg", "regen_effectiveness", "blow_fraction",
                     "particle_diameter_mm", "COP_electrical", "Qc_W", "cost_index_USD"]
 
 
-def _write_csv(rows, path):
+def _write_csv(rows, path, fieldnames=None):
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "w", newline="") as fh:
-        writer = csv.DictWriter(fh, fieldnames=_ROW_FIELDNAMES)
+        writer = csv.DictWriter(fh, fieldnames=fieldnames or _ROW_FIELDNAMES)
         writer.writeheader()
         writer.writerows(rows)
 

@@ -501,7 +501,8 @@ class StateDependentLossModel:
         self.k_pump = k_pump
         self.base_frac = base_frac
 
-    def parasitic_power(self, frequency, mu0H, mdot, Qc, pumping_power_override=None):
+    def parasitic_power(self, frequency, mu0H, mdot, Qc, pumping_power_override=None,
+                         intragranular_eddy_power_W=0.0):
         """W_eddy + W_pump + W_base, as documented in the module docstring.
 
         Phase 15 addition: `pumping_power_override`, default None, changes
@@ -519,8 +520,23 @@ class StateDependentLossModel:
         core/amr_cycle.py's AMRSystem docstring and core/optimize.py's
         Phase 15 section for the full reasoning. k_eddy and base_frac are
         unaffected either way, since geometry does not change eddy-current
-        or baseline-electronics losses."""
-        W_eddy = self.k_eddy * frequency ** 2 * mu0H ** 2
+        or baseline-electronics losses.
+
+        Phase 27 addition: `intragranular_eddy_power_W`, default 0.0,
+        changes NOTHING about existing behavior when omitted (every
+        pre-Phase-27 caller keeps getting exactly W_eddy + W_pump + W_base
+        as before). When provided (by amr_cycle.AMRSystem when a
+        particle_diameter is set -- see its own `_geometry_eddy_power_W()`),
+        it is ADDED to (not swapped in place of) the CORE-calibrated
+        W_eddy term -- deliberately DIFFERENT handling from
+        pumping_power_override's REPLACE semantics, because this new term
+        represents a physically DIFFERENT loss channel (eddy-current
+        self-heating within the MCM particles/plates themselves) than
+        k_eddy's own CORE-calibrated support-structure eddy losses -- see
+        core.thermal.intragranular_eddy_power()'s own docstring for the
+        full distinction. The two mechanisms occur simultaneously in a
+        real device, so they add rather than override."""
+        W_eddy = self.k_eddy * frequency ** 2 * mu0H ** 2 + intragranular_eddy_power_W
         W_pump = self.k_pump * mdot ** 2 if pumping_power_override is None else pumping_power_override
         W_base = self.base_frac * Qc
         return W_eddy + W_pump + W_base
@@ -554,9 +570,11 @@ class RotaryDriveLossModel(StateDependentLossModel):
         self.k_drive0 = k_drive0
         self.k_drive1 = k_drive1
 
-    def parasitic_power(self, frequency, mu0H, mdot, Qc, pumping_power_override=None):
+    def parasitic_power(self, frequency, mu0H, mdot, Qc, pumping_power_override=None,
+                         intragranular_eddy_power_W=0.0):
         base = super().parasitic_power(frequency, mu0H, mdot, Qc,
-                                        pumping_power_override=pumping_power_override)
+                                        pumping_power_override=pumping_power_override,
+                                        intragranular_eddy_power_W=intragranular_eddy_power_W)
         W_drive = self.k_drive0 + self.k_drive1 * frequency
         return base + W_drive
 

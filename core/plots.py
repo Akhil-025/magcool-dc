@@ -1214,13 +1214,13 @@ def plot_astronautics_validation(precomputed=None):
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# FIG 26 — Six-way material family comparison (Track A2 item + Phase 22 item 2)
+# FIG 26 — Eight-way material family comparison (Track A2 item + Phase 22 item 2 + Phase 24/25)
 # ══════════════════════════════════════════════════════════════════════════
 
 def plot_material_family_comparison(precomputed=None):
     """precomputed, if given, may supply 'material_rows' (already computed
     by step 8d in main.py) so this figure reuses it instead of re-running
-    the ~6s six-way material-family sweep a second time in the same
+    the ~8s eight-way material-family sweep a second time in the same
     pipeline invocation."""
     precomputed = precomputed or {}
     rows = precomputed.get('material_rows')
