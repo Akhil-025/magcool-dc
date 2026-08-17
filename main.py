@@ -1017,6 +1017,11 @@ def main():
         ("2c. Calibration-failure root-cause diagnostic: search-space artifact vs. "
          "structural limitation (core/validation_system.py, Paper-Mining Pass review item 1)",
          lambda: validation_system.run_calibration_failure_diagnostics()),
+        ("2d. Regenerative-amplification gap diagnostic: how far real AMR spans exceed "
+         "cooling_capacity()'s own 2*dTad_noload structural cap, across every span>0 "
+         "benchmark row (core/validation_system.py, follow-up to 2c quantifying the "
+         "SIZE of the structural gap, not just which rows hit it)",
+         lambda: validation_system.analyze_regenerative_amplification_gap()),
         ("3. Loss-model calibration (auto-loaded by AMRSystem's default loss model)",
          lambda: (loss_model.calibrate_loss_coefficients(), loss_model.run_extended_diagnostic())),
         ("3b. Regenerator thermal-effectiveness demo (core/thermal.py, reached transitively otherwise)",
@@ -1048,7 +1053,10 @@ def main():
          run_remaining_structural_devices_graded_validation),
         ("7e. Does the Giguere DeltaT_ad correction (giguere_validation.py, ~2.42x "
          "overestimate factor) narrow the Astronautics_rotary_2014 graded-bed "
-         "-81.1% COP error? (core/cascade.py, Paper-Mining Pass review item 2)",
+         "COP error further, on top of the shared_hardware fix (core/cascade.py, "
+         "Paper-Mining Pass review item 2; baseline was -81.1% before that fix, "
+         "now +0.9% -- see run_astronautics_giguere_correction_sensitivity()'s "
+         "own docstring)?",
          lambda: cascade.run_astronautics_giguere_correction_sensitivity()),
         ("8. Giant-MCE materials analysis (Gd vs Gd5Si2Ge2)",
          lambda: giant_mce_analysis.run_analysis()),

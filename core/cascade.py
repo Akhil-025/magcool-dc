@@ -319,7 +319,8 @@ def run_cascade(T_cold_K, total_span_K, n_stages, material=None, mu0H_max=2.0,
 
 def run_explicit_material_cascade(T_cold_K, total_span_K, materials, mu0H_max=2.0,
                                    mass_per_stage=2.0, frequency=1.0, fluid_mdot=0.08,
-                                   regenerator_effectiveness=0.85, cycle_type="brayton"):
+                                   regenerator_effectiveness=0.85, cycle_type="brayton",
+                                   shared_hardware=False):
     """Same series-cascade mechanics as run_cascade()/run_graded_cascade()
     above, but for the case where the REAL per-stage material composition
     is already known from a paper (not searched for, unlike
@@ -330,8 +331,46 @@ def run_explicit_material_cascade(T_cold_K, total_span_K, materials, mu0H_max=2.
     reported Gd/Gd-Y multi-layer bed. n_stages = len(materials).
     mass_per_stage may be a single float (split evenly across all stages)
     or a list/tuple of per-stage masses matching len(materials), for the
-    (more common) case where a paper reports a total MCM mass but not a
-    per-layer breakdown.
+
+    `shared_hardware` (default False, reproduces every pre-existing call's
+    behavior exactly): when True, changes how the N per-stage
+    AMRCycleResult.W_parasitic terms are combined into W_total. The
+    default (False) sums each stage's OWN independently-computed
+    W_eddy+W_pump+W_base (scaled to the bottleneck Qc), which is the right
+    model when the "stages" really are N separate physical machines (as in
+    run_cascade()/compare_staging()'s cascade-vapor-compression framing --
+    see this module's own docstring). It is the WRONG model for a single
+    physical multi-layer regenerator bed with one set of magnets, one
+    pump, and one motor driving all layers at once (e.g. the real
+    Astronautics/DTU_MagQueen/MAGGIE devices this function's callers below
+    reproduce) -- W_eddy = k_eddy*f^2*mu0H^2 and W_base = base_frac*Qc do
+    not multiply by the number of MATERIAL LAYERS inside one shared
+    housing, and `fluid_mdot` is already passed identically (unscaled per
+    stage) to every stage below, i.e. it already represents ONE flow
+    rate through the whole bed, not N independent flows. Summing N
+    independently-scaled copies of a loss term that is physically
+    incurred ONCE overcounts it by roughly a factor of N (exactly N for
+    W_base after scaling; a Qc-distribution-weighted factor for W_eddy/
+    W_pump) -- this was found by inspecting validate_maggie_real_graded_bed
+    (n=4, COP error -69.3%), validate_astronautics_graded_bed (n=6, COP
+    error -81.1%), and validate_magqueen_graded_bed (n=10, COP error
+    -92.2%): the error magnitude increases monotonically with n_stages,
+    the fingerprint of an N-times-overcounted shared term rather than a
+    genuine per-device modeling gap. When shared_hardware=True, W_mag is
+    still summed per stage (thermodynamically legitimate -- each layer's
+    own entropy change/work genuinely differs), but W_eddy/W_pump/W_base
+    are each computed ONCE from the aggregate (frequency, mu0H_max,
+    fluid_mdot, Qc_target) using the same loss_model every stage already
+    shares (_LOSS_MODEL), matching how cycle_type is already shared
+    unscaled across stages (see run_graded_cascade()'s cycle_type
+    docstring paragraph -- the same "one physical field-change mechanism"
+    reasoning applies to the loss terms and was not previously carried
+    through to them).
+
+    (mass_per_stage, continued: it may be a single float -- the more
+    common case where a paper reports a total MCM mass but not a
+    per-layer breakdown -- split evenly, or a list/tuple of per-stage
+    masses matching len(materials).)
 
     See validate_maggie_real_graded_bed() below for the motivating use:
     reproducing DTU_Eriksen_MAGGIE_2016's actual reported 4-composition
@@ -362,6 +401,7 @@ def run_explicit_material_cascade(T_cold_K, total_span_K, materials, mu0H_max=2.
                 "Qc_W": 0.0, "W_total_W": np.nan, "COP_cascade": 0.0, "feasible": False}
 
     W_total = 0.0
+    W_mag_total = 0.0
     T_local = T_cold_K
     stage_info = []
     for i in range(n_stages):
@@ -373,19 +413,27 @@ def run_explicit_material_cascade(T_cold_K, total_span_K, materials, mu0H_max=2.
         r_i = stage.run(T_local, span_per_stage)
         if r_i.Qc > 0:
             scale = Qc_target / r_i.Qc
-            W_i = (r_i.W_mag + r_i.W_parasitic) * scale
+            W_mag_total += r_i.W_mag * scale
+            if not shared_hardware:
+                W_total += (r_i.W_mag + r_i.W_parasitic) * scale
         else:
-            W_i = np.inf
-        W_total += W_i
+            W_mag_total = np.inf
+            if not shared_hardware:
+                W_total = np.inf
         stage_info.append({"stage": i + 1, "T_mid_K": round(T_local + span_per_stage / 2.0, 2),
                             "material": materials[i].name, "Tc_K": round(materials[i].Tc, 2),
                             "mass_kg": round(masses[i], 4), "own_Qc_W": round(r_i.Qc, 2)})
         T_local += span_per_stage
 
+    if shared_hardware:
+        W_parasitic_shared = _LOSS_MODEL.parasitic_power(frequency, mu0H_max, fluid_mdot, Qc_target)
+        W_total = W_mag_total + W_parasitic_shared
+
     COP_cascade = Qc_target / W_total if W_total > 0 else 0.0
     return {"n_stages": n_stages, "span_per_stage_K": span_per_stage,
             "Qc_W": round(Qc_target, 1), "W_total_W": round(W_total, 1),
-            "COP_cascade": round(COP_cascade, 3), "feasible": True, "stage_info": stage_info}
+            "COP_cascade": round(COP_cascade, 3), "feasible": True, "stage_info": stage_info,
+            "shared_hardware": shared_hardware}
 
 
 def validate_maggie_real_graded_bed(cycle_type="brayton"):
@@ -447,7 +495,16 @@ def validate_maggie_real_graded_bed(cycle_type="brayton"):
 
     fluid_mdot is calibrated (brentq) to reproduce the reported Qc=81.5W
     exactly, then COP_cascade is compared to the reported COP=3.6 --
-    mirroring validate_astronautics_graded_bed()'s own methodology."""
+    mirroring validate_astronautics_graded_bed()'s own methodology.
+
+    Calls run_explicit_material_cascade() with shared_hardware=True: the
+    real MAGGIE prototype is ONE rotary assembly with ONE set of magnets
+    and ONE pump driving all 4 Gd/Gd-Y compartments at once (Eriksen et
+    al. 2015/2016, same source as the Curie temperatures above), not 4
+    separate machines -- see run_explicit_material_cascade()'s own
+    docstring for why the previous shared_hardware=False (default)
+    behavior overcounted W_eddy/W_pump/W_base by roughly a factor of
+    n_stages=4 here."""
     T_cold_K = 277.15   # 4.0C = 19.5C(T_hot) - 15.5K(span), thesis Sec. 6.5.3
     span_K = 15.5
     mu0H = 1.13
@@ -466,7 +523,8 @@ def validate_maggie_real_graded_bed(cycle_type="brayton"):
     def qc_residual(mdot):
         r = run_explicit_material_cascade(T_cold_K, span_K, materials, mu0H_max=mu0H,
                                            mass_per_stage=mass_per_stage, frequency=freq,
-                                           fluid_mdot=max(mdot, 1e-6), cycle_type=cycle_type)
+                                           fluid_mdot=max(mdot, 1e-6), cycle_type=cycle_type,
+                                           shared_hardware=True)
         return (r["Qc_W"] if r["feasible"] else 0.0) - Qc_lit
 
     try:
@@ -479,7 +537,8 @@ def validate_maggie_real_graded_bed(cycle_type="brayton"):
 
     result = run_explicit_material_cascade(T_cold_K, span_K, materials, mu0H_max=mu0H,
                                             mass_per_stage=mass_per_stage, frequency=freq,
-                                            fluid_mdot=mdot_cal, cycle_type=cycle_type)
+                                            fluid_mdot=mdot_cal, cycle_type=cycle_type,
+                                            shared_hardware=True)
     result["mdot_calibrated_kg_s"] = round(mdot_cal, 5)
     result["Qc_lit_W"] = Qc_lit
     result["COP_lit"] = cop_lit
@@ -514,7 +573,8 @@ def run_maggie_span_sensitivity(cycle_type="brayton", verbose=True):
     def qc_residual(mdot):
         r = run_explicit_material_cascade(T_cold_2015_K, span_2015_K, materials, mu0H_max=mu0H,
                                            mass_per_stage=mass_per_stage, frequency=freq,
-                                           fluid_mdot=max(mdot, 1e-6), cycle_type=cycle_type)
+                                           fluid_mdot=max(mdot, 1e-6), cycle_type=cycle_type,
+                                           shared_hardware=True)
         return (r["Qc_W"] if r["feasible"] else 0.0) - Qc_lit_2015
 
     try:
@@ -522,7 +582,7 @@ def run_maggie_span_sensitivity(cycle_type="brayton", verbose=True):
         companion = run_explicit_material_cascade(T_cold_2015_K, span_2015_K, materials,
                                                     mu0H_max=mu0H, mass_per_stage=mass_per_stage,
                                                     frequency=freq, fluid_mdot=mdot_cal,
-                                                    cycle_type=cycle_type)
+                                                    cycle_type=cycle_type, shared_hardware=True)
         companion["feasible"] = True
         companion["mdot_calibrated_kg_s"] = round(mdot_cal, 5)
         companion["Qc_lit_W"] = Qc_lit_2015
@@ -750,7 +810,7 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
                         apply_giguere_correction=True, family=None,
                         executor=None, cycle_type="brayton",
                         particle_diameter=None, blow_fraction=0.5,
-                        pump_motor_efficiency=1.0):
+                        pump_motor_efficiency=1.0, shared_hardware=False):
     """Curie-graded cascade (ROADMAP.md Phase 7 open item; generalized in
     Phase 9): rather than identical stages of one material (run_cascade
     above), each stage is assigned a hypothetical composition-tuned material
@@ -812,7 +872,23 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
     without this, a layered-bed NSGA-III search would be silently
     restricted to a strict subset of the single-stage search's own design
     space, which would bias any single-vs-layered comparison built on top
-    of both."""
+    of both.
+
+    `shared_hardware` (default False, no change to any existing caller's
+    numbers): see run_explicit_material_cascade()'s docstring for the
+    full reasoning -- same fix, same justification (one shared magnet/
+    pump/motor system driving all graded layers in a single physical
+    bed), applied here because validate_astronautics_graded_bed() and
+    validate_magqueen_graded_bed() call THIS function, not
+    run_explicit_material_cascade(). compare_graded_cascade() below
+    still defaults to shared_hardware=False, so graded_cascade_comparison.csv
+    and design_recommendations.txt's lever-3 numbers are unchanged by
+    this addition -- they describe a hypothetical from-scratch design
+    exploration where whether the graded bed is one shared-hardware unit
+    or N separate modules is a design choice, not yet a fact about a
+    built device, and re-deriving that whole comparison table was judged
+    out of scope for this pass; see results/regenerative_amplification_diagnostic.txt
+    for a worked example of the resulting magnitude on one operating point."""
     if family is None:
         family = GD_FAMILY if apply_giguere_correction else GradedFamily(
             name=GD_FAMILY.name,
@@ -876,6 +952,7 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
                 "stage_info": stage_info}
 
     W_total = 0.0
+    W_mag_total = 0.0
     T_local = T_cold_K
     for i in range(n_stages):
         stage = AMRSystem(material=stage_materials[i], mu0H_max=mu0H_max,
@@ -887,17 +964,25 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
         r_i = stage.run(T_local, span_per_stage)
         if r_i.Qc > 0:
             scale = Qc_target / r_i.Qc
-            W_i = (r_i.W_mag + r_i.W_parasitic) * scale
+            W_mag_total += r_i.W_mag * scale
+            if not shared_hardware:
+                W_total += (r_i.W_mag + r_i.W_parasitic) * scale
         else:
-            W_i = np.inf
-        W_total += W_i
+            W_mag_total = np.inf
+            if not shared_hardware:
+                W_total = np.inf
         T_local += span_per_stage
+
+    if shared_hardware:
+        W_parasitic_shared = _LOSS_MODEL.parasitic_power(frequency, mu0H_max, fluid_mdot, Qc_target)
+        W_total = W_mag_total + W_parasitic_shared
 
     COP_cascade = Qc_target / W_total if W_total > 0 else 0.0
     return {"n_stages": n_stages, "span_per_stage_K": span_per_stage,
             "Qc_W": round(Qc_target, 1), "W_total_W": round(W_total, 1),
             "COP_cascade": round(COP_cascade, 3), "feasible": True,
-            "n_stages_out_of_range": n_fallback, "stage_info": stage_info}
+            "n_stages_out_of_range": n_fallback, "stage_info": stage_info,
+            "shared_hardware": shared_hardware}
 
 
 def compare_graded_cascade(T_cold_C=18.0, spans=range(5, 21), stage_counts=(1, 2, 3, 4),
@@ -1098,7 +1183,8 @@ def validate_astronautics_graded_bed(apply_correction=None, cycle_type="brayton"
             r = run_graded_cascade(T_cold_K, span_K, n_stages, mu0H_max=mu0H,
                                     mass_per_stage=mass_total / n_stages, frequency=freq,
                                     fluid_mdot=max(mdot, 1e-6), family=family, executor=pool,
-                                    cycle_type=cycle_type)
+                                    cycle_type=cycle_type,
+                                    shared_hardware=True)
             return (r["Qc_W"] if r["feasible"] else 0.0) - Qc_lit
 
         try:
@@ -1111,7 +1197,8 @@ def validate_astronautics_graded_bed(apply_correction=None, cycle_type="brayton"
         result = run_graded_cascade(T_cold_K, span_K, n_stages, mu0H_max=mu0H,
                                      mass_per_stage=mass_total / n_stages, frequency=freq,
                                      fluid_mdot=mdot_cal, family=family, executor=pool,
-                                     cycle_type=cycle_type)
+                                     cycle_type=cycle_type, shared_hardware=True)
+
     finally:
         if pool is not None:
             pool.shutdown(wait=True)
@@ -1209,7 +1296,8 @@ def validate_magqueen_graded_bed(mass_total_kg=1.0, n_stages=10,
             r = run_graded_cascade(T_cold_K, span_K, n_stages, mu0H_max=mu0H,
                                     mass_per_stage=mass_total_kg / n_stages, frequency=freq,
                                     fluid_mdot=max(mdot, 1e-6), family=family, executor=pool,
-                                    cycle_type=cycle_type)
+                                    cycle_type=cycle_type,
+                                    shared_hardware=True)
             return (r["Qc_W"] if r["feasible"] else 0.0) - Qc_lit
 
         try:
@@ -1223,7 +1311,8 @@ def validate_magqueen_graded_bed(mass_total_kg=1.0, n_stages=10,
         result = run_graded_cascade(T_cold_K, span_K, n_stages, mu0H_max=mu0H,
                                      mass_per_stage=mass_total_kg / n_stages, frequency=freq,
                                      fluid_mdot=mdot_cal, family=family, executor=pool,
-                                     cycle_type=cycle_type)
+                                     cycle_type=cycle_type, shared_hardware=True)
+
     finally:
         if pool is not None:
             pool.shutdown(wait=True)
@@ -1643,6 +1732,18 @@ def run_astronautics_giguere_correction_sensitivity(cycle_type="brayton", verbos
     and ships DTAD_CORRECTION_FACTOR (~0.41) for exactly this. The review
     asked whether validate_astronautics_graded_bed() actually applies that
     correction to its 6 La(Fe,Si)13Hy stages.
+
+    UPDATE (later pass): validate_astronautics_graded_bed()'s baseline
+    error above (-81.1%) has since been superseded -- that function now
+    defaults to shared_hardware=True (see run_explicit_material_cascade()/
+    run_graded_cascade()'s own docstrings), which fixed an unrelated
+    N-times loss-overcounting bug and moved the UNCORRECTED baseline to
+    +0.9%. The Giguere-correction experiment below still runs and is still
+    informative (it now narrows +0.9% to -0.3%, still an open, unvalidated
+    cross-family experiment, not an adopted correction) but the original
+    "-81.1%, single worst number in the suite" framing describing why this
+    function exists is no longer current -- kept here for the review-item
+    paper trail, not as a live number to quote.
 
     Checked directly (not assumed): it does NOT, by design --
     validate_astronautics_graded_bed()'s own docstring and

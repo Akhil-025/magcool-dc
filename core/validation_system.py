@@ -482,6 +482,148 @@ def run_calibration_failure_diagnostics(verbose=True,
     return diagnostics
 
 
+def analyze_regenerative_amplification_gap(verbose=True,
+                                             out_path="results/regenerative_amplification_diagnostic.txt"):
+    """Quantifies, from data already in (and the one row newly added to)
+    amr_experimental_benchmarks.csv, how far real AMR devices' achieved
+    spans exceed core/amr_cycle.py's cooling_capacity() own structural
+    ceiling of 2*dTad_noload -- i.e. the size of the "regenerative
+    amplification" effect (temperature-profile buildup along a real
+    regenerator over many cycles) that a 0-D single-blow-material-dTad
+    model cannot represent by construction.
+
+    This is a DIFFERENT, separately-diagnosed issue from cascade.py's
+    shared_hardware fix (which corrected an N-times loss-overcounting bug
+    in the graded-bed reproductions' COP): that fix repairs the WORK
+    (denominator) side of COP for multi-layer devices reproduced as an
+    explicit N-stage cascade. This diagnostic is about the CAPACITY
+    (span-feasibility) side for the underlying single-stage
+    cooling_capacity() kernel itself, which every part of this codebase
+    (comparison_table.csv, cascade_comparison*.csv, design_recommendations.txt,
+    the NSGA-III Pareto front, Sobol sensitivity) calls into, graded-bed or
+    not. Fixing it properly requires representing the actual spatial/
+    temporal regeneration process (an NTU/utilization-based semi-analytical
+    model, or a full transient 1-D blow-by-blow AMR solver, both standard
+    in this repo's own cited numerical-modeling literature) rather than a
+    single-blow dTad evaluated once at T_mid -- out of scope for a
+    same-pass fix (ROADMAP.md's own A3 item declined to invent an
+    unsourced correction here for the same reason: no literature source
+    for the exact functional form was found). This function instead makes
+    the SIZE of the gap visible and falsifiable from data already on hand,
+    the same "document, don't fabricate" standard the rest of this module
+    holds itself to.
+
+    Method: for every benchmark row with span_K>0 (both COP-bearing rows
+    and capacity-only/no-load-span rows -- span_fraction is independent of
+    whether a COP was reported), evaluate dTad_noload the same way
+    diagnose_calibration_failure() does (one cooling_capacity() probe call
+    at T_mid=T_cold+span/2, mdot irrelevant since dTad_noload doesn't
+    depend on it), then report ratio = span_K / (2*dTad_noload). ratio<=1
+    means the row is within the model's own structural ceiling (span_
+    fraction>0 is achievable); ratio>1 means the model cannot reach that
+    span at ANY mdot (a "structural" failure per diagnose_calibration_
+    failure()'s own classification) and ratio itself is a lower bound
+    on how much bigger the real regenerative-amplification effect is
+    than what a single-blow dTad captures. Rows where dTad_noload<0.05K
+    are reported separately as "near-zero" -- for these (both La(Fe,Si)13Hy
+    rows in this benchmark set: Astronautics_rotary_2014, DTU_MagQueen_2018)
+    the ratio is dominated by T_mid falling far from LAFESIH_FIRST_ORDER's
+    single fixed Tc under validation_system.T_COLD_LAFESIH_K, a COMPOUNDING
+    but DIFFERENT failure mode (material/T-window mismatch, not purely the
+    regenerative-amplification gap this function targets) -- see those
+    rows' own entries in calibration_failure_diagnostics.txt."""
+    rows = load_benchmarks()
+    seen = set()
+    entries = []
+    for row in rows:
+        span = float(row["span_K"])
+        if span <= 0:
+            continue
+        key = (row["device_group"], round(span, 4))
+        if key in seen:
+            continue
+        seen.add(key)
+
+        mu0H = float(row["mu0H_T"])
+        mass = float(row["mass_MCM_kg"]) if row["mass_MCM_kg"] else 1.0
+        freq = float(row["frequency_Hz"]) if row["frequency_Hz"] else 1.0
+        material = _material_for_row(row)
+        t_cold = _t_cold_for_row(row)
+        loss_model = _loss_model_for_row(row)
+
+        probe = AMRSystem(material=material, mu0H_max=mu0H, mass_regenerator=mass,
+                           frequency=freq, fluid_mdot=1.0, loss_model=loss_model)
+        _, dTad_noload = probe.cooling_capacity(t_cold, span)
+        dTad_noload = float(dTad_noload)
+
+        near_zero = dTad_noload < 0.05
+        ratio = None if near_zero else round(span / (2.0 * dTad_noload), 2)
+        entries.append({"device": row["device"], "span_K": span,
+                         "dTad_noload_K": round(dTad_noload, 3),
+                         "structural_cap_K": round(2 * dTad_noload, 2),
+                         "amplification_ratio": ratio, "near_zero": near_zero})
+
+    entries.sort(key=lambda e: (e["near_zero"], -(e["amplification_ratio"] or 0)))
+
+    clean = [e for e in entries if not e["near_zero"]]
+    exceeding = [e for e in clean if e["amplification_ratio"] > 1.0]
+    ratios = sorted(e["amplification_ratio"] for e in exceeding)
+
+    lines = ["=" * 100,
+             "REGENERATIVE-AMPLIFICATION GAP DIAGNOSTIC",
+             "(how far real AMR spans exceed cooling_capacity()'s own 2*dTad_noload structural cap)",
+             "=" * 100,
+             f"{len(entries)} unique span>0 benchmark row(s) checked. For each: dTad_noload is the "
+             "model's own single-blow adiabatic dT at T_mid=T_cold+span/2 (mdot-independent); "
+             "structural_cap_K=2*dTad_noload is the MAXIMUM span cooling_capacity() can ever reach "
+             "at that field/T_mid, for ANY mdot; amplification_ratio=span_K/structural_cap_K>1 means "
+             "the real device's span exceeds that ceiling -- a lower bound on the regenerative-"
+             "amplification effect the model is missing.", ""]
+    for e in entries:
+        if e["near_zero"]:
+            lines.append(f"  {e['device']:<38} span={e['span_K']:6.1f}K  "
+                          f"dTad_noload={e['dTad_noload_K']:6.3f}K (~0)  -> ratio undefined "
+                          "(material/T_mid mismatch, see docstring)")
+        else:
+            flag = "  <-- EXCEEDS MODEL'S STRUCTURAL CAP" if e["amplification_ratio"] > 1.0 else ""
+            lines.append(f"  {e['device']:<38} span={e['span_K']:6.1f}K  "
+                          f"dTad_noload={e['dTad_noload_K']:6.2f}K  "
+                          f"cap={e['structural_cap_K']:6.2f}K  "
+                          f"ratio={e['amplification_ratio']:5.2f}x{flag}")
+    lines.append("-" * 100)
+    if ratios:
+        median_ratio = ratios[len(ratios) // 2]
+        lines.append(
+            f"{len(exceeding)}/{len(clean)} rows with a well-defined dTad_noload exceed the model's "
+            f"own structural span cap; ratio range {ratios[0]:.2f}x-{ratios[-1]:.2f}x, "
+            f"median {median_ratio:.2f}x. INDEPENDENT CROSS-CHECK: "
+            "DTU_Eriksen_MAGGIE_2016_noloadspan (added to amr_experimental_benchmarks.csv this pass) "
+            "reports a directly-measured 29.2K no-load span for the SAME physical hardware (1.13T, "
+            "1.7kg Gd/Gd-Y graded bed) as the two calibrated MAGGIE rows above, at its own best "
+            "achievable frequency -- independent of any mdot back-calculation, unlike every other row "
+            "here. This confirms the amplification effect is real and of the same order the rest of "
+            "this table already implies, not an artifact of any single device's data quality.")
+    lines.append(
+        "This is a lower bound, not the model's full error: a genuinely graded/layered real bed "
+        "(Astronautics, DTU_MagQueen, MAGGIE) additionally loses accuracy from being approximated "
+        "here as one uniform-Tc material (see core/cascade.py's *_graded_bed validation functions, "
+        "which address that separately for those three devices by using real per-layer Curie "
+        "temperatures instead)."
+    )
+
+    if verbose:
+        for line in lines:
+            print(line)
+
+    import os
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    with open(out_path, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    if verbose:
+        print(f"Wrote {out_path}")
+    return entries
+
+
 def run_system_validation():
     rows = load_benchmarks()
     results = [calibrate_and_check(r) for r in rows]
