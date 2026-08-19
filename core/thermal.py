@@ -132,6 +132,10 @@ import numpy as np
 
 RHO_GD = 7900.0              # kg/m^3, gadolinium density (standard literature value)
 CP_SOLID_GD = 236.0          # J/(kg K), approx Gd specific heat near room temp
+K_SOLID_GD = 10.5            # W/(m K), gadolinium thermal conductivity near room temp
+                              # (standard literature value; used by
+                              # core/regenerator_1d.py for axial solid-bed
+                              # conduction -- see that module's docstring).
                              # (Dan'kov et al. 1998 report C_p peaking near
                              # 300 J/kg/K at Tc; 236 J/kg/K is representative
                              # of the broader near-room-temperature range)

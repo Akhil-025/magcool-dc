@@ -624,6 +624,155 @@ def analyze_regenerative_amplification_gap(verbose=True,
     return entries
 
 
+def run_regenerative_amplification_override_check(
+        verbose=True, out_path="results/regenerative_amplification_override_check.txt",
+        max_devices=None):
+    """Follow-up to analyze_regenerative_amplification_gap(): for every
+    COP-bearing benchmark row that gap diagnostic flags as STRUCTURALLY
+    infeasible under cooling_capacity()'s default 2*dTad_noload cap
+    (amplification_ratio>1 -- i.e. the model predicts Qc=0 at that span for
+    ANY mdot, not a calibration miss but a hard structural wall), checks
+    whether AMRSystem's opt-in `no_load_span_override` (populated from
+    core.regenerator_1d.regenerative_span_cap(), a real multi-cycle
+    transient simulation -- see that function's own docstring) makes a
+    nonzero, evaluable prediction possible, and how close it lands to the
+    measured COP.
+
+    This is the honest "does the opt-in override actually help" check the
+    override's own documentation promises, run against real devices rather
+    than only the three no-load-span rows regenerator_1d.py validates
+    itself against. EXPENSIVE: each device needs one
+    regenerative_span_cap() call, ~30-90s (a multi-mdot search, each point
+    run to convergence) -- `max_devices` caps how many are checked in one
+    call, for practical runtimes in main.py's pipeline (a None default
+    checks every flagged device, intended for direct/offline use, not for
+    every pipeline run -- see main.py's own step for what default it
+    actually passes).
+
+    mdot for the WITH-override run is estimated the same way
+    diagnose_calibration_failure() infers it elsewhere in this file: solved
+    from the row's own reported Qc via cooling_capacity()'s own formula at
+    the row's actual span (i.e. this checks "does the override let the
+    model reach the measured OPERATING POINT at all", not "does the
+    override alone, with an arbitrary mdot, reproduce COP")."""
+    from core import regenerator_1d
+
+    rows = load_benchmarks()
+    flagged = []
+    seen = set()
+    for row in rows:
+        span = float(row["span_K"])
+        if span <= 0 or not row["COP"]:
+            continue
+        key = (row["device_group"], round(span, 4))
+        if key in seen:
+            continue
+        seen.add(key)
+        mu0H = float(row["mu0H_T"])
+        mass = float(row["mass_MCM_kg"]) if row["mass_MCM_kg"] else 1.0
+        freq = float(row["frequency_Hz"]) if row["frequency_Hz"] else 1.0
+        material = _material_for_row(row)
+        t_cold = _t_cold_for_row(row)
+        probe = AMRSystem(material=material, mu0H_max=mu0H, mass_regenerator=mass,
+                           frequency=freq, fluid_mdot=1.0)
+        _, dTad = probe.cooling_capacity(t_cold, span)
+        if dTad is None or dTad < 0.05:
+            continue
+        ratio = span / (2.0 * dTad)
+        if ratio > 1.0:
+            flagged.append((row, material, t_cold, mu0H, mass, freq, dTad))
+
+    if max_devices is not None:
+        flagged = flagged[:max_devices]
+
+    lines = ["=" * 100,
+             "REGENERATIVE-AMPLIFICATION OVERRIDE CHECK",
+             "(does no_load_span_override actually recover a prediction where the old 2*dTad_noload",
+             " cap makes cooling_capacity() structurally return Qc=0, and how close is it?)",
+             "=" * 100,
+             f"{len(flagged)} structurally-infeasible, COP-bearing row(s) checked "
+             f"(out of {len(seen)} unique span>0 rows scanned).", ""]
+    results = []
+    for row, material, t_cold, mu0H, mass, freq, dTad in flagged:
+        span = float(row["span_K"])
+        Qc_lit = float(row["Qc_W"])
+        cop_lit = float(row["COP"])
+        old_cap = round(2 * dTad, 2)
+
+        span_cap = regenerator_1d.regenerative_span_cap(material, mu0H, mass, freq,
+                                                          T_K_for_ntu=t_cold + span / 2.0)
+
+        # Old cap: cooling_capacity() at this span is a hard 0.0 by
+        # construction (span >= old_cap). With the override, find the mdot
+        # that reproduces the row's own reported Qc (same back-calibration
+        # approach used elsewhere in this file), then read off COP.
+        if span_cap <= span:
+            results.append({"device": row["device"], "span_K": span, "old_cap_K": old_cap,
+                             "span_cap_K": round(span_cap, 2), "recovers_nonzero": False,
+                             "COP_lit": cop_lit, "COP_pred": None, "err_pct": None})
+            lines.append(f"  {row['device']:<38} span={span:6.1f}K  old_cap={old_cap:6.1f}K  "
+                          f"1D_span_cap={span_cap:6.2f}K  -> STILL infeasible (override doesn't reach "
+                          f"this span either)")
+            continue
+
+        def qc_at_mdot(mdot):
+            sys_ = AMRSystem(material=material, mu0H_max=mu0H, mass_regenerator=mass,
+                              frequency=freq, fluid_mdot=mdot,
+                              no_load_span_override=span_cap)
+            qc, _ = sys_.cooling_capacity(t_cold, span)
+            return qc - Qc_lit
+
+        try:
+            mdot_fit = brentq(qc_at_mdot, 1e-5, 5.0, xtol=1e-6)
+        except ValueError:
+            mdot_fit = None
+
+        if mdot_fit is None:
+            results.append({"device": row["device"], "span_K": span, "old_cap_K": old_cap,
+                             "span_cap_K": round(span_cap, 2), "recovers_nonzero": True,
+                             "COP_lit": cop_lit, "COP_pred": None, "err_pct": None})
+            lines.append(f"  {row['device']:<38} span={span:6.1f}K  old_cap={old_cap:6.1f}K  "
+                          f"1D_span_cap={span_cap:6.2f}K  -> reaches span, but no mdot in [1e-5,5] "
+                          f"kg/s reproduces the reported Qc={Qc_lit}W")
+            continue
+
+        sys_fit = AMRSystem(material=material, mu0H_max=mu0H, mass_regenerator=mass,
+                             frequency=freq, fluid_mdot=mdot_fit,
+                             loss_model=_loss_model_for_row(row),
+                             no_load_span_override=span_cap)
+        result = sys_fit.run(t_cold, span)
+        err_pct = 100 * (result.COP_electrical - cop_lit) / cop_lit if cop_lit else None
+        results.append({"device": row["device"], "span_K": span, "old_cap_K": old_cap,
+                         "span_cap_K": round(span_cap, 2), "recovers_nonzero": True,
+                         "COP_lit": cop_lit, "COP_pred": round(result.COP_electrical, 3),
+                         "err_pct": round(err_pct, 1) if err_pct is not None else None})
+        lines.append(f"  {row['device']:<38} span={span:6.1f}K  old_cap={old_cap:6.1f}K  "
+                      f"1D_span_cap={span_cap:6.2f}K  COP_lit={cop_lit:5.2f}  "
+                      f"COP_pred={result.COP_electrical:6.3f} (err={err_pct:+6.1f}%)")
+
+    lines.append("-" * 100)
+    lines.append("Read this as: does the opt-in override make the OLD model's hard structural zero "
+                  "into a usable, evaluable prediction, and is that prediction any good? A device "
+                  "that 'reaches span' but has a large |err_pct| means the override fixes "
+                  "cooling_capacity()'s FEASIBILITY (it can now represent the span at all) without "
+                  "yet fixing its ACCURACY (the underlying 1D span-cap model is still directionally "
+                  "inconsistent -- see results/regenerator_1d_validation.txt). This is exactly the "
+                  "honest outcome AMRSystem.no_load_span_override's own docstring predicts: a real, "
+                  "usable capability, not yet a validated one. Still opt-in, still off by default "
+                  "everywhere else in this codebase.")
+
+    if verbose:
+        for line in lines:
+            print(line)
+    import os
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    with open(out_path, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    if verbose:
+        print(f"Wrote {out_path}")
+    return results
+
+
 def run_system_validation():
     rows = load_benchmarks()
     results = [calibrate_and_check(r) for r in rows]

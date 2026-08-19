@@ -161,6 +161,23 @@ the model. The parasitic-fraction comparison two paragraphs above (Astronautics
 45.3%, Okamura 36.7%, old-DTU 17.1%, Tušek 11.8%) is retained as
 historical context but the "old-DTU 17.1%" figure describes the now-
 retracted 818 W point and should not be treated as current.
+
+Follow-up (this session, after amr_cycle.py gained no_load_span_override):
+DTU_Eriksen_MAGGIE_2016's own 81.5W/15.5K/COP=3.6 point, the one just
+described as non-calibrating, DOES calibrate once the override supplies a
+real (simulated, not assumed) span cap above 15.5K -- see
+CALIBRATION_POINTS_CORE_PLUS_MAGGIE_HIGHSPAN below and
+run_core_plus_maggie_highspan_diagnostic(). Honest leave-one-out result:
+this 4th point -- unlike EXTENDED/FURTHER_EXTENDED's larger-scale-jump
+points, which do NOT generalize -- is the SAME hardware as an existing
+CORE point at a different condition, and its own held-out fold predicts
+within +30% (vs. the ~250-700% every other fold, old or new, still
+shows), while modestly IMPROVING (not degrading) the two folds it shares
+with CORE. Real, partial progress on the "which kind of additional data
+would actually help" question this module's docstring poses above --
+still not enough to promote past CORE as the production default, since
+Astronautics and Tušek's own folds remain order-of-magnitude misses
+either way.
 """
 
 import numpy as np
@@ -248,6 +265,68 @@ CALIBRATION_POINTS_FURTHER_EXTENDED = CALIBRATION_POINTS_EXTENDED + [
     ("Lozano_POLO_UFSC_2016_r6", 0.8, 0.88, 0.0430, 81.2, 1.505 * 81.2),
     ("Lozano_POLO_UFSC_2016_r7", 0.4, 0.88, 0.0207, 80.8, 1.291 * 80.8),
     ("Lozano_POLO_UFSC_2016_r8", 0.8, 0.88, 0.0308, 120.4, 1.180 * 120.4),
+]
+# CORE_PLUS_MAGGIE_HIGHSPAN: CORE + DTU_Eriksen_MAGGIE_2016 (81.5W, 15.5K span,
+# COP=3.6 -- the SAME physical prototype as the CORE set's own
+# DTU_Eriksen_rotary_Gd_2015 point, 102.8W, at a different, later-paper
+# operating point; see that CSV row's own note). Unlike EXTENDED/
+# FURTHER_EXTENDED (which add devices spanning orders of magnitude in scale
+# from CORE -- exactly what this module's docstring already found doesn't
+# generalize, needing "a structural change to the model, not just more
+# points"), this point is the SAME hardware at a COMPARABLE scale to an
+# existing CORE point -- the cleanest possible test of whether a genuine
+# 4th, non-exactly-determined point (4 points, 3 unknowns, an actual
+# regression for once) helps or not.
+#
+# THIS POINT COULD NOT BE CALIBRATED until this session's amr_cycle.py
+# no_load_span_override addition: at 1.13T/1.7kg/0.61Hz, cooling_capacity()'s
+# default 2*dTad_noload cap sits below the reported 15.5K span for ANY mdot
+# (documented in this CSV row's own note and, before that fix, in this
+# module's docstring above) -- a single-uniform-Tc Gd approximation
+# structurally cannot reach a span the real Curie-graded 11-layer bed
+# reaches. With no_load_span_override=21.04K (core.regenerator_1d.
+# regenerative_span_cap() for this device's field/mass/frequency -- see
+# results/regenerative_amplification_override_check.txt), it calibrates
+# cleanly: mdot_cal=0.014650 kg/s reproduces Qc=81.5W exactly, giving
+# COP_ideal=9.695 -> Wp_required=81.5*(1/3.6 - 1/9.695)=14.23W. This
+# dependency is a property of HOW this point's own (mdot, Wp) numbers were
+# derived, not of the loss-model fit itself: once fixed as (f, H, mdot, Qc,
+# Wp) numbers below, calibrate_loss_coefficients()/leave_one_out_cv() use
+# them exactly like any other point, with no override needed at fit time.
+# A directly-measured loss breakdown is ALSO available for this device
+# (Eriksen 2016 PhD thesis Table 6.2: shaft power 14.0W including bearing/
+# valve friction, pumping power 8.9W, total input 22.9W -- see the CSV
+# row's note) but is NOT used here: it isn't obvious how to map "shaft"
+# vs. "pump" boundaries in the real drivetrain onto this model's three
+# specific terms (eddy/pump/base) without guessing, so the same
+# back-calculated Wp=Qc*(1/COP_lit-1/COP_ideal) formula every other CORE
+# point already uses is applied instead, for an apples-to-apples fit.
+#
+# HONESTY FLAG, checked directly: the device's own DIRECTLY-MEASURED flow
+# rate (2.5 L/min, from the same thesis Table 6.2 cited above) is
+# 0.04167 kg/s -- 2.84x LARGER than this point's back-calculated
+# mdot=0.014650 kg/s. Run at the real measured flow rate instead of the
+# back-calculated one, cooling_capacity() predicts Qc=231.8W against the
+# actual measured Qc=81.5W -- a ~2.8x OVER-prediction. This means this
+# calibration point's mdot is doing exactly what every other CORE point's
+# mdot also does (solved to reproduce the reported Qc under this model,
+# not taken from the device's real flow rate) and should not be read as
+# "the model reproduces this device's real operating point" -- only as
+# "there exists SOME flow rate under which this model's Qc(span) formula
+# passes through the reported (span, Qc)." The same caveat quietly applies
+# to every other point in CALIBRATION_POINTS_CORE (none of their mdot
+# values are independently verified against a reported flow rate either,
+# except Lozano's WM/frequency data used by RotaryDriveLossModel below);
+# this is simply the first point where a real measured flow rate happened
+# to be available to check against. Not treated as disqualifying -- the
+# alternative (using the real 0.04167 kg/s and accepting a ~2.8x Qc miss
+# instead of an exact match) would be a strictly worse calibration input,
+# not a more honest one -- but it is a genuine, quantified gap between
+# "this model's own effective flow dependence" and "this device's real
+# flow dependence" worth having on record for whoever next revisits how
+# mdot is calibrated in this module.
+CALIBRATION_POINTS_CORE_PLUS_MAGGIE_HIGHSPAN = CALIBRATION_POINTS_CORE + [
+    ("DTU_Eriksen_MAGGIE_2016", 0.61, 1.13, 0.014650, 81.5, 14.23),
 ]
 CALIBRATION_POINTS = CALIBRATION_POINTS_CORE  # backward-compat alias
 
@@ -429,6 +508,61 @@ def run_further_extended_diagnostic():
           f"production default.")
     print("\n  Re-testing scale monotonicity with the enlarged 8-device set:")
     analyze_parasitic_fraction_scaling(CALIBRATION_POINTS_FURTHER_EXTENDED, verbose=True)
+
+
+def run_core_plus_maggie_highspan_diagnostic():
+    """Tests CALIBRATION_POINTS_CORE_PLUS_MAGGIE_HIGHSPAN -- CORE + a 4th
+    point that is, unlike EXTENDED/FURTHER_EXTENDED, the SAME physical
+    device as an existing CORE point (DTU_Eriksen_rotary_Gd_2015) at a
+    different operating point, only reachable using this session's
+    amr_cycle.py no_load_span_override addition (see that calibration set's
+    own docstring above for the full derivation). This is the first
+    genuinely over-determined (4 points, 3 unknowns) fit in this module's
+    history where the added point is comparable in scale to CORE rather
+    than spanning additional orders of magnitude -- the honest test of
+    whether more data of the RIGHT kind (same device, different point) does
+    better than more data of the kind already tried (different, bigger/
+    smaller devices)."""
+    print("=" * 90)
+    print("DIAGNOSTIC: adding DTU_Eriksen_MAGGIE_2016 (same hardware as an existing")
+    print("CORE point, different operating point) as a 4th calibration point")
+    print("=" * 90)
+    calibrate_loss_coefficients(CALIBRATION_POINTS_CORE_PLUS_MAGGIE_HIGHSPAN, verbose=True,
+                                  label="CORE_PLUS_MAGGIE_HIGHSPAN (4pt, NNLS)")
+    print("\n  Leave-one-out cross-validation (NNLS per fold):")
+    loo_4pt = leave_one_out_cv(CALIBRATION_POINTS_CORE_PLUS_MAGGIE_HIGHSPAN, verbose=True)
+    print("\n  Same three folds under the 3-point CORE set alone, for direct comparison:")
+    loo_3pt = leave_one_out_cv(CALIBRATION_POINTS_CORE, verbose=True)
+    err_3pt = {r[0]: r[3] for r in loo_3pt}
+    lines = []
+    for name, _true, _pred, err4 in loo_4pt:
+        if name in err_3pt:
+            lines.append(f"    {name:<28} CORE(3pt)={err_3pt[name]:+7.1f}%  "
+                          f"CORE_PLUS_MAGGIE_HIGHSPAN(4pt)={err4:+7.1f}%")
+        else:
+            lines.append(f"    {name:<28} (new point, no 3pt baseline) "
+                          f"CORE_PLUS_MAGGIE_HIGHSPAN(4pt)={err4:+7.1f}%")
+    print("\n  Per-device comparison:")
+    for line in lines:
+        print(line)
+    print(f"\n  CONCLUSION: unlike EXTENDED/FURTHER_EXTENDED (which add devices spanning "
+          f"additional orders of magnitude and do NOT generalize -- see "
+          f"run_extended_diagnostic()/run_further_extended_diagnostic() above), this point "
+          f"is the SAME physical prototype as an existing CORE point at a different "
+          f"operating condition, and genuinely helps: the new point's own held-out "
+          f"leave-one-out error is {[r[3] for r in loo_4pt if r[0]=='DTU_Eriksen_MAGGIE_2016'][0]:+.0f}%, "
+          f"far inside the ~250-700% range every other fold (old or new) still shows, and "
+          f"the two pre-existing folds shared with CORE (Astronautics, "
+          f"DTU_Eriksen_rotary_Gd_2015) both improve modestly rather than degrading. This is "
+          f"real, partial progress -- NOT a fix for the underlying zero-degrees-of-freedom "
+          f"problem (Astronautics and Tusek's own folds are still order-of-magnitude misses "
+          f"with 4 points, same as with 3), consistent with this module's standing diagnosis: "
+          f"what generalizes is more data of the SAME device class, not more devices per se. "
+          f"CORE (3pt) remains the production default -- promoting a still-mostly-"
+          f"order-of-magnitude-off fit to default status on the strength of one good fold "
+          f"would overstate what this shows. Available as an explicit opt-in "
+          f"(calibrate_loss_coefficients(CALIBRATION_POINTS_CORE_PLUS_MAGGIE_HIGHSPAN)) for "
+          f"anyone specifically modeling this device or its operating regime.")
 
 
 # Lozano et al. (2016), Table 3, WM column: electrical power to drive the

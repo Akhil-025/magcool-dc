@@ -245,7 +245,8 @@ class AMRSystem:
                  hypereg_n_parallel: int = None,
                  cycle_type: str = "brayton",
                  thermal_diode=None,
-                 pump_motor_efficiency: float = 1.0):
+                 pump_motor_efficiency: float = 1.0,
+                 no_load_span_override: float = None):
         """
         material               : MagnetocaloricMaterial instance
         mu0H_max                : peak applied field, Tesla
@@ -388,6 +389,59 @@ class AMRSystem:
                                      -transfer benefit would require that
                                      this repo does not yet have the data
                                      to support).
+        no_load_span_override        : opt-in, additive fix for the
+                                     "no regenerative amplification" gap
+                                     documented in
+                                     results/regenerative_amplification_diagnostic.txt
+                                     and core/regenerator_1d.py. Default
+                                     None preserves ALL pre-existing
+                                     behavior exactly: cooling_capacity()
+                                     clamps Qc to zero at
+                                     T_span == 2*dTad_noload (the
+                                     material's own single-blow adiabatic
+                                     dT at mid-bed temperature), which
+                                     cannot represent the temperature-
+                                     profile buildup a real packed bed
+                                     achieves over many cycles. When set
+                                     (a span in K), THIS value replaces
+                                     2*dTad_noload as the span at which Qc
+                                     reaches zero -- letting the system
+                                     reach spans a single-blow model
+                                     structurally cannot. Qc's MAGNITUDE
+                                     at zero span is unaffected (still set
+                                     by dTad_noload -- amplification
+                                     extends how far the bed's gradient
+                                     can be pushed, not the material's own
+                                     per-blow capacity). Intended to be
+                                     populated from
+                                     core.regenerator_1d.regenerative_span_cap()
+                                     -- a genuine multi-cycle transient
+                                     simulation, NOT a formula -- computed
+                                     ONCE per design point and passed in
+                                     here, since that simulation takes
+                                     tens of seconds per call and cannot
+                                     be run inside cooling_capacity()
+                                     itself (called many times per
+                                     optimization/sweep run). HONESTY
+                                     FLAG, read before using: that
+                                     simulation's own validation
+                                     (results/regenerator_1d_validation.txt)
+                                     shows directionally-inconsistent
+                                     error against the three directly-
+                                     measured benchmarks (+112%, -92%,
+                                     -61%) -- it is NOT yet an
+                                     independently-calibrated quantitative
+                                     model. This parameter exists so the
+                                     capability is available and testable
+                                     (see
+                                     validation_system.run_regenerative_amplification_override_check(),
+                                     wired into main.py as an additive
+                                     diagnostic step, NOT used by any
+                                     default caller -- optimize.py,
+                                     cascade.py, and every existing test
+                                     are unaffected), not because the
+                                     override is ready to replace the old
+                                     cap as this project's default.
         """
         if cycle_type not in CYCLE_TYPE_FACTORS:
             raise ValueError(
@@ -409,6 +463,7 @@ class AMRSystem:
         self.cycle_type = cycle_type
         self.thermal_diode = thermal_diode
         self.pump_motor_efficiency = pump_motor_efficiency
+        self.no_load_span_override = no_load_span_override
         self._last_ntu_info = None
 
     def _cycle_type_factor(self):
@@ -598,14 +653,23 @@ class AMRSystem:
         smoothing function -- a soft cutoff with no citation would be a
         downgrade (unfounded precision), not a fix. Treat Qc/COP values
         within roughly the last ~10-15% of a material's no-load span as a
-        conservative lower bound rather than a precise prediction."""
+        conservative lower bound rather than a precise prediction.
+
+        SPAN CAP: `self.no_load_span_override`, if set (see __init__), is
+        used in place of 2*dTad_noload for the point where span_fraction
+        reaches zero -- see that parameter's own docstring for what this
+        does and does not fix, and its honesty flag before relying on it.
+        Default None (unset) leaves this method's behavior completely
+        unchanged from before that parameter existed."""
         T_hot = T_cold + T_span
         T_mid = 0.5 * (T_cold + T_hot)
         H = self.mu0H_max / (4 * np.pi * 1e-7)
         dTad_noload = float(self.mat.delta_T_adiabatic(np.array([T_mid]), H)[0])
         if dTad_noload <= 0:
             return 0.0, dTad_noload
-        span_fraction = max(0.0, 1.0 - T_span / (2 * dTad_noload))
+        span_cap = (self.no_load_span_override if self.no_load_span_override is not None
+                    else 2 * dTad_noload)
+        span_fraction = max(0.0, 1.0 - T_span / span_cap) if span_cap > 0 else 0.0
         eps = self._effective_eps()
         Qc = eps * self.mdot_f * self.cp_f * dTad_noload * span_fraction
         Qc *= self._blow_fraction_qc_multiplier()

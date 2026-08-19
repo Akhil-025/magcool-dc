@@ -318,6 +318,7 @@ from core import magnet_geometry
 from core import fluid_mce_analysis
 from core import passive_regenerator_analysis
 from core import inhomogeneous_broadening
+from core import regenerator_1d
 from core import plots
 from core import design_recommendations
 
@@ -1022,8 +1023,39 @@ def main():
          "benchmark row (core/validation_system.py, follow-up to 2c quantifying the "
          "SIZE of the structural gap, not just which rows hit it)",
          lambda: validation_system.analyze_regenerative_amplification_gap()),
+        ("2e. 1-D transient regenerator model vs. directly-measured no-load spans "
+         "(core/regenerator_1d.py) -- DIAGNOSTIC ONLY, additive: this is a standalone "
+         "check of whether an actual multi-cycle blow-by-blow simulation reproduces the "
+         "spans 2d shows the 0-D model structurally cannot reach. Its own validation "
+         "file states plainly that its predictions are directionally inconsistent "
+         "(over on some devices, under on others) pending an independently-sourced "
+         "packed-bed axial-conductivity value, so it is NOT used to compute Qc, COP, "
+         "span, or any other number anywhere else in this file or in core/amr_cycle.py "
+         "-- cooling_capacity() is unchanged by this step. Reported here so its status "
+         "is visible on every run rather than only to someone who opens the file "
+         "directly.",
+         lambda: regenerator_1d.validate_against_benchmarks()),
+        ("2f. Regenerative-amplification OVERRIDE check: for benchmark devices 2d/2e flag as "
+         "structurally infeasible under cooling_capacity()'s default cap, checks whether "
+         "AMRSystem's opt-in no_load_span_override (populated from "
+         "core.regenerator_1d.regenerative_span_cap()) recovers a usable, evaluable COP "
+         "prediction where the old model gives a hard Qc=0 -- and how close it lands "
+         "(core/validation_system.py). ADDITIVE ONLY: no_load_span_override defaults to None "
+         "everywhere else in this file and in optimize.py/cascade.py, so this step changes "
+         "nothing about any other stage's numbers. Capped at 3 devices here for pipeline "
+         "runtime (each device is a multi-mdot transient search, tens of seconds) -- run "
+         "validation_system.run_regenerative_amplification_override_check(max_devices=None) "
+         "directly for the full check across every flagged device.",
+         lambda: validation_system.run_regenerative_amplification_override_check(max_devices=3)),
         ("3. Loss-model calibration (auto-loaded by AMRSystem's default loss model)",
          lambda: (loss_model.calibrate_loss_coefficients(), loss_model.run_extended_diagnostic())),
+        ("3a2. Loss-model 4th-point diagnostic: adds DTU_Eriksen_MAGGIE_2016 (same physical "
+         "device as an existing CORE point, different operating condition, only reachable "
+         "using this session's no_load_span_override) and honestly leave-one-out tests "
+         "whether a genuinely comparable-scale 4th point generalizes better than "
+         "EXTENDED/FURTHER_EXTENDED's larger-scale-jump points did (core/loss_model.py). "
+         "ADDITIVE: CORE (3pt) remains the production default loss model everywhere else.",
+         lambda: loss_model.run_core_plus_maggie_highspan_diagnostic()),
         ("3b. Regenerator thermal-effectiveness demo (core/thermal.py, reached transitively otherwise)",
          run_thermal_demo),
         ("3c. Geometry-dependent pumping power: packed-bed + parallel-plate (core/geometry_analysis.py)",
