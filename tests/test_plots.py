@@ -53,6 +53,8 @@ FIGURE_FUNCTIONS = [
     (plots.plot_cycle_type_validation, "fig32_cycle_type_validation"),
     (plots.plot_hysteresis_sensitivity, "fig33_hysteresis_pareto_sensitivity"),
     (plots.plot_magnet_geometry_pareto_sensitivity, "fig34_magnet_geometry_pareto_sensitivity"),
+    (plots.plot_regenerative_amplification_override_check,
+     "fig35_regenerative_amplification_override_check"),
 ]
 
 

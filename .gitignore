@@ -22,6 +22,15 @@ Thumbs.db
 # Environment variables
 .env
 
+
+# Local performance cache (opaque, not a reviewable result -- see
+
+# core/regenerator_1d.py's no_load_span() docstring)
+
+results/.regenerator_1d_cache.json
+
+
+
 # Build/distribution
 build/
 dist/
@@ -31,3 +40,4 @@ Papers
 
 Papers
 Papers.zip
+results.zip

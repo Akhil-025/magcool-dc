@@ -12,6 +12,7 @@ import pytest
 
 from core.first_order_mce import (
     GD5SI2GE2_FIRST_ORDER, LAFESIH_FIRST_ORDER, MNFEPSI_FIRST_ORDER,
+    MNCUCOGE_FIRST_ORDER,
     composition_tuned_material, lafesih_composition_tuned_material,
     mnfepsi_composition_tuned_material,
     GIANT_MCE_TC_MIN_K, GIANT_MCE_TC_MAX_K, LAFESIH_TC_MIN_K, LAFESIH_TC_MAX_K,
@@ -258,7 +259,7 @@ def test_hysteresis_loss_is_mutable_field_not_frozen():
     hysteresis_loss_J_per_kg in place and restore it afterward -- this
     requires FirstOrderMCEMaterial to NOT be a frozen dataclass. Guards
     against a future refactor silently freezing the class and breaking
-    that diagnostic."""
+    that diagnostic.""" 
     original = LAFESIH_FIRST_ORDER.hysteresis_loss_J_per_kg
     try:
         LAFESIH_FIRST_ORDER.hysteresis_loss_J_per_kg = 999.0
@@ -266,3 +267,70 @@ def test_hysteresis_loss_is_mutable_field_not_frozen():
     finally:
         LAFESIH_FIRST_ORDER.hysteresis_loss_J_per_kg = original
     assert LAFESIH_FIRST_ORDER.hysteresis_loss_J_per_kg == original
+
+
+# ---------------------------------------------------------------------------
+# _equilibrium_m()'s h==0 closed-form fast path (this session's speedup for
+# main.py's step 11f / core.cascade.run_graded_cascade()): guards against a
+# silent regression of the ONE thing that matters -- m**2 (the only quantity
+# any caller ever uses, via delta_S_isothermal()'s s = -0.5*A*m**2) must
+# match a from-scratch, independent np.roots()-based reference computation
+# to numerical precision, for every h==0 call the fast path intercepts. The
+# raw sign of m is NOT checked (see _equilibrium_m()'s own docstring: it is
+# a genuine, physically meaningless degeneracy at h=0 that the pre-fast-path
+# implementation also had no defined convention for).
+# ---------------------------------------------------------------------------
+
+def _reference_equilibrium_m(mat, tau, h):
+    """Independent re-implementation of the ORIGINAL (pre-fast-path)
+    np.roots()-based algorithm, kept local to this test rather than
+    imported, so this test can't be satisfied by a bug that breaks both
+    the fast path and the "reference" identically."""
+    coeffs = [mat.C, 0, mat.B, 0, mat.A * (tau - 1), -h]
+    roots = np.roots(coeffs)
+    real_roots = roots[np.abs(roots.imag) < 1e-6].real
+    real_roots = real_roots[np.abs(real_roots) <= 1.5]
+    if len(real_roots) == 0:
+        return 0.0
+
+    def f(m):
+        return (0.5 * mat.A * (tau - 1) * m ** 2 + 0.25 * mat.B * m ** 4
+                + (mat.C / 6) * m ** 6 - h * m)
+    vals = [f(m) for m in real_roots]
+    return real_roots[int(np.argmin(vals))]
+
+
+@pytest.mark.parametrize("material", [
+    GD5SI2GE2_FIRST_ORDER, LAFESIH_FIRST_ORDER, MNFEPSI_FIRST_ORDER, MNCUCOGE_FIRST_ORDER,
+])
+def test_equilibrium_m_h_zero_fast_path_matches_reference_msquared(material):
+    for tau in np.linspace(0.80, 1.20, 41):
+        fast = material._equilibrium_m(tau, 0.0)
+        ref = _reference_equilibrium_m(material, tau, 0.0)
+        assert fast ** 2 == pytest.approx(ref ** 2, abs=1e-9), (
+            f"{material.name} at tau={tau}: fast path m**2={fast**2!r} != "
+            f"reference m**2={ref**2!r}")
+
+
+def test_equilibrium_m_h_nonzero_path_unchanged():
+    """h != 0 must still go through the original general quintic solve,
+    completely untouched by the fast path -- checked by comparing directly
+    against the same independent reference implementation."""
+    mat = GD5SI2GE2_FIRST_ORDER
+    for tau in np.linspace(0.85, 1.15, 15):
+        for h in (0.001, 0.05, 0.2, -0.1):
+            actual = mat._equilibrium_m(tau, h)
+            ref = _reference_equilibrium_m(mat, tau, h)
+            assert actual == pytest.approx(ref, abs=1e-9)
+
+
+def test_delta_S_isothermal_end_to_end_finite_after_fast_path():
+    """Full delta_S_isothermal() output (what every real caller actually
+    uses) must stay finite and sensibly-signed (entropy change from
+    field-on is <=0 for a normal MCE material) across each family's own
+    transition region."""
+    for mat in (GD5SI2GE2_FIRST_ORDER, LAFESIH_FIRST_ORDER, MNFEPSI_FIRST_ORDER):
+        T = np.linspace(mat.Tc - 20, mat.Tc + 20, 50)
+        dS = mat.delta_S_isothermal(T, H_final=4.0 / (4e-7 * np.pi), H_initial=0.0)
+        assert np.all(np.isfinite(dS))
+        assert np.all(dS <= 1e-9)

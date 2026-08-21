@@ -1199,7 +1199,15 @@ def plot_astronautics_validation(precomputed=None):
         ax2.set_ylabel('Qc [W]')
         ax2b.set_ylabel('COP')
         ax2.set_title(f"Astronautics_rotary_2014 Validation\nCOP error: {astro['COP_error_pct']:+.1f}%")
-        ax2.legend(fontsize=9)
+        # loc='best' on a twinned-axis bar chart doesn't see ax2b's bars at
+        # all (matplotlib's auto-placement only considers artists on the
+        # axis .legend() is called from), so it can and does pick a corner
+        # that overlaps the COP bar on ax2b -- confirmed visually. Placed
+        # explicitly below the axes instead, which is robust to whatever
+        # the Qc/COP bar heights happen to be for any future device.
+        handles = ax2.get_legend_handles_labels()[0]
+        ax2.legend(handles, ['Literature (Jacobs et al. 2014)', 'Model (this repo)'],
+                   fontsize=9, loc='upper center', bbox_to_anchor=(0.5, -0.12), ncol=2)
     else:
         for ax in axes:
             ax.text(0.5, 0.5, astro.get('status', 'infeasible'), ha='center', va='center',
@@ -1562,15 +1570,122 @@ def plot_magnet_geometry_pareto_sensitivity(precomputed=None):
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# FIG 35 — Regenerative-amplification OVERRIDE check (this session)
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_regenerative_amplification_override_check(precomputed=None):
+    """Visualizes validation_system.run_regenerative_amplification_
+    override_check()'s result: for each benchmark device the 2d/2e
+    diagnostics flag as STRUCTURALLY infeasible under
+    core.amr_cycle.AMRSystem's default 2*dTad_noload span cap (i.e.
+    cooling_capacity() returns a hard Qc=0 at that device's real
+    reported span, for ANY mdot), does the opt-in
+    `no_load_span_override` -- populated from
+    core.regenerator_1d.regenerative_span_cap(), a real multi-cycle
+    transient simulation -- recover a usable, evaluable COP prediction,
+    and how close does it land?
+
+    This is the first figure for this session's regenerative-
+    amplification work (core/regenerator_1d.py, AMRSystem's
+    no_load_span_override, and this check) -- everything else from that
+    work (results/regenerator_1d_validation.txt,
+    results/regenerative_amplification_override_check.txt) was
+    previously text-only. Two panels:
+      left  -- span reach per device: the old hard cap vs. the 1-D
+               model's own span cap vs. the device's actual reported
+               span (bar at the real span shows whether the override
+               even reaches it).
+      right -- for devices the override DOES reach, predicted vs.
+               literature COP (a Risoe-DTU-style "doesn't help at all"
+               device, if present, is called out by name rather than
+               silently omitted -- see run_regenerative_amplification_
+               override_check()'s own docstring for why one device can
+               show this).
+
+    precomputed, if given, may supply 'override_check_result' (the list
+    of dicts already returned by step 2f's
+    run_regenerative_amplification_override_check(max_devices=3) call in
+    main.py) so this figure reuses it instead of re-running that check
+    (each device is a multi-mdot transient search, tens of seconds) a
+    second time in the same pipeline invocation. When called standalone
+    with no precomputed data, this recomputes the same bounded
+    (max_devices=3) check main.py itself runs, for a comparable default
+    runtime -- pass core.validation_system.run_regenerative_amplification_
+    override_check(max_devices=None) results in via `precomputed` for the
+    full, every-flagged-device version instead."""
+    precomputed = precomputed or {}
+    results = precomputed.get('override_check_result')
+    if results is None:
+        results = validation_system.run_regenerative_amplification_override_check(
+            verbose=False, max_devices=3)
+
+    if not results:
+        fig, ax = plt.subplots(figsize=(8, 4))
+        ax.text(0.5, 0.5, 'No structurally-infeasible, COP-bearing benchmark rows found',
+                ha='center', va='center', transform=ax.transAxes)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        fig.tight_layout()
+        save(fig, 'fig35_regenerative_amplification_override_check')
+        return
+
+    devices = [r['device'] for r in results]
+    n = len(devices)
+    x = np.arange(n)
+
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5.5))
+
+    w = 0.25
+    axes[0].bar(x - w, [r['old_cap_K'] for r in results], w,
+                label='Old cap (2*dTad_noload)', color=COLOR_MAIN, alpha=0.85, edgecolor='white')
+    axes[0].bar(x, [r['span_cap_K'] for r in results], w,
+                label='1-D span cap (this session)', color=COLOR_POWER, alpha=0.85, edgecolor='white')
+    axes[0].bar(x + w, [r['span_K'] for r in results], w,
+                label='Actual reported span', color='#2ca02c', alpha=0.85, edgecolor='white')
+    axes[0].set_xticks(x)
+    axes[0].set_xticklabels([d.replace('_', '\n') for d in devices], fontsize=7)
+    axes[0].set_ylabel('Span [K]')
+    axes[0].set_title('Span Reach: Old Cap vs. 1-D Model vs. Reality\n'
+                       '(bar at "actual span" not reached by the 1-D cap = still infeasible)')
+    axes[0].legend(fontsize=8)
+
+    recovered = [r for r in results if r['recovers_nonzero'] and r['COP_pred'] is not None]
+    unrecovered = [r for r in results if not (r['recovers_nonzero'] and r['COP_pred'] is not None)]
+    if recovered:
+        rx = np.arange(len(recovered))
+        rw = 0.35
+        axes[1].bar(rx - rw / 2, [r['COP_lit'] for r in recovered], rw,
+                    label='Literature COP', color=COLOR_MAIN, alpha=0.85, edgecolor='white')
+        axes[1].bar(rx + rw / 2, [r['COP_pred'] for r in recovered], rw,
+                    label='Model COP (with override)', color=COLOR_POWER, alpha=0.85, edgecolor='white')
+        for i, r in enumerate(recovered):
+            axes[1].annotate(f"{r['err_pct']:+.1f}%", xy=(i + rw / 2, r['COP_pred']),
+                              xytext=(0, 4), textcoords='offset points', ha='center', fontsize=8)
+        axes[1].set_xticks(rx)
+        axes[1].set_xticklabels([r['device'].replace('_', '\n') for r in recovered], fontsize=7)
+        axes[1].set_ylabel('COP')
+        axes[1].legend(fontsize=8)
+    title = 'COP Recovered by the Override\n(% label = model error vs. literature)'
+    if unrecovered:
+        title += '\nStill infeasible: ' + ', '.join(r['device'] for r in unrecovered)
+    axes[1].set_title(title, fontsize=10)
+
+    fig.suptitle('Regenerative-Amplification Override Check: Does no_load_span_override\n'
+                 'Recover a Usable Prediction Where the Old Cap Gives a Hard Qc=0?', fontsize=12)
+    fig.tight_layout()
+    save(fig, 'fig35_regenerative_amplification_override_check')
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # Generate all figures
 # ══════════════════════════════════════════════════════════════════════════
 
 def run_all(precomputed=None):
-    """Generates all 34 figures.
+    """Generates all 35 figures.
 
     precomputed, if given, is a dict that may carry results already
     computed earlier in the SAME pipeline run (main.py steps
-    2/4/7/7b/7c/8d/9/9b/11/11b/11d):
+    2/2f/4/7/7b/7c/8d/9/9b/11/11b/11d):
       - 'system_validation_results'         (step 2)
       - 'baseline_rows'                     (step 4)
       - 'sobol_const_Si', 'sobol_state_Si'  (step 9 / step 9b)
@@ -1581,15 +1696,18 @@ def run_all(precomputed=None):
       - 'material_rows'                     (step 8d)
       - 'hysteresis_result'                 (step 11b)
       - 'magnet_geometry_result'            (step 11d)
-    Figures 8, 14, 16, 18, 19, 20, 21, 25, 26, 33, and 34 reuse whichever
-    of these are supplied instead of recomputing them, which otherwise
-    adds several minutes of redundant work (mostly fig21's graded-cascade
-    sweep, fig25's Astronautics validation, and fig33/fig34's NSGA-III
-    A/B comparisons — each a ~9s optimization, with fig34 running it
-    TWICE — on top of the identical computation already performed earlier
-    in the same run). When called standalone (`python plots.py`,
-    precomputed=None) every figure still computes its own data fresh from
-    core/, exactly as before.
+      - 'override_check_result'             (step 2f)
+    Figures 8, 14, 16, 18, 19, 20, 21, 25, 26, 33, 34, and 35 reuse
+    whichever of these are supplied instead of recomputing them, which
+    otherwise adds several minutes of redundant work (mostly fig21's
+    graded-cascade sweep, fig25's Astronautics validation, fig33/fig34's
+    NSGA-III A/B comparisons, and fig35's multi-device 1-D regenerator
+    override check -- each a nontrivial computation, on top of the
+    identical work already performed earlier in the same run). When
+    called standalone (`python plots.py`, precomputed=None) every figure
+    still computes its own data fresh from core/, exactly as before
+    (fig35 falls back to the SAME bounded max_devices=3 check main.py
+    itself runs by default, not the full every-flagged-device version).
     """
     print("Generating all figures...\n")
     precomputed = precomputed or {}
@@ -1646,6 +1764,8 @@ def run_all(precomputed=None):
          lambda: plot_hysteresis_sensitivity(precomputed)),
         ("34 Magnet-geometry (Halbach) Pareto-front sensitivity (Phase 19)",
          lambda: plot_magnet_geometry_pareto_sensitivity(precomputed)),
+        ("35 Regenerative-amplification override check (this session)",
+         lambda: plot_regenerative_amplification_override_check(precomputed)),
     ]
 
     failures = []

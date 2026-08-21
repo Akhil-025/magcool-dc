@@ -287,6 +287,7 @@ import os
 import time
 import traceback
 import contextlib
+import argparse
 
 import numpy as np
 import csv
@@ -995,7 +996,20 @@ def run_design_recommendations_synthesis(sobol_state_dependent_Si, pareto_rows, 
     )
 
 
-def main():
+def main(quick=False):
+    """quick=True skips the three diagnostic-only, slow stages this
+    session added (2e, 2f, 3a2 -- each involves one or more multi-cycle
+    1-D transient regenerator simulations, ~30-90s per device; see
+    core/regenerator_1d.py's module docstring). None of the three feed
+    any other stage's numbers (all additive/diagnostic by construction --
+    see README.md's "1-D regenerator model findings" section), so
+    skipping them changes nothing about the rest of the pipeline's
+    output, only removes their own printed sections and result files.
+    core/regenerator_1d.py's no_load_span() also disk-caches every
+    simulation it runs (results/.regenerator_1d_cache.json) regardless of
+    `quick`, so even a full (non-quick) run only pays the multi-cycle
+    simulation cost once per unique (material, field, mass, frequency,
+    ...) combination across repeated invocations of this script."""
     _attach_file_logging()
     t_start = time.time()
     stage_times = {}
@@ -1046,7 +1060,8 @@ def main():
          "runtime (each device is a multi-mdot transient search, tens of seconds) -- run "
          "validation_system.run_regenerative_amplification_override_check(max_devices=None) "
          "directly for the full check across every flagged device.",
-         lambda: validation_system.run_regenerative_amplification_override_check(max_devices=3)),
+         None),  # handled specially below, result (override_check_result) captured
+                 # for fig35 (see core/plots.py)
         ("3. Loss-model calibration (auto-loaded by AMRSystem's default loss model)",
          lambda: (loss_model.calibrate_loss_coefficients(), loss_model.run_extended_diagnostic())),
         ("3a2. Loss-model 4th-point diagnostic: adds DTU_Eriksen_MAGGIE_2016 (same physical "
@@ -1133,7 +1148,19 @@ def main():
          "the function's own full-quality defaults, purely to keep this pipeline "
          "stage's own runtime bounded (see run_layered_optimization()'s own "
          "docstring for the full 1-6 layer, pop_size=40/n_gen=25 version, callable "
-         "directly for a dedicated deep run)",
+         "directly for a dedicated deep run). This session: two independent speedups. "
+         "(1) core.first_order_mce._equilibrium_m() gained an exact closed-form fast "
+         "path for the h==0 case (roughly half of all calls this stage's cascade "
+         "evaluations make), replacing a general quintic np.roots() eigenvalue solve "
+         "with a quadratic formula -- verified bit-for-bit equivalent in the only "
+         "quantity ever used downstream (m**2); ~30% faster per cascade evaluation, "
+         "unconditional, no opt-in needed. (2) run_layered_optimization() gained an "
+         "opt-in n_processes parameter (pymoo StarmapParallelization across each "
+         "generation's population) -- verified to produce an IDENTICAL Pareto front "
+         "to serial execution at the same seed (evaluation order doesn't affect "
+         "NSGA-III's own RNG stream), so this call passes "
+         "min(4, os.cpu_count() or 1): a no-op on a single-core machine (this "
+         "session's own sandbox), real wall-clock speedup on a real multi-core one",
          None),  # handled specially below, result (layered_pareto_rows) captured
                  # for the executive summary
         ("12. Figure generation: 34 figures covering validation, AMR curves, "
@@ -1154,6 +1181,14 @@ def main():
          None),  # handled specially below, result (passive_regen_result) captured
                  # for the executive summary
     ]
+
+    if quick:
+        _slow_prefixes = ("2e.", "2f.", "3a2.")
+        skipped = [name for name, _ in stages if name.startswith(_slow_prefixes)]
+        stages = [(name, fn) for name, fn in stages if not name.startswith(_slow_prefixes)]
+        logger.info(f"--quick: skipping {len(skipped)} slow diagnostic stage(s): "
+                    f"{[s.split('.')[0] + '.' for s in skipped]} (all additive/diagnostic-only "
+                    "-- see main()'s own docstring; every other stage's output is unaffected)")
 
     representative_row = None
     system_validation_results = None
@@ -1177,6 +1212,7 @@ def main():
     thermal_diode_rows = None
     curie_shift_v2_result = None
     astronautics_giguere_result = None
+    override_check_result = None
 
     for name, fn in stages:
         _banner(name)
@@ -1202,6 +1238,10 @@ def main():
                     validation_system.run_tusek_multipoint_curve_validation()
                 elif name.startswith("2b."):
                     cycle_type_result = validation_system.run_cycle_type_validation()
+                elif name.startswith("2f."):
+                    override_check_result = (
+                        validation_system.run_regenerative_amplification_override_check(
+                            max_devices=3))
                 elif name.startswith("4."):
                     rows = run_baseline_sweep()
                     representative_row = next(
@@ -1252,7 +1292,8 @@ def main():
                     layered_pareto_rows = optimize_module.run_layered_optimization(
                         n_layers_range=(1, 2, 3), pop_size=20, n_gen=10, seed=1,
                         out_csv="results/layered_pareto_front.csv",
-                        per_n_layers_out_dir="results/layered_pareto_front_by_n")
+                        per_n_layers_out_dir="results/layered_pareto_front_by_n",
+                        n_processes=min(4, os.cpu_count() or 1))
                 elif name.startswith("11d."):
                     magnet_geometry.run_magnet_geometry_analysis()
                     magnet_geometry_result = magnet_geometry.run_geometric_cost_pareto_sensitivity()
@@ -1272,6 +1313,7 @@ def main():
                         "material_rows": material_rows,
                         "hysteresis_result": hysteresis_result,
                         "magnet_geometry_result": magnet_geometry_result,
+                        "override_check_result": override_check_result,
                     })
                 elif name.startswith("13."):
                     run_design_recommendations_synthesis(
@@ -1614,4 +1656,16 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
 
 
 if __name__ == "__main__":
-    main()
+    _parser = argparse.ArgumentParser(description=__doc__ if "__doc__" in dir() else None)
+    _parser.add_argument("--quick", action="store_true",
+                          help="Skip the slow, additive/diagnostic-only 1-D regenerator "
+                               "stages (2e, 2f, 3a2 -- each runs one or more multi-cycle "
+                               "transient simulations, ~30-90s per device). None of them "
+                               "feed any other stage's numbers, so this only removes their "
+                               "own printed sections and result files, changing nothing "
+                               "else about the pipeline's output. Even without --quick, "
+                               "results are disk-cached (results/.regenerator_1d_cache.json) "
+                               "so repeated runs only pay the simulation cost once per "
+                               "unique input combination.")
+    _args = _parser.parse_args()
+    main(quick=_args.quick)

@@ -141,6 +141,11 @@ from pymoo.core.problem import ElementwiseProblem
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.util.ref_dirs import get_reference_directions
 from pymoo.optimize import minimize as pymoo_minimize
+import multiprocessing
+try:
+    from pymoo.parallelization import StarmapParallelization  # pymoo >= 0.6.1
+except ImportError:
+    from pymoo.core.problem import StarmapParallelization  # older pymoo
 from core.mce_material import GADOLINIUM
 from core.amr_cycle import AMRSystem
 from core.loss_model import StateDependentLossModel
@@ -337,13 +342,15 @@ class LayeredAMRDesignProblem(ElementwiseProblem):
     # NSGA-III's crowding-distance/reference-direction machinery with inf/nan.
 
     def __init__(self, n_layers, family=None, family_name="Gd",
-                 apply_giguere_correction=True, use_geometric_magnet_mass=False):
+                 apply_giguere_correction=True, use_geometric_magnet_mass=False,
+                 elementwise_runner=None):
         self.n_layers = n_layers
         self.family = family
         self.family_name = family_name
         self.apply_giguere_correction = apply_giguere_correction
         self.use_geometric_magnet_mass = use_geometric_magnet_mass
-        super().__init__(n_var=7, n_obj=3, n_constr=0, xl=_XL, xu=_XU)
+        kwargs = {"elementwise_runner": elementwise_runner} if elementwise_runner is not None else {}
+        super().__init__(n_var=7, n_obj=3, n_constr=0, xl=_XL, xu=_XU, **kwargs)
 
     def _evaluate(self, x, out, *args, **kwargs):
         mu0H, freq, mdot, mass_per_stage, eps, blow_fraction, particle_diameter_mm = x
@@ -385,18 +392,51 @@ _LAYERED_ROW_FIELDNAMES = ["family", "n_layers", "mu0H_max_T", "frequency_Hz",
 
 def run_layered_optimization_for_n_layers(n_layers, family=None, family_name="Gd",
                                            pop_size=40, n_gen=25, seed=1,
-                                           out_csv=None, use_geometric_magnet_mass=False):
+                                           out_csv=None, use_geometric_magnet_mass=False,
+                                           n_processes=1):
     """Runs NSGA-III for a single n_layers value -- the layered-bed analog
     of run_optimization_for_material() above. Same reduced pop_size/n_gen
     defaults (40/25) for the same runtime-accounting reason: this is meant
     to be called once per n_layers value in LAYERED_N_LAYERS_RANGE, not
-    once total."""
+    once total.
+
+    n_processes: opt-in multiprocessing across each generation's
+    population (default 1 = serial, unchanged behavior/results from
+    before this parameter existed). >1 evaluates that generation's
+    individuals across a multiprocessing.Pool via pymoo's
+    StarmapParallelization, which does NOT change results for a given
+    seed -- randomness only affects population generation/selection
+    (still single-process, single RNG stream), not evaluation dispatch or
+    the order results are gathered back in, so a parallel run reproduces
+    the exact same Pareto front as a serial one at the same seed (checked
+    directly; see tests/test_optimize.py). Most useful in combination
+    with core.first_order_mce's h==0 fast path (this session's other
+    speedup for this same stage) -- multiprocessing helps most when each
+    individual evaluation is still nontrivially expensive, which the fast
+    path already halved but did not eliminate (each evaluation still
+    solves a genuine quintic for h!=0 via np.roots(); see that function's
+    own docstring for why this wasn't also fast-pathed). On a
+    single-core machine (e.g. this repo's own CI/sandbox environment)
+    n_processes>1 adds pool-management overhead for no benefit -- only
+    request it on a real multi-core machine."""
     ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=6)
     algorithm = NSGA3(pop_size=pop_size, ref_dirs=ref_dirs)
-    problem = LayeredAMRDesignProblem(
-        n_layers=n_layers, family=family, family_name=family_name,
-        use_geometric_magnet_mass=use_geometric_magnet_mass)
-    res = pymoo_minimize(problem, algorithm, ("n_gen", n_gen), seed=seed, verbose=False)
+
+    pool = None
+    try:
+        elementwise_runner = None
+        if n_processes and n_processes > 1:
+            pool = multiprocessing.Pool(n_processes)
+            elementwise_runner = StarmapParallelization(pool.starmap)
+        problem = LayeredAMRDesignProblem(
+            n_layers=n_layers, family=family, family_name=family_name,
+            use_geometric_magnet_mass=use_geometric_magnet_mass,
+            elementwise_runner=elementwise_runner)
+        res = pymoo_minimize(problem, algorithm, ("n_gen", n_gen), seed=seed, verbose=False)
+    finally:
+        if pool is not None:
+            pool.close()
+            pool.join()
 
     X, F = res.X, res.F
     family_label = family.name if family is not None else family_name
@@ -438,7 +478,7 @@ def run_layered_optimization(n_layers_range=LAYERED_N_LAYERS_RANGE, family=None,
                               family_name="Gd", pop_size=40, n_gen=25, seed=1,
                               out_csv="results/layered_pareto_front.csv",
                               per_n_layers_out_dir="results/layered_pareto_front_by_n",
-                              use_geometric_magnet_mass=False):
+                              use_geometric_magnet_mass=False, n_processes=1):
     """Phase 29: runs NSGA-III separately for each n_layers in
     n_layers_range (default LAYERED_N_LAYERS_RANGE=1..6), writes each
     layer-count's own Pareto front to
@@ -468,7 +508,8 @@ def run_layered_optimization(n_layers_range=LAYERED_N_LAYERS_RANGE, family=None,
         rows = run_layered_optimization_for_n_layers(
             n_layers, family=family, family_name=family_name,
             pop_size=pop_size, n_gen=n_gen, seed=seed, out_csv=out_path,
-            use_geometric_magnet_mass=use_geometric_magnet_mass)
+            use_geometric_magnet_mass=use_geometric_magnet_mass,
+            n_processes=n_processes)
         per_n_rows[n_layers] = rows
         all_rows.extend(rows)
         print(f"  n_layers={n_layers}  {len(rows)} Pareto-optimal design(s) found"

@@ -476,10 +476,55 @@ def simulate_amr_1d(material, mu0H_max, mass_total, frequency, mdot,
     return result
 
 
+import hashlib
+import json
+import os
+
+_CACHE_PATH = "results/.regenerator_1d_cache.json"
+
+
+def _cache_key(material, mu0H_max, mass_total, frequency, n_nodes, mdot_search,
+                extra_kwargs):
+    """Deterministic cache key for no_load_span(): material identity (name
+    plus a couple of its own physical parameters, in case two materials
+    share a display name) plus every numeric input that can change the
+    result. Rounds floats to avoid a fresh cache miss from harmless
+    float-repr noise (e.g. 21.039999999999992 vs 21.04)."""
+    mat_id = (getattr(material, "name", repr(material)),
+              round(float(getattr(material, "Tc", 0.0)), 6),
+              round(float(getattr(material, "J", 0.0)), 6))
+    payload = {
+        "material": mat_id,
+        "mu0H_max": round(float(mu0H_max), 6),
+        "mass_total": round(float(mass_total), 6),
+        "frequency": round(float(frequency), 6),
+        "n_nodes": n_nodes,
+        "mdot_search": [round(float(m), 8) for m in mdot_search],
+        "extra_kwargs": {k: (round(float(v), 8) if isinstance(v, (int, float)) else v)
+                          for k, v in sorted(extra_kwargs.items())},
+    }
+    blob = json.dumps(payload, sort_keys=True)
+    return hashlib.sha256(blob.encode()).hexdigest()
+
+
+def _cache_load():
+    try:
+        with open(_CACHE_PATH) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _cache_save(cache):
+    os.makedirs(os.path.dirname(_CACHE_PATH), exist_ok=True)
+    with open(_CACHE_PATH, "w") as f:
+        json.dump(cache, f)
+
+
 def no_load_span(material, mu0H_max, mass_total, frequency, mdot=None,
                   n_nodes=20,
                   mdot_search=(0.0002, 0.0005, 0.001, 0.002, 0.004, 0.008, 0.015, 0.03, 0.06),
-                  **kwargs):
+                  use_cache=True, **kwargs):
     """Convenience wrapper: no-load span, searched over `mdot_search` and
     reporting the BEST (maximum span, among CONVERGED runs) result found.
 
@@ -499,32 +544,65 @@ def no_load_span(material, mu0H_max, mass_total, frequency, mdot=None,
     quantitative one.
 
     If mdot is explicitly provided (not None), search is skipped and that
-    single value is used instead."""
+    single value is used instead (also cached, keyed on that single mdot).
+
+    CACHING: each search point is a multi-cycle transient simulation run
+    to convergence (tens of seconds -- see module docstring), and this
+    function is called repeatedly for the SAME device across
+    main.py's steps 2e/2f/3a2 and across repeated pipeline runs. Results
+    are cached to disk at `results/.regenerator_1d_cache.json`, keyed on
+    every input that affects the answer (material identity, field, mass,
+    frequency, node count, mdot grid, and any extra simulate_amr_1d
+    kwargs -- see _cache_key()). Pass `use_cache=False` to force a fresh
+    computation (e.g. after changing this module's own physics, since the
+    cache has no way to know the code changed underneath it -- delete
+    results/.regenerator_1d_cache.json directly for the same effect
+    across every call)."""
+    cache_key = None
+    if use_cache:
+        cache_key = _cache_key(material, mu0H_max, mass_total, frequency, n_nodes,
+                                (mdot,) if mdot is not None else mdot_search, kwargs)
+        cache = _cache_load()
+        if cache_key in cache:
+            hit = dict(cache[cache_key])
+            hit["T_nodes_K"] = np.array(hit["T_nodes_K"])
+            hit["from_cache"] = True
+            return hit
+
     if mdot is not None:
-        return simulate_amr_1d(material, mu0H_max, mass_total, frequency, mdot,
-                                n_nodes=n_nodes, **kwargs)
-    kwargs.setdefault("max_cycles", 1200)
-    kwargs.setdefault("tol", 3e-3)
-    # Selection uses span_K (already the tail-averaged, noise-robust value
-    # from simulate_amr_1d -- see that function) from EVERY evaluated mdot,
-    # not just ones that hit the strict per-cycle `converged` flag: with
-    # axial conduction now in the model, several operating points settle
-    # into a small residual cycle-to-cycle oscillation that can outlast a
-    # practical cycle budget without ever tripping that flag, even though
-    # the tail-averaged span is already a stable, trustworthy estimate (see
-    # module docstring's "known limitations" for the interior-maximum
-    # confirmation this search now reliably finds).
-    best = None
-    any_converged = False
-    for m in mdot_search:
-        r = simulate_amr_1d(material, mu0H_max, mass_total, frequency, m,
-                             n_nodes=n_nodes, **kwargs)
-        r["mdot_kg_s"] = m
-        any_converged = any_converged or r["converged"]
-        if best is None or r["span_K"] > best["span_K"]:
-            best = r
-    best["any_converged_in_search"] = any_converged
-    return best
+        result = simulate_amr_1d(material, mu0H_max, mass_total, frequency, mdot,
+                                  n_nodes=n_nodes, **kwargs)
+    else:
+        kwargs.setdefault("max_cycles", 1200)
+        kwargs.setdefault("tol", 3e-3)
+        # Selection uses span_K (already the tail-averaged, noise-robust value
+        # from simulate_amr_1d -- see that function) from EVERY evaluated mdot,
+        # not just ones that hit the strict per-cycle `converged` flag: with
+        # axial conduction now in the model, several operating points settle
+        # into a small residual cycle-to-cycle oscillation that can outlast a
+        # practical cycle budget without ever tripping that flag, even though
+        # the tail-averaged span is already a stable, trustworthy estimate (see
+        # module docstring's "known limitations" for the interior-maximum
+        # confirmation this search now reliably finds).
+        best = None
+        any_converged = False
+        for m in mdot_search:
+            r = simulate_amr_1d(material, mu0H_max, mass_total, frequency, m,
+                                 n_nodes=n_nodes, **kwargs)
+            r["mdot_kg_s"] = m
+            any_converged = any_converged or r["converged"]
+            if best is None or r["span_K"] > best["span_K"]:
+                best = r
+        best["any_converged_in_search"] = any_converged
+        result = best
+
+    if use_cache:
+        to_store = dict(result)
+        to_store["T_nodes_K"] = to_store["T_nodes_K"].tolist()
+        cache = _cache_load()
+        cache[cache_key] = to_store
+        _cache_save(cache)
+    return result
 
 
 def validate_against_benchmarks(verbose=True,

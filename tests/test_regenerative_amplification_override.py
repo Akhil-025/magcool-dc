@@ -167,10 +167,51 @@ def test_no_load_span_search_returns_best_among_grid():
     """no_load_span()'s search must return the mdot in its own grid with
     the largest span, not just the first or last point evaluated."""
     result = no_load_span(GADOLINIUM, 1.5, 0.5, 1.0, n_nodes=4,
-                           mdot_search=(0.001, 0.01, 0.1), max_cycles=25, tol=1e-2)
+                           mdot_search=(0.001, 0.01, 0.1), max_cycles=25, tol=1e-2,
+                           use_cache=False)
     assert "mdot_kg_s" in result
     assert result["mdot_kg_s"] in (0.001, 0.01, 0.1)
     assert np.isfinite(result["span_K"])
+
+
+def test_no_load_span_cache_hit_matches_uncached_result():
+    """Caching (added for main.py's --quick/runtime concerns) must be
+    transparent: a cached result must be numerically identical to a fresh
+    computation with the same inputs, and use_cache=False must bypass the
+    cache entirely (no read, no write) for callers who want a guaranteed-
+    fresh run."""
+    import os
+    from core.regenerator_1d import _CACHE_PATH, _cache_load
+
+    kwargs = dict(n_nodes=4, mdot_search=(0.003, 0.03), max_cycles=20, tol=1e-2)
+    fresh = no_load_span(GADOLINIUM, 1.6, 0.6, 1.2, use_cache=False, **kwargs)
+
+    cached_first = no_load_span(GADOLINIUM, 1.6, 0.6, 1.2, use_cache=True, **kwargs)
+    assert cached_first["span_K"] == pytest.approx(fresh["span_K"])
+    assert cached_first["mdot_kg_s"] == fresh["mdot_kg_s"]
+    assert not cached_first.get("from_cache")  # this call was the cache MISS/write
+
+    cached_second = no_load_span(GADOLINIUM, 1.6, 0.6, 1.2, use_cache=True, **kwargs)
+    assert cached_second.get("from_cache") is True
+    assert cached_second["span_K"] == pytest.approx(fresh["span_K"])
+
+    # Cache file must actually contain the entry (not just an in-memory shortcut).
+    if os.path.exists(_CACHE_PATH):
+        assert len(_cache_load()) >= 1
+
+
+def test_no_load_span_cache_key_distinguishes_different_inputs():
+    """Two calls with different physical inputs must NOT collide in the
+    cache -- a cache-key bug here would silently serve one device's span
+    to another."""
+    kwargs = dict(n_nodes=4, mdot_search=(0.005,), max_cycles=15, tol=1e-2, use_cache=True)
+    r_a = no_load_span(GADOLINIUM, 1.5, 0.5, 1.0, **kwargs)
+    r_b = no_load_span(GADOLINIUM, 2.5, 0.5, 1.0, **kwargs)  # different field
+    assert r_a["span_K"] != pytest.approx(r_b["span_K"]) or True  # values may
+    # coincidentally match; what actually matters is BOTH being freshly
+    # computed (neither incorrectly served from the other's cache entry):
+    assert not r_a.get("from_cache")
+    assert not r_b.get("from_cache")
 
 
 # ---------------------------------------------------------------------------

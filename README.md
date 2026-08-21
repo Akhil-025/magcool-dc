@@ -4,14 +4,58 @@ Physics-based simulation suite evaluating **magnetocaloric (magnetic) cooling
 for data centers**, benchmarked against vapor-compression CRAC/CRAH and
 direct liquid cooling.
 
+## Index
+
+This file is a running log, not a reorganized document — sections are
+mostly in the order they were written, and (see note below) that is
+**not** the same as chronological phase order. Use this index rather
+than scrolling.
+
+**Start here:**
+- [Status](#status) — current phase, one-paragraph-per-phase changelog (long)
+- [What's implemented](#whats-implemented) — per-module table, the fastest way to see what a given file does and its most recent change
+- [Quick start](#quick-start) — how to run it
+- [Repo layout](#repo-layout) — directory map, file-by-file
+
+**Findings write-ups, in file order (see chronology note below):**
+- [Phase 15 findings](#phase-15-findings) — BOM cost model, Hypereg pumping analysis, material+geometry co-optimization
+- [Phase 16 findings](#phase-16-findings) — thermal-hysteresis loss, NSGA-III front-composition sensitivity
+- [Phase 17-23 findings](#phase-17-23-findings) — cycle-type switch (Brayton/Ericsson/Carnot), thermal diode, Halbach magnet geometry, magnetocaloric fluids, passive/hybrid regenerators, inhomogeneous broadening + nanocomposite materials, elastocaloric reference line
+- [1-D regenerator model findings](#1d-regenerator-model-findings) — **most recent work**: the regenerative-amplification gap, the low-mdot fix, the opt-in `no_load_span_override`, and the 4-of-5-device override check
+- [Phase 12 findings](#phase-12-findings) — paper-mining pass, part 3
+- [Phase 11 findings](#phase-11-findings) — paper-mining pass, part 2
+- [Phase 10 findings](#phase-10-findings) — paper-mining pass
+- [Phase 7 findings](#phase-7-findings) — (so far)
+- [Phase 6 findings](#phase-6-findings)
+- [Phase 5 findings](#phase-5-findings)
+- [Phase 4 findings](#phase-4-findings)
+- [Phase 3 findings](#phase-3-findings)
+- [Key Phase 2 finding: ideal vs. electrical COP](#phase-2-finding)
+- [Sobol sensitivity: a genuine model-structure finding](#sobol-sensitivity)
+- [Validation snapshot (Gd MCE, mean-field vs. Dan'kov et al. 1998)](#validation-snapshot)
+
+**Chronology note:** phase numbers do NOT increase monotonically as you
+scroll down this file. Phases 3-12 (paper-mining passes) were written
+*before* Phases 15-23 and the 1-D regenerator work, but sit physically
+*below* them in this file — they were the earliest, most foundational
+passes and were left in place rather than reordered, since reordering
+a running log risks breaking existing external links/citations into it.
+If you want strict chronological order, read bottom-to-top starting
+from [Key Phase 2 finding](#phase-2-finding), then jump up to
+[Phase 15](#phase-15-findings) onward. If you just want the current
+state of a specific module, [What's implemented](#whats-implemented)
+is faster than reading findings sections in any order.
+
+<a id="status"></a>
 ## Status: Phase 13 (paper-mining pass part 6: traced/corrected the `DTU_rotary_Gd_2016` citation, promoted `DTU_Eriksen_rotary_Gd_2015` into the CORE calibration slot) done, Phase 14 (bug fixes: corrected a mean-field-vs-first-order GD5SI2GE2 material mixup in the cascade comparison/fig20/cascade.py demo; added `core/material_family_comparison.py`, a four-way Gd/Gd5Si2Ge2/GD-family/LAFESIH-family/MNFEPSI-family ranking at the same ASHRAE point, wired into `main.py` step 8d and `plots.py` fig26; documented the `span_fraction` linear-clamp approximation rather than inventing an unsourced smoothing function; confirmed the full-system BOM cost gap, reference-book OCR, and two flagged CSV rows are already correctly left open/flagged, no change needed; Tušek et al. (2013) Figs. 10-11 digitization still open, being done manually in WebPlotDigitizer; 170/170 tests passing) done, Phase 15 (a full-system BOM cost model in `core/economics.py` — soft-magnetic-yoke cost, an order-of-magnitude full-system-cost estimate, and a CRF-based levelized cost of cooling; confirmed the multi-bed-rotary-vs-reciprocating loss question was already answered by existing `RotaryDriveLossModel`/`analyze_parasitic_fraction_scaling` infrastructure, no new term needed; a Hypereg-style parallel-hydraulic pumping-power analysis (`core/hypereg_analysis.py`), grounded in a direct reading of Klinar et al. (2024); and material+geometry co-optimization inside NSGA-III (`core/optimize.py`) — particle diameter as a 7th design variable wired through `core/amr_cycle.py`'s new geometry-aware pumping-power accounting, and material family as a per-family NSGA-III search merged post-hoc into one Pareto front; 153/153 tests passing. **Note**: `core/design_recommendations.py`, referenced in the original Phase 15 plan, does not exist in this project snapshot — see `ROADMAP.md` Phase 15 item 1 for the flagged discrepancy) done, Phase 16 (thermal-hysteresis loss quantified for the first time: new `hysteresis_loss_J_per_kg` field on `FirstOrderMCEMaterial` [core/first_order_mce.py], literature-analog placeholder values for all three first-order families (each heavily honesty-flagged), wired into `AMRSystem.run()` [core/amr_cycle.py] as an additional parasitic-power term; new `core/hysteresis_sensitivity.py` A/B diagnostic asks whether Phase 15's "100% La(Fe,Si)13Hy" merged-front result survives — result: front composition DID shift, but in the opposite direction than naively expected (MORE La(Fe,Si)13Hy-dominant, not less), confirmed to be a genuine NSGA-III search-dynamics effect rather than a bug via an independent fixed-design-point sanity check; open item flagged for a full-resolution rerun; 216/216 tests passing) done, Phase 17 (AMR cycle-topology switch — `cycle_type` on `AMRSystem` [core/amr_cycle.py], `"brayton"` [default, unchanged behavior] / `"ericsson"` / `"carnot"` — with the honest caveat that this project's own copy of Kitanovski et al. (2015) excludes pp. 104-109 [Sect. 4.1.1-4.1.4], so the `CYCLE_TYPE_FACTORS` multipliers encode only the qualitative Carnot >= Ericsson >= Brayton ranking, not the book's own closed-form relations; new `validation_system.run_cycle_type_validation()` re-checks rotary-named benchmark devices as Ericsson-like, finding one genuine improvement [`DTU_Eriksen_rotary_Gd_2015`: COP error -2.1% -> +0.6%] out of two comparable rotary devices; 236/236 tests passing) done, Phase 18 (a scoped-down mechanical-contact active thermal diode — `core/thermal_diode.py`'s `MechanicalContactDiode` and `core/thermal_diode_analysis.py` — after checking the plan's own premise directly and finding `AMRSystem` has no internal frequency ceiling for a diode to "unlock", so the module ships as a parasitic-cost-only sensitivity study [no benchmark device uses thermal diodes] rather than the fuller NSGA-III categorical variant originally proposed; 254/254 tests passing) done, a follow-up pass closing three flagged Phase 16-18 open items (a full-production-settings multiseed hysteresis-reversal check that found the Phase 16 reversal is **not** stable at production NSGA-III settings — `results/hysteresis_multiseed_stability.txt`; a higher-mdot Hypereg re-sweep confirming a >2x larger benefit at 0.3 kg/s than at the 0.08 kg/s baseline; and a `cycle_type` sensitivity check on the Astronautics graded-bed cascade, which found the Ericsson reclassification does **not** narrow that device's much larger -81.1% error, unlike the single-bed DTU case) done, Phase 19 (a closed-form Halbach-cylinder field-vs-mass magnet geometry model — `core/magnet_geometry.py`, `economics.bom_cost_geometric()` — replacing the old flat $/T magnet-mass ratio with a genuinely super-linear-in-field relation, wired into `optimize.cost_index()` as an opt-in `use_geometric_magnet_mass` flag; a citation correction found and documented for the Bjørk et al. field-vs-cost reference; 293/293 tests passing) done, Phase 20 (magnetocaloric fluids as a new working-body class — `core/fluid_mce_cycle.py`'s `FerrofluidMCESystem`, `core/fluid_mce_analysis.py` — built on standard Krieger-Dougherty/Darcy-Weisbach relations since neither source book's fluids chapter was available; headline finding: the lack of regeneration collapses usable span to well under a Kelvin versus solid AMR at the same field/flow, despite an interior COP optimum existing around phi≈0.10-0.20; 313/313 tests passing) done, Phase 21 (passive/hybrid magnetic regenerators — `core/passive_regenerator_analysis.py`, `baseline_cooling.augmented_regenerator_cop()` — recombining this repo's own existing heat-capacity and baseline-COP models rather than digitizing Tishin's unreadable Ch. 11; found Gd's own Curie point sitting inside the ASHRAE operating window gives the largest, still-modest COP gain [+0.24%], shrinking as span widens; 326/326 tests passing) done, **Phase 22 (three sub-items: item 1 — Gaussian inhomogeneous/polycrystalline Tc-broadening [`core/inhomogeneous_broadening.py`], which narrows the model's 1T ΔT_ad overestimate but widens its 5T underestimate, a genuine trade-off rather than a clean fix; item 2 — an engineered multi-phase nanocomposite material family [`core/nanocomposite_material.py`], which underperforms a perfectly-tuned single phase at its own design span but uniquely survives at an off-design span where the sharply-tuned single phase collapses to zero capacity; item 3 — magnetoelastic/anisotropic contributions deliberately left unmodeled [no digitizable data, no plan deliverable] plus a qualitative amorphous-materials cost/performance note in `core/economics.py`; 353/353 tests passing)** done, **Phase 23 (an elastocaloric reference comparison line — `baseline_cooling.elastocaloric_reference_cop()` — added as a static literature-sourced horizontal band on `plots.py` fig08 and in `main.py`'s baseline sweep, exactly as scoped ["a comparison row, not a new simulated device"]; representative COP=5.8 anchor from Qian et al. 2023's simulated multimode elastocaloric system, low end from Wu et al. 2023's measured narrow-span device, since neither of this repo's two source books covers elastocalorics; 356/356 tests passing)** done, and a diagnostic-only follow-up (`core/regenerator_1d.py`, a 1-D transient blow-by-blow AMR simulator checking the 2d regenerative-amplification gap directly: fixed a low-mdot degeneracy by adding axial conduction the model previously lacked, which exposed a still-open, directionally-inconsistent calibration gap; wired into `main.py` as step 2e, additive/diagnostic only, not feeding `cooling_capacity()` or any downstream result by default; PLUS an opt-in `no_load_span_override` on `AMRSystem` + `regenerative_span_cap()`, letting that fix actually be used per design point, and `run_regenerative_amplification_override_check()` (step 2f) honestly showing it recovers usable COP predictions within ~±16% on 4 of 5 previously-structurally-infeasible benchmark devices, and doesn't help on the 5th) done — see `ROADMAP.md`
 
+<a id="whats-implemented"></a>
 ## What's implemented
 
 | Module | Purpose |
 |---|---|
 | `core/mce_material.py` | Mean-field (Brillouin/Weiss) model for continuous-transition materials (Gd, La0.7Ca0.3MnO3); Gd validated, Gd5Si2Ge2 flagged as invalid for this framework |
-| `core/first_order_mce.py` | Extended (6th-order) Landau model for first-order/giant-MCE materials: Gd5Si2Ge2, La(Fe,Si)13Hy, and (Mn,Fe)2(P,Si) — **Phase 16: added `hysteresis_loss_J_per_kg` field (literature-analog placeholder values, heavily honesty-flagged per family; 0.0 default preserves old behavior)** |
+| `core/first_order_mce.py` | Extended (6th-order) Landau model for first-order/giant-MCE materials: Gd5Si2Ge2, La(Fe,Si)13Hy, and (Mn,Fe)2(P,Si) — **Phase 16: added `hysteresis_loss_J_per_kg` field (literature-analog placeholder values, heavily honesty-flagged per family; 0.0 default preserves old behavior). This session: `_equilibrium_m()` gained an exact closed-form fast path for h==0 (roughly half of all calls, since `H_initial=0.0` is the default nearly everywhere), replacing a general degree-5 `np.roots()` eigenvalue solve with a quadratic formula. Profiled as the dominant cost of `core.cascade.run_graded_cascade()` (called heavily by `main.py`'s NSGA-III optimization stages, notably 11f) — this alone cut its per-call runtime by ~30% (verified: 1.02s → 0.72s/call). Verified bit-for-bit equivalent in the only quantity ever used downstream (`m**2`, via `delta_S_isothermal()`) across 1600 test cases spanning all four material families; the two solutions' raw signs can differ (a physically meaningless ±m degeneracy at zero field, spontaneous symmetry breaking — the original `np.roots()` path had no defined sign convention here either) but this is never observed since sign is never used** |
 | `core/giant_mce_analysis.py` | Formal Gd vs. giant-MCE comparison → `results/giant_mce_analysis.txt` |
 | `core/material_family_comparison.py` | Four-way material family ranking (Gd, Gd5Si2Ge2-fixed, and the three composition-tunable families) at the same ASHRAE point → `results/material_family_comparison.csv`/`.txt`, fig26 (Phase 14) |
 | `core/emissions.py` | Refrigerant-free GWP/emissions comparison |
@@ -36,8 +80,9 @@ direct liquid cooling.
 | `core/regenerator_1d.py` | **Diagnostic addition, follow-up to the 2d gap-quantification step**: a standalone 1-D transient (blow-by-blow, multi-cycle) AMR simulator — the actual regenerator physics `amr_cycle.py`'s 0-D `cooling_capacity()` cannot represent, built to check whether an explicit simulation reproduces the spans 2d shows the 0-D model is structurally capped below. Fixed an initial low-mdot degeneracy (predicted span grew without bound as flow decreased, no interior maximum) by adding axial node-to-node conduction, which the model had lacked entirely. That fix exposed a follow-on problem: the model's error is now directionally inconsistent across the three directly-measured benchmarks (over on one device, under on two others), because the axial-conductivity value used is physically reasoned but not independently calibrated. Its `regenerative_span_cap()` feeds `amr_cycle.py`'s new opt-in `no_load_span_override` (default `None`, every other caller unaffected) — `validation_system.run_regenerative_amplification_override_check()` (step 2f) shows this recovers usable COP predictions within ~±16% on 4 of 5 benchmark devices the old cap makes structurally infeasible, and honestly doesn't help on the 5th. **Neither is used by default anywhere else in this repo — `cooling_capacity()`'s default behavior is unmodified.** Wired into `main.py` as steps 2e/2f, additive/diagnostic-only → `results/regenerator_1d_validation.txt`, `results/regenerative_amplification_override_check.txt` |
 | `core/validation.py`, `validation_system.py`, `giguere_validation.py` | Material- and system-level validation against literature/prototypes; `validation.py` also cross-checks Gd at 7T (Giguere et al.) and a Dan'kov et al. Curie-shift held-out prediction (not reproduced by the model, documented); `validation_system.py` also field-sensitivity-checks the Chubu Electric/Toshiba pair and reachability-checks capacity-only rows (Cooltech's 42K stress test); `giguere_validation.py` also cross-checks the Gd5Si2Ge2 dTad correction against Pecharsky & Gschneidner (1997)'s independent peak-ratio figure — **Phase 17: `validation_system.py` gained `infer_cycle_type_for_device()`/`run_cycle_type_validation()`, finding the Ericsson reclassification narrows `DTU_Eriksen_rotary_Gd_2015`'s COP error from -2.1% to +0.6%** |
 | `core/sensitivity.py`, `rsm.py` | Sobol sensitivity, RSM surrogate |
-| `main.py` | Full comparison across the ASHRAE TC9.9 thermal envelope: 15 numbered stages (plus sub-stages, e.g. 1b/2b/3b-3d/7b-7c/8b-8e/9b/11b-11d, and 2e for the 1-D regenerator diagnostic above) and 34 figures — see `python main.py --help`-style stage list in the module's own docstring |
+| `main.py` | Full comparison across the ASHRAE TC9.9 thermal envelope: 15 numbered stages (plus sub-stages, e.g. 1b/2b/3b-3d/7b-7c/8b-8e/9b/11b-11d, and 2e/2f/3a2 for the 1-D regenerator diagnostics above) and 35 figures (fig35, this session, shows the regenerative-amplification override check visually for the first time — see the "1-D regenerator model findings" section) — see `python main.py --help`-style stage list in the module's own docstring. **`--quick`** skips 2e/2f/3a2 (each a multi-cycle transient regenerator simulation, ~30-90s per device; all three are additive/diagnostic-only, so skipping them changes nothing about any other stage's output). Even without `--quick`, `core/regenerator_1d.py`'s `no_load_span()` disk-caches every simulation (`results/.regenerator_1d_cache.json`, gitignored), so repeated runs only pay the simulation cost once per unique input combination |
 
+<a id="quick-start"></a>
 ## Quick start
 
 ```bash
@@ -64,7 +109,8 @@ python -m core.fluid_mce_analysis                # Phase 20: magnetocaloric-flui
 python -m core.passive_regenerator_analysis       # Phase 21: passive/hybrid magnetic regenerator augmentation of a conventional gas cycle
 python -m core.inhomogeneous_broadening            # Phase 22 item 1: Gaussian Tc-broadening sensitivity of the mean-field Gd model
 python -m core.nanocomposite_material               # Phase 22 item 2: nanocomposite (multi-phase blended) La(Fe,Si)13Hy family + off-design robustness check
-python main.py                                       # full pipeline: validation, economics/BOM, cascade, sensitivity, optimization, 34 figures
+python main.py                                       # full pipeline: validation, economics/BOM, cascade, sensitivity, optimization, 35 figures
+python main.py --quick                                # same, but skips the slow 1-D regenerator diagnostic stages (2e/2f/3a2) -- see "What's implemented"'s main.py row
 ```
 
 ### Phase 15 module usage notes
@@ -96,6 +142,7 @@ Running `python -m core.optimize` (or `main.py`'s step 11) now writes
 material candidates) AND `results/pareto_front_by_material/<material>.csv`
 (each material's own front, before merging, for transparency).
 
+<a id="phase-15-findings"></a>
 ## Phase 15 findings
 
 Full writeup and honesty flags in `ROADMAP.md`'s Phase 15 section and
@@ -142,6 +189,7 @@ already answered by existing infrastructure
 `analyze_parasitic_fraction_scaling()`) — documented explicitly rather
 than duplicated; see `core/loss_model.py`'s module docstring.
 
+<a id="phase-16-findings"></a>
 ## Phase 16 findings
 
 Full writeup and honesty flags in `ROADMAP.md`'s Phase 16 section;
@@ -187,6 +235,7 @@ accounted for as an additive parasitic-power term rather than folded
 into the ideal-cycle thermodynamics or exergy efficiency. See
 `ROADMAP.md`'s Phase 16 section for the full discussion.
 
+<a id="phase-17-23-findings"></a>
 ## Phase 17-23 findings
 
 Full writeups and honesty flags live in `ROADMAP.md`'s own Phase 17-23
@@ -271,6 +320,7 @@ does **not** generalize to the Astronautics graded-bed device the way it
 did for the single-bed DTU device — its much larger -81.1% error is
 essentially unchanged.
 
+<a id="1d-regenerator-model-findings"></a>
 ## 1-D regenerator model findings (diagnostic, not wired into the pipeline)
 
 Full writeup in `core/regenerator_1d.py`'s own module docstring;
@@ -352,6 +402,16 @@ predicts, shown here on COP rather than span. Still opt-in and still off
 by default everywhere else in this codebase for the same reason as
 before: this is a usable capability, not yet a validated one.
 
+**Figure**: this whole override check was text-only
+(`results/regenerative_amplification_override_check.txt`) until this
+session's `fig35` (`core/plots.py`'s `plot_regenerative_amplification_
+override_check()`, wired into `main.py`'s step 12 and `run_all()`) —
+two panels: span reach (old cap vs. 1-D cap vs. the device's real
+reported span, so a device the 1-D cap still doesn't reach is visibly a
+shorter bar than "actual span," not silently omitted) and COP recovered
+vs. literature for whichever devices the override does reach.
+
+<a id="phase-12-findings"></a>
 ## Phase 12 findings (paper-mining pass, part 3)
 
 
@@ -385,6 +445,7 @@ Phase 12 section.
   as a result; flagged (not added) an unconfirmed 18K span number for the
   Astronautics device and two under-documented reference books.
 
+<a id="phase-11-findings"></a>
 ## Phase 11 findings (paper-mining pass, part 2)
 
 A deeper second pass through the remaining unmined papers (tables, in-text
@@ -417,6 +478,7 @@ Phase 11 section.
   was on the paper-mining pass's own "updated priority list," and the
   Riso point's primary source isn't in this repo's `Papers/`.
 
+<a id="phase-10-findings"></a>
 ## Phase 10 findings (paper-mining pass)
 
 A cross-reference of this repo's current state against the papers in
@@ -446,6 +508,7 @@ details in `ROADMAP.md`'s Phase 10 section.
   numbers are in the same undigitized Figs. 10-11 already open since
   Phase 7.
 
+<a id="phase-7-findings"></a>
 ## Phase 7 findings (so far)
 
 **-1. Lifetime operating cost added — HX/pump/motor/controls CAPEX still open.**
@@ -536,6 +599,7 @@ with independently reported component efficiencies, not a
 size-dependent term. (`analyze_parasitic_fraction_scaling()` in
 `core/loss_model.py`.)
 
+<a id="phase-6-findings"></a>
 ## Phase 6 findings
 
 **1. Adding data revealed model fragility — and that's the finding.** Found
@@ -568,6 +632,7 @@ placeholder's less-grounded ~$500-50,000 range. Still a materials-only
 floor, not full system cost (heat exchangers/pumps/motor/controls excluded)
 — reconciling that is Phase 7.
 
+<a id="phase-5-findings"></a>
 ## Phase 5 findings
 
 **1. The giant-MCE material is now honestly modeled — via a different
@@ -612,6 +677,7 @@ refrigerant-free story is a real, categorical benefit (leak risk, phase-out
 liability) but only becomes an emissions *win* once the COP gap identified
 in Phase 1-4 closes. Report both numbers plainly in the paper.
 
+<a id="phase-4-findings"></a>
 ## Phase 4 findings
 
 **1. The mass gap is closed.** `core/thermal.py` computes regenerator
@@ -643,6 +709,7 @@ material changes the Phase 3 conclusion requires a Bean-Rodbell/Landau
 model (Phase 5) — not a difference of degree from what's here, a difference
 in the physics needed.
 
+<a id="phase-3-findings"></a>
 ## Phase 3 findings
 
 **1. Sobol resolved.** Replacing the constant `parasitic_fraction` with
@@ -678,6 +745,7 @@ mass/effectiveness coupling gap, single-stage span limits) — not a
 already in the materials library) or the GWP/refrigerant-free case
 (Phase 5) changes this conclusion is the natural next question.
 
+<a id="phase-2-finding"></a>
 ## Key Phase 2 finding: ideal vs. electrical COP
 
 Published AMR COP figures are **electrical** (include pump + magnet-motor-drive
@@ -699,6 +767,7 @@ different conclusion than the naive ideal-COP comparison would suggest, and
 the central design-motivation for Phase 3 (multi-stage, higher field,
 state-dependent loss modeling).
 
+<a id="sobol-sensitivity"></a>
 ## Sobol sensitivity: a genuine model-structure finding
 
 Sobol analysis (`results/sobol_results.txt`) found electrical COP is ~99.9%
@@ -709,6 +778,7 @@ This is because the current model makes `eta_2nd_law` and
 they cancel out of the COP ratio algebraically. This is flagged as a
 required Phase 3 upgrade, not silently patched.
 
+<a id="validation-snapshot"></a>
 ## Validation snapshot (Gd MCE, mean-field model vs. Dan'kov et al. 1998)
 
 | Field | Literature ΔT_ad | Model ΔT_ad | Error |
@@ -721,14 +791,15 @@ Mean-field theory is known to overpredict ΔT_ad near T_c because it
 neglects short-range spin correlations / critical fluctuations (de Oliveira
 & von Ranke, *Phys. Rep.* 489 (2010) 89-159).
 
+<a id="repo-layout"></a>
 ## Repo layout
 
 ```
 core/                              physics, validation, sensitivity, surrogate, and economics modules
-tests/                             pytest suite (364 tests as of Phase 23)
+tests/                             pytest suite (452 tests as of this session's regenerative-amplification-override work)
 data/                              literature-sourced parameter tables + digitized prototype benchmarks
 results/                           generated comparison tables, figures, Sobol results, RSM coefficients
-main.py                            top-level comparison driver (15 numbered stages + sub-stages, 34 figures)
+main.py                            top-level comparison driver (15 numbered stages + sub-stages, 35 figures)
 diagnose_cop_gap.py                standalone diagnostic script
 ROADMAP.md                         phased plan/changelog — the authoritative, detailed record of every phase
 phase_plan.md                      forward-looking plan for not-yet-started phases/items
