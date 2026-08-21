@@ -212,6 +212,16 @@ from scipy.optimize import nnls
 # `tests/test_loss_model.py::test_core_calibration_points_are_self_consistent`
 # guards against this drifting again silently.
 CALIBRATION_POINTS_CORE = [
+    # CITATION AUDIT (Phase 30, CITATION_AUDIT_PHASE30.md items 1-2):
+    # Astronautics_rotary_2014 and DTU_Eriksen_rotary_Gd_2015 below were
+    # independently re-verified this pass directly against their PDF
+    # source text (Jacobs et al. and Eriksen et al. respectively, both
+    # present in Papers/) -- field, frequency, Qc, and COP all match the
+    # primary source word-for-word for both points. Tusek_singlebed_Gd_2010
+    # (below) was ALSO independently checked and its existing field/
+    # frequency discrepancy flag (see that point's own long comment) was
+    # CONFIRMED, not newly discovered: the source paper's own text reports
+    # 1.15T/0.3Hz throughout, "1.69" does not appear anywhere in it.
     ("Astronautics_rotary_2014", 4.0, 1.44, 0.252999, 2502.0, 1133.70),
     # FIX (Paper-Mining Pass Part 6): replaces the fabricated/unlocated
     # "DTU_rotary_Gd_2016" point (818W, mdot=0.198062, Wp=139.79 -- these
@@ -260,6 +270,28 @@ CALIBRATION_POINTS_EXTENDED = CALIBRATION_POINTS_CORE + [
 # validation_system.run_system_validation() output). Each Wp_required here
 # comes from that device's OWN calibrated mdot: Wp = Qc * (1/COP_lit -
 # 1/COP_ideal), same formula used to build CORE/EXTENDED above.
+#
+# CITATION AUDIT FLAG (Phase 30, CITATION_AUDIT_PHASE30.md item 4 --
+# UPDATED/RESOLVED by a follow-up web search pass, see item 4a below):
+# the "2016" citation itself is CORRECT. Lozano, Capovilla, Trevizoli,
+# Bahl, Engelbrecht, Nielsen, Barbosa, "Development of a novel rotary
+# magnetic refrigerator", Int. J. Refrig. 68 (2016) 187-197, is a real,
+# genuinely 2016-dated paper (confirmed via DTU's own publication
+# database and ScienceDirect) -- a DIFFERENT paper from the Lozano et al.
+# Int. J. Refrig. 37 (2014) 92-98 paper that happened to be the only
+# Lozano PDF in this project's local Papers/ corpus. The earlier version
+# of this flag incorrectly checked the 2016 numbers against the wrong
+# (2014) paper and found no match, which is expected -- they are
+# different devices. The 2016 paper's own reported figures (max zero-load
+# span 12K at 1Hz/150L/h; max zero-span cooling power 150W at 0.8Hz/
+# 200L/h; 80.4W thermal load producing a 7.1K span; ~1T field; ~1.7kg Gd
+# spheres in 8 regenerator-bed pairs) are consistent in device class,
+# field, and order of magnitude with the four (Qc, COP) pairs used below,
+# though the exact per-point r4/r6/r7/r8 table values were not
+# individually re-verified against the paper's own data tables in this
+# pass (the full PDF was not accessible to fetch directly). Net effect:
+# the citation is real and correctly dated; only the exact per-row digits
+# remain formally unverified, a much smaller gap than "wrong year."
 CALIBRATION_POINTS_FURTHER_EXTENDED = CALIBRATION_POINTS_EXTENDED + [
     ("Lozano_POLO_UFSC_2016_r4", 0.4, 0.88, 0.3244, 62.5, 1.684 * 62.5),
     ("Lozano_POLO_UFSC_2016_r6", 0.8, 0.88, 0.0430, 81.2, 1.505 * 81.2),

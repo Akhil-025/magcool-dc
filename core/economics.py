@@ -311,6 +311,128 @@ def bom_cost(mu0H_max, mass_regenerator, family_name="Gd",
     }
 
 
+# =============================================================================
+# Phase 30 addition: AMR-NATIVE bottom-up lifetime-cost model
+# =============================================================================
+#
+# Everything above this point either (a) prices magnet+MCM+SMM materials
+# only (`bom_cost()`), or (b) scales that materials-only BOM by a multiplier
+# BORROWED from a different, more mature technology (vapor-compression AC
+# manufactured-cost benchmarks, `full_system_cost_estimate()`). Neither is
+# an AMR-specific bottom-up cost. This section closes that gap using a
+# paper genuinely specific to AMR devices that was in this project's own
+# corpus but not yet used for costing:
+#
+#   Bjørk, Bahl & Nielsen, "The lifetime cost of a magnetic refrigerator",
+#   Int. J. Refrig. 63 (2016) 48-62.
+#
+# This is a DTU numerical-optimization study of a 25W-average-load AMR
+# device's TOTAL lifetime cost (capital: magnet + MCM; operating:
+# electricity), independently varying magnet/MCM unit price and device
+# lifetime, and reporting the actual optimized capital+operating cost
+# split -- not a manufactured-cost multiplier borrowed from a different
+# technology. Their own headline numbers (Abstract, Section 4, magnet/MCM
+# price $40/$20 per kg):
+#   - Capital cost: ~$100 (magnet) + ~$40 (MCM) at a representative
+#     4.5 Hz, utilization=0.35, COP=2 operating point.
+#   - Operating cost: ~$0.004/hour of runtime.
+#   - Total 15-year lifetime cost: $150-$400, depending on magnet/MCM
+#     price (magnet dominates; MCM cost is "almost negligible" -- their
+#     own wording).
+#   - Their own rough VCC comparison point: an A+++ compression-based
+#     appliance uses ~$113 of electricity over 15 years at 8.6W and
+#     $0.10/kWh, plus a ~$30 compressor -- i.e. ~$143 total, similar
+#     order of magnitude to the cheapest AMR configuration they find.
+#
+# This is for a SMALL (25W-average) appliance-scale device, NOT this
+# repo's own data-center-scale (~kW) design points -- the numbers below
+# are used as a per-unit-cost-structure REFERENCE (magnet-dominated
+# capital cost, small MCM share, small operating-cost share at low
+# utilization), not rescaled to kW scale here, since Bjørk et al.
+# themselves do not provide a scaling law for that jump and inventing one
+# would be a bigger honesty violation than leaving the gap open.
+
+BJORK2016_REFERENCE_DEVICE = {
+    "average_cooling_power_W": 25.0,
+    "capital_cost_magnet_usd": 100.0,
+    "capital_cost_mcm_usd": 40.0,
+    "operating_cost_usd_per_hour": 0.004,
+    "device_lifetime_years": 15.0,
+    "lifetime_cost_range_usd": (150.0, 400.0),
+    "frequency_Hz": 4.5,
+    "utilization": 0.35,
+    "COP": 2.0,
+    "field_T_at_optimum": 1.4,
+    "magnet_price_usd_per_kg": 40.0,
+    "mcm_price_usd_per_kg": 20.0,
+    "source": "Bjork, Bahl & Nielsen, Int. J. Refrig. 63 (2016) 48-62, "
+              "Abstract + Section 4 + Fig. 8/Table 2.",
+}
+
+VCC_REFERENCE_APPLIANCE_BJORK2016 = {
+    "class": "A+++ compression-based appliance (rough comparison point, "
+             "Bjork et al.'s own words, not this repo's own baseline_cooling.py)",
+    "power_W": 8.6,
+    "electricity_price_usd_per_kWh": 0.10,
+    "lifetime_electricity_cost_usd": 113.0,
+    "compressor_capital_cost_usd": 30.0,
+    "lifetime_years": 15.0,
+    "total_lifetime_cost_usd": 143.0,
+    "source": "Bjork, Bahl & Nielsen (2016), Section 6 discussion, citing "
+              "Vincent & Heun (2006) for the compressor price.",
+}
+
+
+def amr_native_lifetime_cost_reference(verbose=True):
+    """Report the Bjork et al. (2016) AMR-native lifetime-cost structure
+    directly, as a genuine (not borrowed-multiplier) bottom-up reference
+    point -- for the paper's economics section, to be cited ALONGSIDE (not
+    instead of) `full_system_cost_estimate()`'s order-of-magnitude VCC-
+    multiplier estimate, each disclosing a different limitation."""
+    d = BJORK2016_REFERENCE_DEVICE
+    v = VCC_REFERENCE_APPLIANCE_BJORK2016
+    capital = d["capital_cost_magnet_usd"] + d["capital_cost_mcm_usd"]
+    magnet_share_of_capital = d["capital_cost_magnet_usd"] / capital
+    if verbose:
+        print("AMR-native lifetime-cost reference (Bjork, Bahl & Nielsen, "
+              "Int. J. Refrig. 63 (2016) 48-62):")
+        print(f"  device class: {d['average_cooling_power_W']:.0f}W-average "
+              f"appliance-scale AMR (NOT this repo's kW-scale data-center "
+              f"design points -- reference structure only, not rescaled)")
+        print(f"  capital cost: ${d['capital_cost_magnet_usd']:.0f} magnet + "
+              f"${d['capital_cost_mcm_usd']:.0f} MCM = ${capital:.0f} "
+              f"(magnet is {magnet_share_of_capital*100:.0f}% of capital cost)")
+        print(f"  operating cost: ${d['operating_cost_usd_per_hour']:.3f}/hour")
+        print(f"  15-year lifetime cost range: "
+              f"${d['lifetime_cost_range_usd'][0]:.0f}-"
+              f"${d['lifetime_cost_range_usd'][1]:.0f}, depending on "
+              f"magnet/MCM unit price")
+        print(f"  their own rough VCC comparison (A+++ appliance): "
+              f"~${v['total_lifetime_cost_usd']:.0f} total lifetime cost "
+              f"(${v['lifetime_electricity_cost_usd']:.0f} electricity + "
+              f"${v['compressor_capital_cost_usd']:.0f} compressor)")
+        print("  HONEST FRAMING FOR THE PAPER: this is a genuine AMR-native "
+              "bottom-up cost study (magnet + MCM capital + electricity "
+              "OPEX, numerically optimized), unlike full_system_cost_"
+              "estimate()'s borrowed VCC-manufactured-cost multiplier -- "
+              "but it is small-appliance-scale (25W average), not "
+              "data-center scale (~kW), and does NOT include HX/pump/"
+              "motor/controls/enclosure costs any more than this repo's "
+              "own bom_cost() does (Bjork et al. themselves scope their "
+              "cost model to magnet+MCM+electricity only -- see their own "
+              "Section 2). Cite it as independent qualitative support "
+              "(magnet cost dominates, MCM cost is a small fraction, "
+              "operating cost is comparable in order of magnitude to "
+              "capital cost over a 15-year life) rather than as a "
+              "kW-scale dollar figure for this repo's own design points.")
+    return {
+        "capital_cost_usd": capital,
+        "magnet_share_of_capital": round(magnet_share_of_capital, 3),
+        "lifetime_cost_range_usd": d["lifetime_cost_range_usd"],
+        "vcc_comparison_total_usd": v["total_lifetime_cost_usd"],
+    }
+
+
 def full_system_cost_estimate(mu0H_max, mass_regenerator, family_name="Gd",
                                 smm_mass_fraction=0.5,
                                 non_materials_multiplier=NON_MATERIALS_COST_MULTIPLIER):

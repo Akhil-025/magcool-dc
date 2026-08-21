@@ -1,0 +1,32 @@
+First-order Landau model (first_order_mce.py) vs. Giguere et al. (1999)
+DIRECT adiabatic temperature change measurement, Gd5Si2Ge2, 7 T
+==============================================================================
+Model peak DeltaT_ad at 7 T: 24.17 K (at T=286.4 K)
+Giguere et al. DIRECT measurement at 7 T: 10.0 K (Clausius-Clapeyron cross-check: 9.9 K)
+Giguere et al. INDIRECT (Maxwell-relation, 'giant') value at 7 T: 14.9 K
+
+Model error vs. DIRECT measurement:   +142%  (model overestimates by 2.42x)
+Model error vs. INDIRECT (Maxwell):    +62%  (model overestimates by 1.62x)
+For reference, Giguere et al.'s OWN indirect-vs-direct overestimate: 1.49x (14.9 K / 10.0 K)
+
+CONCLUSION: the model, calibrated to the widely-quoted 'giant' peak DeltaS_M
+(~18 J/(kg K) at 5T, itself a Maxwell-relation/indirect literature value),
+overestimates Giguere et al.'s DIRECTLY measured DeltaT_ad by a wider margin
+(2.42x) than the paper's own indirect-vs-direct gap
+(1.49x). This is NOT a contradiction of the paper --
+it is additive: Giguere et al.'s finding is that Maxwell-relation DeltaS_M
+overestimates DeltaT_ad for a first-order transition; honesty flag #1 in
+first_order_mce.py separately notes this model's lattice-only C_lattice
+denominator (no latent-heat correction) is inappropriate for a first-order
+transition. Both effects point the same way and appear to compound here.
+
+This model should NOT be refit to match Giguere's direct DeltaT_ad instead --
+doing so would abandon its documented calibration to the peak DeltaS_M literature
+value, and this 0-D lattice-only-C_p framework cannot simultaneously match both
+(that would require resolving the transition's latent heat, which honesty flag #1
+already flags as out of scope for this model). Instead: DeltaT_ad predictions from
+this module should be treated as upper-bound-ish, roughly 2-2.5x optimistic vs. a
+direct measurement at the one field/composition point checked here, and any
+downstream design conclusion (e.g. cascade.py's graded-cascade capacity/COP numbers)
+that depends on this module's DeltaT_ad should be read with that correction in mind
+(see core.first_order_mce.composition_tuned_material's apply_giguere_correction flag).

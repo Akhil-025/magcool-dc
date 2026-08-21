@@ -320,6 +320,11 @@ from core import fluid_mce_analysis
 from core import passive_regenerator_analysis
 from core import inhomogeneous_broadening
 from core import regenerator_1d
+from core import commercial_landscape
+from core import pue_annualized
+from core import uncertainty_propagation
+from core import pareto_multiseed_stability
+from core import water_usage
 from core import plots
 from core import design_recommendations
 
@@ -1180,6 +1185,16 @@ def main(quick=False):
          "Phase 21)",
          None),  # handled specially below, result (passive_regen_result) captured
                  # for the executive summary
+        ("16. Paper-strengthening additions (Phase 30-31): commercial/state-of-the-art "
+         "landscape comparison (core/commercial_landscape.py), PUE framing + "
+         "annualized/part-load climate-weighted comparison (core/pue_annualized.py), "
+         "Monte Carlo calibration-uncertainty propagation onto COP/Qc "
+         "(core/uncertainty_propagation.py), NSGA-III seed-to-seed multiseed "
+         "stability on the main Pareto front's own headline numbers "
+         "(core/pareto_multiseed_stability.py), and water-usage/WUE comparison "
+         "(core/water_usage.py) -- each writes its own results/ file, "
+         "additive-only, does not change any existing stage's output",
+         None),  # handled specially below, uses representative_row from step 4
     ]
 
     if quick:
@@ -1331,6 +1346,8 @@ def main(quick=False):
                     fluid_mce_result = fluid_mce_analysis.run_fluid_mce_analysis()
                 elif name.startswith("15."):
                     passive_regen_result = passive_regenerator_analysis.run_passive_regenerator_analysis()
+                elif name.startswith("16."):
+                    _run_phase30_additions(representative_row)
                 else:
                     fn()
         except Exception:
@@ -1653,6 +1670,85 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
                     "device-level COP prediction")
     else:
         logger.info("  - unavailable (stage failed or was skipped)")
+
+
+def _run_phase30_additions(representative_row=None):
+    """Phase 30-31: run all paper-strengthening additions. Each writes
+    its own results/ file and is independently exception-safe internally
+    only insofar as its own module guards feasibility (e.g. AMR span cap);
+    a failure in one does not block the others here.
+
+    `representative_row` (the same step-4 baseline-sweep row already fed
+    to run_economics()/run_emissions()) is threaded through to
+    pue_annualized's PUE-framing section and to water_usage.py, so both
+    report against this repo's own actual computed operating point rather
+    than the modules' own illustrative example COPs (4.63/3.2/4.0) --
+    those illustrative numbers were silently disconnected from the rest
+    of the pipeline's output until this fix (flagged after the initial
+    Phase 30 merge: they made water_usage.py's own AMR-vs-liquid-cooling
+    comparison read as a 0% reduction purely from reusing the same
+    placeholder pair, not from a real result)."""
+    try:
+        commercial_landscape.write_commercial_landscape_report()
+    except Exception:
+        logger.error("Phase 30: commercial_landscape.py failed")
+        logger.error(traceback.format_exc())
+    if representative_row:
+        capacity_kW = representative_row["AMR_Qc_W"] / 1000.0
+        amr_cop = representative_row["AMR_COP_electrical"]
+        vcc_cop = representative_row["VaporCompression_COP"]
+        liquid_cop = representative_row["LiquidCooling_COP"]
+        logger.info(f"Phase 30-31 additions basis: capacity={capacity_kW:.2f} kW, "
+                    f"AMR_COP={amr_cop}, VCC_COP={vcc_cop}, Liquid_COP={liquid_cop} "
+                    f"(all from step 4, span={REPRESENTATIVE_SPAN_K}K) -- same basis "
+                    "run_economics()/run_emissions() already use")
+    else:
+        # Step 4 failed or was skipped -- fall back to each module's own
+        # illustrative defaults rather than crashing this stage.
+        logger.warning("Phase 30-31: representative_row unavailable (step 4 failed/"
+                        "skipped) -- pue_annualized/water_usage will use their own "
+                        "illustrative placeholder COPs instead of a real operating point")
+        capacity_kW = amr_cop = vcc_cop = liquid_cop = None
+    try:
+        if representative_row:
+            pue_annualized.write_pue_annualized_report(
+                amr_cop=amr_cop, vcc_cop=vcc_cop, liquid_cop=liquid_cop)
+        else:
+            pue_annualized.write_pue_annualized_report()
+    except Exception:
+        logger.error("Phase 30: pue_annualized.py failed")
+        logger.error(traceback.format_exc())
+    try:
+        uncertainty_propagation.write_uncertainty_report()
+    except Exception:
+        logger.error("Phase 30: uncertainty_propagation.py failed")
+        logger.error(traceback.format_exc())
+    try:
+        # Reduced pop_size/n_gen/seeds vs. the module's own full-quality
+        # defaults (pop_size=40/n_gen=25/5 seeds), purely to keep this
+        # pipeline stage's own runtime bounded -- same pattern main.py
+        # already uses for stage 11f's layered optimization. See
+        # pareto_multiseed_stability.py's own docstring for the full
+        # version, callable directly for a dedicated deep run.
+        pareto_multiseed_stability.write_pareto_multiseed_stability_report(
+            seeds=(1, 2, 3), pop_size=20, n_gen=12)
+    except Exception:
+        logger.error("Phase 30: pareto_multiseed_stability.py failed")
+        logger.error(traceback.format_exc())
+    try:
+        if representative_row:
+            # Report at facility scale (same round 1 MW convention
+            # run_emissions() already uses for its own facility-scale row)
+            # rather than the module's own 100 kW-IT illustrative default,
+            # since we now have a real capacity to report at.
+            water_usage.write_water_usage_report(
+                capacity_kW_IT=emissions.FACILITY_SCALE_KW,
+                amr_cop=amr_cop, vcc_cop=vcc_cop, liquid_cop=liquid_cop)
+        else:
+            water_usage.write_water_usage_report()
+    except Exception:
+        logger.error("Phase 30: water_usage.py failed")
+        logger.error(traceback.format_exc())
 
 
 if __name__ == "__main__":

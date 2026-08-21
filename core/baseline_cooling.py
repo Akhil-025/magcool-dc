@@ -313,22 +313,29 @@ def augmented_regenerator_cop(base_cop, passive_regenerator_material, T_range,
 #     authors themselves report this simulated figure as the one still
 #     requiring future experimental verification -- stated here rather
 #     than smoothed over.
-#   - Wu et al., "Continuous and efficient elastocaloric air cooling by
-#     coil-bending", Nat. Commun. 14, 7982 (2023): MEASURED device-level
-#     system COP = 3.7, but at a much narrower ~0.9-1 K temperature drop --
-#     a genuinely different, far smaller operating span than this repo's
-#     own sweep, so this anchor is weaker evidence for this repo's own
-#     span range specifically than the Qian et al. figure is. Kept as the
-#     LOW end of the reported range for that reason, not averaged in as an
-#     equal-weight data point.
+#   - Li, Hua & Sun, "Continuous and efficient elastocaloric air cooling by
+#     coil-bending", Nat. Commun. 14, 7982 (2023), DOI: 10.1038/s41467-
+#     023-43611-6: MEASURED device-level system COP = 3.7, but at a much
+#     narrower ~0.9-1 K temperature drop -- a genuinely different, far
+#     smaller operating span than this repo's own sweep, so this anchor
+#     is weaker evidence for this repo's own span range specifically than
+#     the Qian et al. figure is. Kept as the LOW end of the reported
+#     range for that reason, not averaged in as an equal-weight data
+#     point. Phase 30 citation-audit correction: this was previously
+#     misattributed here as "Wu et al." -- the paper's actual authors are
+#     Xueshi Li, Peng Hua & Qingping Sun (Hong Kong Univ. of Science and
+#     Technology); no author named Wu appears on it. The journal, volume,
+#     page, year, and COP=3.7/~1K-span figures were all independently
+#     re-verified via web search this pass and are correct; only the
+#     author name was wrong.
 #
 # What this deliberately is NOT: a span-dependent model, and NOT a
 # simulation of an elastocaloric AMR-analog cycle the way core/amr_cycle.py
 # simulates magnetic AMR. Neither literature anchor above reports a
 # COP(span) curve over anything resembling this repo's own 5-20K sweep
 # (Qian et al.'s own device reaches spans up to 22.5K but at a single
-# reported operating COP, not a swept curve; Wu et al.'s own COP=3.7 figure
-# is reported at a ~1K span). Fitting a COP(span) curve from two
+# reported operating COP, not a swept curve; Li, Hua & Sun's own COP=3.7
+# figure is reported at a ~1K span). Fitting a COP(span) curve from two
 # single-point anchors measured at different, non-overlapping spans would
 # invent a slope this repo has no data for. So, exactly per phase_plan.md's
 # own framing ("similar treatment to how Carnot COP is already just a
@@ -338,15 +345,17 @@ def augmented_regenerator_cop(base_cop, passive_regenerator_material, T_range,
 # horizontal reference line across the whole span sweep -- not a per-span
 # calculation, and not claimed to be one.
 
-ELASTOCALORIC_COP_LOW = 3.7    # Wu et al. (2023) Nat. Commun. 14, 7982 -- MEASURED, ~1K span
+ELASTOCALORIC_COP_LOW = 3.7    # Li, Hua & Sun (2023) Nat. Commun. 14, 7982 -- MEASURED, ~1K span
 ELASTOCALORIC_COP_HIGH = 5.8   # Qian et al. (2023) Science 380, 722-727 -- SIMULATED, up to 22.5K span
 ELASTOCALORIC_COP_SOURCE_NOTE = (
     "External literature (NOT this repo's two source books -- see "
     "core/baseline_cooling.py's Phase 23 honesty flag): Qian et al. (2023) "
-    "Science 380, 722-727 (simulated steady-state system COP=5.8, up to a "
-    "22.5K span) and Wu et al. (2023) Nat. Commun. 14, 7982 (measured "
-    "system COP=3.7, at a much narrower ~1K span). A single static "
-    "reference point, not a span-dependent simulation."
+    "Science 380, 722-727, DOI 10.1126/science.adg7043 (simulated "
+    "steady-state system COP=5.8, up to a 22.5K span) and Li, Hua & Sun "
+    "(2023) Nat. Commun. 14, 7982, DOI 10.1038/s41467-023-43611-6 "
+    "(measured system COP=3.7, at a much narrower ~1K span; corrected "
+    "Phase 30 -- previously misattributed here as 'Wu et al.'). A single "
+    "static reference point, not a span-dependent simulation."
 )
 
 

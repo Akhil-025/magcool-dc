@@ -1,0 +1,34 @@
+Giant-MCE (Gd5Si2Ge2, first-order Landau model) vs. Gd, at their
+own favorable operating points vs. the ASHRAE 18-27C (291-300K) range
+==========================================================================================
+Gd peak-effect temperature: 294.5 K (21.4 C) -- INSIDE the ASHRAE recommended supply range
+Gd5Si2Ge2 peak-effect temperature: 286.4 K (13.2 C) -- BELOW the ASHRAE range by ~4.6 K
+Landau-model Tc-vs-peak-effect offset at 2.0T: peak sits +10.4 K above the nominal Tc=276.0K parameter -- a real, stable property of this extended Landau formulation (see landau_peak_offset_K() docstring), independently confirmed to within ~1K by the Astronautics graded-bed cascade check (+11.1 to +11.5K offset across all 6 stages vs. Jacobs et al. 2014 Table 1's actual layer Curie temperatures).
+
+Test 1: BOTH materials at the ASHRAE operating point (T_cold=291K, span=10.0K)
+  Gd:         Qc=  1466.1 W   COP_elec=5.12
+  Gd5Si2Ge2:  Qc=     0.0 W   COP_elec=0.00   <- collapses to ~0: 10.0K span is centered ~9.6K from its own peak
+
+Test 2: Gd5Si2Ge2 at ITS OWN favorable point (T_cold=281.4K = 8.2C, span=10.0K, straddling its 286.4K peak)
+  Gd5Si2Ge2:  Qc=  5319.3 W   COP_elec=5.05   <- strong performance when correctly targeted
+  Gd (same point): Qc=     0.0 W   COP_elec=0.00   <- Gd fails here (point is far from Gd's own 294.5K)
+
+CONCLUSION:
+The giant-MCE effect is real and large when the material is operated within
+its own narrow first-order transition window -- but Gd5Si2Ge2's window sits
+~5K below the ASHRAE data-center range, so it is not directly
+usable for this application as-is. This does not overturn the
+conclusion (Gd trails vapor-compression/liquid cooling on COP within the
+ASHRAE range). What it DOES support: literature confirms the Gd5(SixGe1-x)4
+family has composition-tunable ordering temperature (Pecharsky & Gschneidner,
+Appl. Phys. Lett. 70, 3299 (1997), report tunability from ~30K to ~276K by
+Si:Ge ratio, with Gd5Si4 itself ordering at ~335K) -- so a composition between
+Gd5Si2Ge2 and Gd5Si4 tuned to ~291-300K, IF it retains first-order/giant
+character at that composition, is the genuinely promising untested direction
+for closing the COP gap. This is a materials-synthesis question outside what
+a simulation study alone can answer and remains an open materials
+research question rather than a result established here.
+
+For reference, baselines at this operating point: VCC COP=12.22, Liquid COP=19.89
+
+Note also: even correctly targeted, Gd5Si2Ge2's COP_electrical (5.05) is close to Gd's own COP_electrical at its matched point (5.12), not dramatically higher, despite ~4x the cooling capacity (Qc). This is consistent with the Sobol sensitivity analysis: COP_electrical is driven mainly by frequency/flow/field-dependent losses (loss_model.py), not by which material is loaded into the regenerator -- a bigger MCE mostly buys more Qc per kg, not a better COP.

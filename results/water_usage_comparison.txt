@@ -1,0 +1,11 @@
+Water-usage (WUE) comparison, 1000 kW-IT facility
+==============================================================================
+(amr_cop/vcc_cop/liquid_cop below are the actual step-4 baseline-sweep COPs at the representative span, same basis run_economics()/run_emissions() already use -- see main.py's _run_phase30_additions())
+
+Magnetic (AMR)       rejection=dry_air_cooled     WUE= 0.05 L/kWh_IT  annual water=     306,600 L  (     307 L/kW_IT/yr)
+Vapor-compression    rejection=evaporative_tower  WUE= 1.80 L/kWh_IT  annual water=  11,037,600 L  (  11,038 L/kW_IT/yr)
+Liquid cooling       rejection=closed_loop_liquid WUE= 0.05 L/kWh_IT  annual water=     306,600 L  (     307 L/kW_IT/yr)
+
+AMR (dry/air-cooled rejection, default) uses 0% less annual water than the better of the two evaporative/closed-loop baselines above, under the default rejection-class assignments.
+
+HONEST FRAMING FOR THE PAPER: this compares TECHNOLOGY-CLASS WUE references (dry rejection vs. evaporative-tower rejection vs. closed-loop liquid), not a like-for-like measurement at one real facility -- see this module's own docstring 'HONEST FRAMING' section. AMR's water advantage in this framing comes from being assignable to a DRY heat-rejection loop (a design choice enabled by, not uniquely guaranteed by, its refrigerant-free/water-glycol-loop architecture -- Magnotherm's own 'no reliance on local water supply' claim is a vendor statement, not an independently audited WUE figure, see core/commercial_landscape.py), not from the magnetocaloric cycle itself consuming less water than a compressor cycle would under the SAME rejection strategy.

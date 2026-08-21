@@ -415,7 +415,24 @@ GD5SI2GE2_FIRST_ORDER = FirstOrderMCEMaterial(
            "at 5T (Pecharsky & Gschneidner 1997; Gschneidner & Pecharsky "
            "review); NOT independently validated against a second dataset "
            "(see module docstring honesty flag #2).",
-    hysteresis_loss_J_per_kg=8.0,
+    hysteresis_loss_J_per_kg=65.0,
+    # Phase 30 update (was Phase 16's 8.0 J/kg placeholder -- an order of
+    # magnitude too low). Provenzano, Shapiro & Shull's own patent
+    # filings covering the SAME Nature (2004) work already cited above
+    # (US Patent 8,048,236 / 7,651,574, "Doped Gd5Ge2Si2 compounds and
+    # methods for reducing hysteresis losses in Gd5Ge2Si2 compound")
+    # report the DIRECT quantitative hysteresis-loss numbers (computed as
+    # the area inside each M-H loop, Table 22/FIG. 9) underlying the
+    # Nature paper's qualitative ">90% reduction" headline: "approximately
+    # 4 J/kg or less" for the Fe/Co/Cu/Ga/Mn-doped alloys and "around 65
+    # J/kg" for the UNDOPED Gd5Ge2Si2 compound this repo's
+    # GD5SI2GE2_FIRST_ORDER represents (averaged over the 270-320K range
+    # where refrigeration capacity RC was computed). This REPLACES the old
+    # 8.0 J/kg placeholder, which had no direct citation of its own (see
+    # the honesty-flag comment immediately below, now superseded) with a
+    # number read directly off the same authors' own reported hysteresis-
+    # loop-area measurement for the exact (undoped, stoichiometric)
+    # material this repo calibrates.
     # Phase 16, honesty flag #4. Undoped, stoichiometric Gd5Si2Ge2 is the
     # textbook "large hysteresis" first-order magnetocaloric material --
     # Provenzano, Shapiro & Shull, Nature 429, 853-857 (2004) report a
