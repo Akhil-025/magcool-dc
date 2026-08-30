@@ -429,11 +429,25 @@ class _StreamToLogger:
             self._buffer = ""
 
 
-def run_baseline_sweep():
+def run_baseline_sweep(no_load_span_override=None, out_path=None):
     """Step 4: AMR vs vapor-compression vs liquid cooling vs Carnot,
     swept over the ASHRAE 5-20K temperature-lift range. Returns the full
     list of row dicts so later steps can pull the representative point
     out of it instead of recomputing or hardcoding numbers.
+
+    no_load_span_override / out_path: opt-in, additive (see
+    core/cascade.py's staged_baseline_result() and
+    core/amr_cycle.py's AMRSystem, both of the same name). Default
+    None/None reproduces this function's prior behavior exactly,
+    including writing to the same RESULTS_CSV path -- every existing
+    caller is unaffected. Passed together by run_regenerator_1d_override_sweep()
+    below so the 1-D transient regenerator model's own no-load-span
+    prediction (core/regenerator_1d.py's regenerative_span_cap(), NOT
+    validated -- see that function's own honesty flag) can replace the
+    default 0-D 2*dTad_noload span cap for a standalone, clearly-labeled
+    sensitivity comparison, written to its own file rather than
+    overwriting the default comparison_table.csv this function normally
+    produces.
 
     Uses core.cascade.staged_baseline_result() rather than a bare
     single-stage AMRSystem.run(). A single Gd stage at this operating
@@ -474,7 +488,9 @@ def run_baseline_sweep():
     rows = []
     for span in spans:
         T_hot_K = T_cold_K + span
-        amr_res = staged_baseline_result(T_cold_K, float(span), **amr_kwargs)
+        amr_res = staged_baseline_result(T_cold_K, float(span),
+                                          no_load_span_override=no_load_span_override,
+                                          **amr_kwargs)
         vcc = vapor_compression_cop(T_cold_K, T_hot_K)
         liq = liquid_cooling_cop(T_cold_K, T_hot_K)
         rows.append({
@@ -491,7 +507,7 @@ def run_baseline_sweep():
             "Elastocaloric_COP_ref": round(elasto.COP_representative, 2),
         })
 
-    with open(RESULTS_CSV, "w", newline="") as f:
+    with open(out_path or RESULTS_CSV, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=rows[0].keys())
         writer.writeheader()
         writer.writerows(rows)
@@ -505,7 +521,7 @@ def run_baseline_sweep():
                 f"(range {elasto.COP_low:.1f}-{elasto.COP_high:.1f}), a flat literature "
                 f"anchor repeated across every span -- NOT a span-dependent simulation. "
                 f"Source: {elasto.source_note}")
-    logger.info(f"Wrote {RESULTS_CSV}")
+    logger.info(f"Wrote {out_path or RESULTS_CSV}")
     logger.info(
         "Note: AMR_COP_electrical includes estimated parasitic losses and is "
         "the appropriate quantity for comparison with vapor-compression and "
@@ -517,6 +533,68 @@ def run_baseline_sweep():
         "stage's own no-load DeltaT_ad could not cover that span -- see that "
         "function's docstring."
     )
+    return rows
+
+
+REGENERATOR_1D_OVERRIDE_CSV = "results/comparison_table_regenerator1d_override.csv"
+
+
+def run_regenerator_1d_override_sweep():
+    """Step 4z (opt-in, --regenerator-1d-override): re-runs the SAME
+    baseline sweep as step 4, but with cooling_capacity()'s default
+    0-D span cap (2*dTad_noload) replaced by
+    core.regenerator_1d.regenerative_span_cap()'s own 1-D transient
+    no-load-span prediction, for the same Gd/2T/5kg/2Hz/0.08kg/s
+    operating point step 4 already uses.
+
+    ADDITIVE ONLY, same convention as step 11g.
+    (--layered-material-cross-product): step 4's own
+    results/comparison_table.csv is written first, unmodified, by the
+    unconditional step 4 call in main() -- this function runs afterward
+    and writes ONLY to REGENERATOR_1D_OVERRIDE_CSV, a separate file.
+    Nothing else in this pipeline (NSGA-III, cascade, economics,
+    emissions, ...) reads this file or is affected by this step; every
+    one of them keeps using cooling_capacity()'s unmodified default via
+    no_load_span_override=None, exactly as before.
+
+    HONESTY FLAG (do not skip before citing REGENERATOR_1D_OVERRIDE_CSV
+    numbers anywhere): core/regenerator_1d.py's own validation
+    (results/regenerator_1d_validation.txt) shows directionally
+    INCONSISTENT error against its three directly-measured no-load-span
+    benchmarks (+112%, -92%, -61%) -- it is not yet an independently
+    calibrated quantitative model. This sweep exists to make its actual
+    effect on the headline comparison table visible and reproducible on
+    demand, NOT to assert it is more correct than the default 0-D model.
+    Treat differences between this file and the default comparison_table.csv
+    as "here is what changes if you plug in the 1-D model as-is today",
+    not as an improved or corrected baseline result.
+
+    The override span is computed ONCE (disk-cached by
+    core/regenerator_1d.py's own cache, so repeat pipeline runs only pay
+    the multi-cycle transient simulation cost the first time) at the same
+    operating point run_baseline_sweep() itself uses, then held fixed
+    across every span in the 5-20K sweep -- the no-load span is a
+    property of (material, field, mass, frequency), not of the target
+    span being evaluated, so this is the correct way to apply it, not an
+    approximation specific to this function."""
+    logger.info(
+        "Computing 1-D transient regenerator no-load-span override for "
+        "Gd @ 2T / 5kg / 2Hz (matches step 4's own operating point) -- "
+        "first call may take ~30-90s (multi-mdot transient search), "
+        "cached afterward in results/.regenerator_1d_cache.json"
+    )
+    override_span_K = regenerator_1d.regenerative_span_cap(
+        material=GADOLINIUM, mu0H_max=2.0, mass_total=5.0, frequency=2.0)
+    logger.warning(
+        f"1-D regenerator override span = {override_span_K:.2f}K, replacing the default "
+        f"0-D model's 2*dTad_noload cap for every row below. UNVALIDATED (see this "
+        f"function's own honesty flag) -- do not treat this file as more correct than "
+        f"comparison_table.csv without reading results/regenerator_1d_validation.txt first."
+    )
+    rows = run_baseline_sweep(no_load_span_override=override_span_K,
+                               out_path=REGENERATOR_1D_OVERRIDE_CSV)
+    logger.info(f"Wrote {REGENERATOR_1D_OVERRIDE_CSV} ({len(rows)} rows) -- opt-in, additive, "
+                f"does not affect results/comparison_table.csv or any other pipeline stage.")
     return rows
 
 
@@ -1005,7 +1083,7 @@ def run_design_recommendations_synthesis(sobol_state_dependent_Si, pareto_rows, 
     )
 
 
-def main(quick=False, layered_material_cross_product=False):
+def main(quick=False, layered_material_cross_product=True, regenerator_1d_override=True):
     """quick=True skips the three diagnostic-only, slow stages this
     session added (2e, 2f, 3a2 -- each involves one or more multi-cycle
     1-D transient regenerator simulations, ~30-90s per device; see
@@ -1101,6 +1179,16 @@ def main(quick=False, layered_material_cross_product=False):
          run_eddy_and_pump_efficiency_demo),
         ("4. Baseline comparison sweep: AMR vs VCC vs liquid cooling vs Carnot",
          None),  # handled specially below, result captured
+        ("4z. Regenerator-1D span-cap override applied to the baseline sweep (opt-in, "
+         "off by default -- pass --regenerator-1d-override to run it): re-runs step 4's "
+         "own sweep with core/regenerator_1d.py's 1-D transient no-load-span prediction "
+         "in place of cooling_capacity()'s default 0-D 2*dTad_noload cap. ADDITIVE: writes "
+         "to results/comparison_table_regenerator1d_override.csv only, step 4's own "
+         "comparison_table.csv and every later stage are unaffected. See "
+         "run_regenerator_1d_override_sweep()'s own honesty flag (the 1-D model's own "
+         "validation is directionally inconsistent, +112%/-92%/-61%) before citing this "
+         "file's numbers.",
+         None),  # handled specially below, off by default
         ("5. Economics / TCO at the representative operating point",
          None),  # needs step 4's result
         ("5b. Full-system cost estimate by material family (core/economics.py, Phase 15 item 5) + amorphous-material cost/performance note (Phase 22 item 3)",
@@ -1245,6 +1333,18 @@ def main(quick=False, layered_material_cross_product=False):
                      "n_layers cross-product NSGA-III co-optimization) -- expect this "
                      "stage alone to take several times as long as step 11f.")
 
+    if not regenerator_1d_override:
+        # Opt-in, OFF by default -- same mechanism/rationale as
+        # layered_material_cross_product just above. See step "4z."'s own
+        # stages entry for why this stays opt-in (unvalidated 1-D model).
+        stages = [(name, fn) for name, fn in stages if not name.startswith("4z.")]
+    else:
+        logger.info("--regenerator-1d-override: running step 4z. (baseline sweep with "
+                    "the 1-D transient regenerator's no-load-span prediction in place of "
+                    "the default 0-D span cap) -- writes a separate, clearly-labeled "
+                    "results/comparison_table_regenerator1d_override.csv; step 4's own "
+                    "comparison_table.csv is unaffected.")
+
     representative_row = None
     system_validation_results = None
     cascade_rows_gd = None
@@ -1303,6 +1403,8 @@ def main(quick=False, layered_material_cross_product=False):
                     representative_row = next(
                         r for r in rows if abs(r["span_K"] - REPRESENTATIVE_SPAN_K) < 1e-9
                     )
+                elif name.startswith("4z."):
+                    run_regenerator_1d_override_sweep()
                 elif name.startswith("5."):
                     run_economics(representative_row)
                 elif name.startswith("6."):
@@ -1825,23 +1927,39 @@ def _run_phase30_additions(representative_row=None):
 if __name__ == "__main__":
     _parser = argparse.ArgumentParser(description=__doc__ if "__doc__" in dir() else None)
     _parser.add_argument("--quick", action="store_true",
-                          help="Skip the slow, additive/diagnostic-only 1-D regenerator "
-                               "stages (2e, 2f, 3a2 -- each runs one or more multi-cycle "
-                               "transient simulations, ~30-90s per device). None of them "
-                               "feed any other stage's numbers, so this only removes their "
-                               "own printed sections and result files, changing nothing "
-                               "else about the pipeline's output. Even without --quick, "
-                               "results are disk-cached (results/.regenerator_1d_cache.json) "
-                               "so repeated runs only pay the simulation cost once per "
-                               "unique input combination.")
+                        help="Skip the slow, additive/diagnostic-only 1-D regenerator "
+                            "stages (2e, 2f, 3a2 -- each runs one or more multi-cycle "
+                            "transient simulations, ~30-90s per device). None of them "
+                            "feed any other stage's numbers, so this only removes their "
+                            "own printed sections and result files, changing nothing "
+                            "else about the pipeline's output. Even without --quick, "
+                            "results are disk-cached (results/.regenerator_1d_cache.json) "
+                            "so repeated runs only pay the simulation cost once per "
+                            "unique input combination.")
     _parser.add_argument("--layered-material-cross-product", action="store_true",
-                          help="Phase 31: also run step 11g., the material x n_layers "
-                               "cross-product NSGA-III co-optimization (5 material "
-                               "families x step 11f.'s own reduced n_layers_range/pop_size/"
-                               "n_gen). Off by default -- multiplies step 11f.'s own "
-                               "already-reduced runtime by ~5x. See "
-                               "run_layered_optimization_material_family_cross_product()'s "
-                               "own docstring in core/optimize.py.")
+                        default=True,
+                        help="Phase 31: also run step 11g., the material x n_layers "
+                            "cross-product NSGA-III co-optimization (5 material "
+                            "families x step 11f.'s own reduced n_layers_range/pop_size/"
+                            "n_gen). ON by default -- multiplies step 11f.'s own "
+                            "already-reduced runtime by ~5x. See "
+                            "run_layered_optimization_material_family_cross_product()'s "
+                            "own docstring in core/optimize.py.")
+    _parser.add_argument("--no-regenerator-1d-override", dest="regenerator_1d_override",
+                        action="store_false", default=True,
+                        help="Skip step 4z.: by default `python main.py` now also re-runs "
+                            "the step-4 baseline sweep with core/regenerator_1d.py's 1-D "
+                            "transient no-load-span prediction in place of the default "
+                            "0-D 2*dTad_noload span cap, writing "
+                            "results/comparison_table_regenerator1d_override.csv "
+                            "(ADDITIVE — step 4's own comparison_table.csv is unaffected). "
+                            "Pass this flag to skip it and restore the old default. "
+                            "The 1-D model's own validation "
+                            "(results/regenerator_1d_validation.txt) is directionally "
+                            "inconsistent against its three benchmarks (+112%%/-92%%/-61%%), "
+                            "so treat this file as 'what changes if you plug it in as-is "
+                            "today', not as a corrected baseline.")
     _args = _parser.parse_args()
     main(quick=_args.quick,
-         layered_material_cross_product=_args.layered_material_cross_product)
+         layered_material_cross_product=_args.layered_material_cross_product,
+         regenerator_1d_override=_args.regenerator_1d_override)

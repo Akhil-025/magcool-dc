@@ -84,10 +84,11 @@ below, and `ROADMAP.md` for the full phase-by-phase reasoning.
   diameter as a 7th design variable wired through `core/amr_cycle.py`'s
   new geometry-aware pumping-power accounting, and material family as a
   per-family NSGA-III search merged post-hoc into one Pareto front.
-  153/153 tests passing. **Note**: `core/design_recommendations.py`,
-  referenced in the original Phase 15 plan, does not exist in this
-  project snapshot -- see `ROADMAP.md` Phase 15 item 1 for the flagged
-  discrepancy.
+  153/153 tests passing. **Correction (see `ROADMAP.md` Phase 15 item 1):**
+  an earlier draft of this entry claimed `core/design_recommendations.py`
+  did not exist in this project snapshot -- that was stale/wrong. Both
+  `core/design_recommendations.py` and `tests/test_design_recommendations.py`
+  are present, wired into `main.py` step 13, and passing.
 
 - **Phase 16** -- thermal-hysteresis loss quantified for the first time:
   new `hysteresis_loss_J_per_kg` field on `FirstOrderMCEMaterial`

@@ -772,12 +772,27 @@ class StagedBaselineResult:
 def staged_baseline_result(T_cold_K, span, material=None, mu0H_max=2.0,
                             mass_regenerator=5.0, frequency=2.0,
                             fluid_cp=4186.0, fluid_mdot=0.08,
-                            regenerator_effectiveness=0.85, max_stages=4):
+                            regenerator_effectiveness=0.85, max_stages=4,
+                            no_load_span_override=None):
     """Single-stage AMR result if the span is within that material's own
     no-load DeltaT_ad at this operating point; otherwise, the minimum
     number of IDENTICAL stages (up to max_stages) in series -- each
     covering span/n_stages, same mass/frequency/field/flow per stage --
     that reaches a positive Qc.
+
+    no_load_span_override: opt-in, additive passthrough to each stage's
+    AMRSystem (see core/amr_cycle.py's own parameter of the same name and
+    core/regenerator_1d.py's regenerative_span_cap(), the function meant
+    to populate it). Default None reproduces this function's prior
+    behavior exactly -- every existing caller (main.py's default
+    run_baseline_sweep(), every test) is unaffected. When set, it is
+    applied identically to every stage probed here, per-stage, the same
+    way mu0H_max/frequency/etc. already are; it does NOT change the
+    stage-count fallback logic above, only cooling_capacity()'s span cap
+    within each stage. See core/amr_cycle.py's no_load_span_override
+    docstring for the honesty flag on that model's own accuracy before
+    treating output produced with this set as more than an illustrative,
+    non-default sensitivity check.
 
     Why this exists: AMRSystem.cooling_capacity() (amr_cycle.py) correctly
     returns Qc=0 once a single stage is asked to span more than ~2x its
@@ -810,7 +825,8 @@ def staged_baseline_result(T_cold_K, span, material=None, mu0H_max=2.0,
         sys_ = AMRSystem(material=material, mu0H_max=mu0H_max,
                           mass_regenerator=mass, frequency=frequency,
                           fluid_cp=fluid_cp, fluid_mdot=fluid_mdot,
-                          regenerator_effectiveness=regenerator_effectiveness)
+                          regenerator_effectiveness=regenerator_effectiveness,
+                          no_load_span_override=no_load_span_override)
         return sys_.run(T_cold, span_i)
 
     r1 = _single_stage(T_cold_K, span, mass_regenerator)
