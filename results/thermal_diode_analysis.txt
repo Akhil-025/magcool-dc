@@ -12,11 +12,11 @@ AMRSystem itself (core/amr_cycle.py) has NO internal frequency ceiling: frequenc
 No comment, docstring, or ROADMAP.md entry ties the 5.0 Hz optimize.py bound to a mechanical-valve-switching limit specifically -- it is an unexplained round-number search-space bound, not a physical constraint this module can relax.
 
 --- Step 2: COP_electrical impact of the (illustrative) diode actuation cost across frequency, at T_cold=291.0K, span=10.0K, mu0H=1.5T, mass=5.0kg, mdot=0.08kg/s ---
-  f= 0.50Hz   COP_no_diode= 7.5048   COP_diode_assisted= 7.5032   delta= -0.02%
-  f= 1.00Hz   COP_no_diode= 5.2788   COP_diode_assisted= 5.2773   delta= -0.03%
-  f= 2.00Hz   COP_no_diode= 2.4041   COP_diode_assisted= 2.4035   delta= -0.03%
-  f= 4.00Hz   COP_no_diode= 0.7524   COP_diode_assisted= 0.7523   delta= -0.02%
-  f= 8.00Hz   COP_no_diode= 0.2007   COP_diode_assisted= 0.2007   delta= -0.01%
+  f= 0.50Hz   COP_no_diode= 8.0637   COP_diode_assisted= 8.0618   delta= -0.02%
+  f= 1.00Hz   COP_no_diode= 5.5073   COP_diode_assisted= 5.5056   delta= -0.03%
+  f= 2.00Hz   COP_no_diode= 2.4181   COP_diode_assisted= 2.4174   delta= -0.03%
+  f= 4.00Hz   COP_no_diode= 0.7415   COP_diode_assisted= 0.7413   delta= -0.02%
+  f= 8.00Hz   COP_no_diode= 0.1965   COP_diode_assisted= 0.1965   delta= -0.01%
 
 --- Step 3: cycle_time_reduction_factor() illustrative worked example ---
   Illustrative example only (NOT a literature value -- see docstring): conventional valve switch time=0.5s, diode switch time=0.05s -> 90% dead-time reduction per half-cycle IF these numbers were real.

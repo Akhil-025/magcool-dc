@@ -52,6 +52,10 @@ in the repository in one pass, in dependency order, so a single
         (n_layers=1-3, pop_size=20, n_gen=10); the full 1-6 layer,
         production-settings version is directly callable but not run
         here, purely for pipeline-runtime reasons
+    11g. Material x n_layers cross-product NSGA-III co-optimization
+        (core/optimize.py, Phase 31) -- OFF BY DEFAULT, pass
+        --layered-material-cross-product to run it (5 material families x
+        step 11f.'s own reduced settings; multiplies 11f.'s runtime ~5x)
     12. Figure generation (34 figures) (plots.py -> results/figures/*.png, *.pdf)
     13. Design-recommendations synthesis (core/design_recommendations.py) --
         consolidates steps 3c/7b/8d/9b/11's already-computed results into
@@ -1001,7 +1005,7 @@ def run_design_recommendations_synthesis(sobol_state_dependent_Si, pareto_rows, 
     )
 
 
-def main(quick=False):
+def main(quick=False, layered_material_cross_product=False):
     """quick=True skips the three diagnostic-only, slow stages this
     session added (2e, 2f, 3a2 -- each involves one or more multi-cycle
     1-D transient regenerator simulations, ~30-90s per device; see
@@ -1014,7 +1018,17 @@ def main(quick=False):
     simulation it runs (results/.regenerator_1d_cache.json) regardless of
     `quick`, so even a full (non-quick) run only pays the multi-cycle
     simulation cost once per unique (material, field, mass, frequency,
-    ...) combination across repeated invocations of this script."""
+    ...) combination across repeated invocations of this script.
+
+    layered_material_cross_product=True (Phase 31, default False) runs
+    step "11g." -- the material x n_layers cross-product NSGA-III
+    co-optimization core/optimize.py's own run_layered_optimization()
+    docstring explicitly left as a follow-up. Off by default because it
+    multiplies step 11f.'s own already-reduced runtime by
+    ~len(family_candidates)=5; opt in for a dedicated deep run, the same
+    way run_layered_optimization()'s own full-quality 1-6 layer/
+    pop_size=40/n_gen=25 settings are available but not this pipeline's
+    default for step 11f."""
     _attach_file_logging()
     t_start = time.time()
     stage_times = {}
@@ -1168,6 +1182,20 @@ def main(quick=False):
          "session's own sandbox), real wall-clock speedup on a real multi-core one",
          None),  # handled specially below, result (layered_pareto_rows) captured
                  # for the executive summary
+        ("11g. Material x n_layers cross-product NSGA-III co-optimization "
+         "(core/optimize.py, Phase 31) -- OFF BY DEFAULT (pass "
+         "--layered-material-cross-product to run it); the cross-product "
+         "run_layered_optimization()'s own Phase 29 docstring explicitly left as a "
+         "\"documented, concretely-scoped follow-up, not attempted here to keep this "
+         "phase's own runtime and scope bounded\". Runs step 11f.'s own function once "
+         "per material family (5 families x the same reduced n_layers_range/pop_size/"
+         "n_gen as 11f.) then applies one further global Pareto filter across every "
+         "family's rows -- multiplies 11f.'s already-reduced runtime by "
+         "~len(family_candidates), which is why this is opt-in rather than run by "
+         "default alongside it",
+         None),  # handled specially below, result (layered_cross_product_rows)
+                 # captured for the executive summary; skipped entirely (removed from
+                 # `stages` before the loop below) unless the flag above is passed
         ("12. Figure generation: 34 figures covering validation, AMR curves, "
          "cascade/graded staging, sensitivity, RSM, NSGA-III, economics, emissions, "
          "Tc-broadening, nanocomposite robustness, thermal-diode, fluid-MCE, passive "
@@ -1205,6 +1233,18 @@ def main(quick=False):
                     f"{[s.split('.')[0] + '.' for s in skipped]} (all additive/diagnostic-only "
                     "-- see main()'s own docstring; every other stage's output is unaffected)")
 
+    if not layered_material_cross_product:
+        # Phase 31: opt-in, OFF by default -- see step "11g."'s own stages
+        # entry above for why (multiplies step 11f.'s already-reduced
+        # runtime by ~len(family_candidates)=5). Mirrors --quick's own
+        # removal-from-`stages` mechanism just above, in the opposite
+        # direction (an opt-in ADDITION instead of an opt-out REMOVAL).
+        stages = [(name, fn) for name, fn in stages if not name.startswith("11g.")]
+    else:
+        logger.info("--layered-material-cross-product: running step 11g. (material x "
+                     "n_layers cross-product NSGA-III co-optimization) -- expect this "
+                     "stage alone to take several times as long as step 11f.")
+
     representative_row = None
     system_validation_results = None
     cascade_rows_gd = None
@@ -1214,6 +1254,7 @@ def main(quick=False):
     material_rows = None
     pareto_rows = None
     layered_pareto_rows = None
+    layered_cross_product_rows = None
     sobol_const_Si = None
     sobol_state_dependent_Si = None
     pb_best_cop_row = None
@@ -1309,6 +1350,12 @@ def main(quick=False):
                         out_csv="results/layered_pareto_front.csv",
                         per_n_layers_out_dir="results/layered_pareto_front_by_n",
                         n_processes=min(4, os.cpu_count() or 1))
+                elif name.startswith("11g."):
+                    layered_cross_product_rows = optimize_module.run_layered_optimization_material_family_cross_product(
+                        n_layers_range=(1, 2, 3), pop_size=20, n_gen=10, seed=1,
+                        out_csv="results/layered_pareto_front_material_cross_product.csv",
+                        per_combo_out_dir="results/layered_pareto_front_by_material_and_n",
+                        n_processes=min(4, os.cpu_count() or 1))
                 elif name.startswith("11d."):
                     magnet_geometry.run_magnet_geometry_analysis()
                     magnet_geometry_result = magnet_geometry.run_geometric_cost_pareto_sensitivity()
@@ -1396,15 +1443,17 @@ def main(quick=False):
                               material_rows, pareto_rows, pb_best_cop_row,
                               pp_best_cop_row, hysteresis_result,
                               magnet_geometry_result, fluid_mce_result,
-                              passive_regen_result, failures, curie_shift_v2_result, 
-                              astronautics_giguere_result, layered_pareto_rows, magnet_geometry_multiseed_result)
+                              passive_regen_result, failures, curie_shift_v2_result,
+                              astronautics_giguere_result, layered_pareto_rows,
+                              magnet_geometry_multiseed_result, layered_cross_product_rows)
 
 
 def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, material_rows,
                               pareto_rows, pb_best_cop_row, pp_best_cop_row,
                               hysteresis_result, magnet_geometry_result, fluid_mce_result,
                               passive_regen_result, failures, curie_shift_v2_result, 
-                              astronautics_giguere_result, layered_pareto_rows, magnet_geometry_multiseed_result):
+                              astronautics_giguere_result, layered_pareto_rows, 
+                              magnet_geometry_multiseed_result, layered_cross_product_rows):
     """Final, well-structured overview of every implemented analysis and
     its headline metric, printed once at the very end of the run so a
     reader does not have to scroll back through 13 stages of log output
@@ -1481,17 +1530,20 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
     else:
         logger.info("  - unavailable (stage failed or was skipped)")
     if astronautics_giguere_result and _ok("7e."):
-        base_err = astronautics_giguere_result["baseline"].get("COP_error_pct")
-        corr_err = astronautics_giguere_result["corrected"].get("COP_error_pct")
-        improves = astronautics_giguere_result["correction_improves"]
-        logger.info(f"  - Astronautics_rotary_2014 Giguere-correction sensitivity (step 7e, "
-                    f"Paper-Mining Pass review item 2): uncorrected COP_error={base_err}% -> "
-                    f"Giguere-corrected COP_error={corr_err}% "
-                    f"({'narrows the error' if improves else 'does NOT narrow the error'}) "
-                    f"-- {'consistent with' if not improves else 'contrary to'} the existing "
-                    "honesty flag that DTAD_CORRECTION_FACTOR was never shown to transfer from "
-                    "Gd5Si2Ge2 to La(Fe,Si)13Hy; see core/cascade.py's "
-                    "run_astronautics_giguere_correction_sensitivity() docstring")
+        base_err = astronautics_giguere_result.get("uncorrected", {}).get("COP_error_pct")
+        corr_err = astronautics_giguere_result.get("corrected", {}).get("COP_error_pct")
+        improves = astronautics_giguere_result.get("correction_improves", False)
+        if base_err is not None and corr_err is not None:
+            logger.info(f"  - Astronautics_rotary_2014 Giguere-correction sensitivity (step 7e, "
+                        f"Paper-Mining Pass review item 2): uncorrected COP_error={base_err}% -> "
+                        f"Giguere-corrected COP_error={corr_err}% "
+                        f"({'narrows the error' if improves else 'does NOT narrow the error'}) "
+                        f"-- {'consistent with' if not improves else 'contrary to'} the existing "
+                        "honesty flag that DTAD_CORRECTION_FACTOR was never shown to transfer from "
+                        "Gd5Si2Ge2 to La(Fe,Si)13Hy; see core/cascade.py's "
+                        "run_astronautics_giguere_correction_sensitivity() docstring")
+        else:
+            logger.info("  - Astronautics_rotary_2014 Giguere-correction result unavailable")
 
     logger.info("Material family ranking (Gd / Gd5Si2Ge2 / GD- / LAFESIH- / MNFEPSI-tuned families)")
     if material_rows and _ok("8d."):
@@ -1553,6 +1605,25 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
                     f"production-settings version (not run here for pipeline-runtime reasons).")
     else:
         logger.info("  - unavailable (stage failed or was skipped)")
+
+    logger.info("Material x n_layers cross-product NSGA-III co-optimization (Phase 31, "
+                "step 11g., off by default -- pass --layered-material-cross-product to run it)")
+    if layered_cross_product_rows and _ok("11g."):
+        best_combo_cop = max(layered_cross_product_rows, key=lambda r: r["COP_cascade"])
+        family_counts = {}
+        for r in layered_cross_product_rows:
+            family_counts[r["family"]] = family_counts.get(r["family"], 0) + 1
+        logger.info(f"  - {len(layered_cross_product_rows)} globally non-dominated designs "
+                    f"across {sorted(family_counts)}; best cascade COP="
+                    f"{best_combo_cop['COP_cascade']} at family={best_combo_cop['family']}, "
+                    f"n_layers={best_combo_cop['n_layers']} "
+                    f"(results/layered_pareto_front_material_cross_product.csv). Family "
+                    f"representation: {dict(sorted(family_counts.items()))} -- see "
+                    f"run_layered_optimization_material_family_cross_product()'s own docstring "
+                    f"for why this is opt-in rather than run by default alongside step 11f.")
+    else:
+        logger.info("  - not run this session (opt-in stage -- pass "
+                    "--layered-material-cross-product to include it)")
 
     logger.info("Hysteresis sensitivity: does Phase 16's thermal-hysteresis loss change the "
                 "Phase 15 material-selection result? (step 11b, Phase 16)")
@@ -1763,5 +1834,14 @@ if __name__ == "__main__":
                                "results are disk-cached (results/.regenerator_1d_cache.json) "
                                "so repeated runs only pay the simulation cost once per "
                                "unique input combination.")
+    _parser.add_argument("--layered-material-cross-product", action="store_true",
+                          help="Phase 31: also run step 11g., the material x n_layers "
+                               "cross-product NSGA-III co-optimization (5 material "
+                               "families x step 11f.'s own reduced n_layers_range/pop_size/"
+                               "n_gen). Off by default -- multiplies step 11f.'s own "
+                               "already-reduced runtime by ~5x. See "
+                               "run_layered_optimization_material_family_cross_product()'s "
+                               "own docstring in core/optimize.py.")
     _args = _parser.parse_args()
-    main(quick=_args.quick)
+    main(quick=_args.quick,
+         layered_material_cross_product=_args.layered_material_cross_product)

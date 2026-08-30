@@ -46,25 +46,30 @@ and the old lstsq-then-clip approach agree exactly (checked by
 `tests/test_loss_model.py`). For the EXTENDED 4-point set, NNLS
 removes the negative k_eddy/base_frac Phase 6 reported (`k_eddy=0` is
 now the constrained optimum instead of a clipped negative value), but
-leave-one-out error predicting the smallest device (Tušek, 6.5 W) from
-the other three is still ~680% (down from +1639% with plain lstsq, but
-still an order-of-magnitude miss) -- confirming Phase 6's conclusion
+leave-one-out error predicting the smallest device (Tušek, 5.3 W --
+Phase 31: Qc/Wp corrected from an old, unverified 6.5W/0.76W guessed
+point to a genuinely digitized one, see CALIBRATION_POINTS_CORE below)
+from the other three is now ~333% (down from ~680% under the old,
+pre-Phase-31 Tušek point, and from +1639% with plain lstsq before that,
+but still an order-of-magnitude miss) -- confirming Phase 6's conclusion
 that pooling four orders of magnitude of device scale needs a structural
-change to the model, not just a better-behaved solver.
+change to the model, not just a better-behaved solver or better-sourced
+calibration data.
 
 `analyze_parasitic_fraction_scaling()` checks the natural next
 hypothesis -- that this is a simple device-size effect, i.e. that
 smaller devices carry proportionally more fixed (non-Qc-scaling)
 overhead. Sorting the four devices by Qc shows this does NOT hold in
 the fixed-overhead/economies-of-scale direction: the smallest device
-(Tušek, 6.5 W) has the *lowest* parasitic fraction (11.7%), and the
+(Tušek, 5.3 W -- Phase 31: updated from the old 6.5W point, see above)
+has the *lowest* parasitic fraction (13.8%), and the
 largest (Astronautics, 2502 W) has the *highest* (45.3%) -- the
 opposite of what a fixed-overhead story predicts (which would put
 small devices at the top, not the bottom). Paper-Mining Pass Part 6
 correction: with the DTU point corrected from the old fabricated
 818 W/17.1% figure to the verified 102.8 W/25.5% figure (see this
 module's correction note above), the four-device ranking by Qc
-(Tušek 6.5 W/11.7%, DTU 102.8 W/25.5%, Okamura 200 W/36.7%,
+(Tušek 5.3 W/13.8%, DTU 102.8 W/25.5%, Okamura 200 W/36.7%,
 Astronautics 2502 W/45.3%) is now cleanly MONOTONICALLY INCREASING
 with device scale -- the opposite trend from a fixed-overhead story,
 and no longer "non-monotonic in between" as the old fabricated DTU
@@ -237,21 +242,31 @@ CALIBRATION_POINTS_CORE = [
     #   mdot_cal = 0.084666 kg/s  ->  Qc_model = 102.8W (exact match)
     #   COP_ideal = 14.73  ->  Wp_required = 102.8*(1/3.1 - 1/14.73) = 26.18W
     ("DTU_Eriksen_rotary_Gd_2015", 0.75, 1.13, 0.084666, 102.8, 26.18),
-    # Tusek: deliberately still uses the PRE-correction field/mass/frequency
-    # (1.69T, 0.196kg, 0.25Hz) rather than data/amr_experimental_benchmarks
-    # .csv's now-corrected values (1.15T, 0.1763kg, 0.3Hz -- see that CSV's
-    # row note). Checked directly: with the corrected, paper-verified 1.15T
-    # field, (span=15K, Qc=6.5W) does NOT calibrate at all (NO CALIBRATION
-    # FOUND) -- suggesting the old 1.69T value may have been silently
-    # inflated specifically to make an arbitrarily-chosen Qc/span pair
-    # reachable. Keeping the old self-consistent-but-unverified combination
-    # here as a stopgap (better than dropping to an underdetermined 2-point
-    # CORE fit) until Figs. 10-11 are properly digitized to get a genuinely
-    # verified (span, Qc) pair at the confirmed 1.15T/0.1763kg/0.3Hz
-    # operating point -- see data/amr_experimental_benchmarks.csv and
-    # results/tusek_ate2013_figs_notes.md. Flagged, not silently carried
-    # forward.
-    ("Tusek_singlebed_Gd_2010", 0.25, 1.69, 0.002422, 6.5, 0.76),
+    # Tusek: FIXED (Phase 31). Previously used the pre-correction field/mass/
+    # frequency (1.69T, 0.196kg, 0.25Hz) as a deliberate stopgap, because the
+    # corrected, paper-verified operating point (1.15T, 0.1763kg, 0.3Hz) did
+    # not calibrate at all against the old guessed (span=15K, Qc=6.5W) pair
+    # -- see this module's git history / the long comment this replaces for
+    # the full original diagnosis. That guessed pair has since been replaced
+    # in data/amr_experimental_benchmarks.csv with a genuinely pixel-
+    # digitized point from the source paper's own Figs. 10-11 (AMR-A,
+    # V*=0.95: span=7.26K, Qc=5.27W, COP=5.38 -- see
+    # data/tusek_ate2013_figs/fig10_data.csv, fig11_data.csv, and
+    # data/tusek_ate2013_figs/tusek_ate2013_figs_notes.md for the full
+    # pixel-calibration/uncertainty methodology, +-0.15K span / +-0.15W Qc).
+    # That digitized point DOES calibrate cleanly at the correct 1.15T field
+    # -- recomputed here via the same brentq(qc_residual, 1e-6, 5.0)/
+    # Wp=Qc*(1/COP_lit-1/COP_ideal) procedure used for every other CORE
+    # point, GADOLINIUM material, T_cold=289K:
+    #   mdot_cal = 0.007351 kg/s  ->  Qc_model = 5.270W (exact match)
+    #   COP_ideal = 20.70  ->  Wp_required = 5.27*(1/5.38 - 1/20.70) = 0.725W
+    # (mdot_cal=0.0074 independently cross-checked against the CSV row's own
+    # note, which reports the same value to 2 sig figs from a separate
+    # computation -- good agreement.) This CORE point now uses the SAME
+    # verified field/mass/frequency as data/amr_experimental_benchmarks.csv's
+    # Tusek_singlebed_Gd_2010 row, closing the discrepancy
+    # CITATION_AUDIT_PHASE30.md flagged between this module and that CSV.
+    ("Tusek_singlebed_Gd_2010", 0.3, 1.15, 0.007351, 5.27, 0.7250),
 ]
 # EXTENDED: CORE + Okamura & Hirano (2013). Retained only as a
 # diagnostic comparison; not used as the default calibration.
@@ -500,7 +515,7 @@ def run_extended_diagnostic():
 
 def run_further_extended_diagnostic():
     """Adds the 4 calibratable Lozano et al. (2016) POLO/UFSC points to the
-    EXTENDED set (8 points total spanning 6.5-2502W) and re-checks NNLS
+    EXTENDED set (8 points total spanning 5.3-2502W) and re-checks NNLS
     fit stability and the scale-monotonicity question. This device class
     is qualitatively different from CORE/EXTENDED: Lozano's own paper
     reports COP of 0.37-0.83 (vs. 1.9-4.6 for every other benchmark

@@ -1,0 +1,56 @@
+name: tests
+
+# Phase 31 addition: this repository had no CI workflow at all before this
+# file. Its absence is directly connected to a real bug this same phase
+# found and fixed: a ProcessPoolExecutor hang in core/cascade.py that only
+# ever surfaced by actually RUNNING the test suite (not by code review),
+# and that would have hung a CI job indefinitely with no informative
+# failure had CI existed and hit the same restricted-environment failure
+# mode this session reproduced locally. `timeout-minutes` below is a
+# defense-in-depth safeguard for exactly that class of failure: if some
+# future change reintroduces an unbounded wait anywhere in this codebase,
+# the CI job fails loudly after a bounded time instead of consuming runner
+# minutes indefinitely.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run test suite
+        run: pytest -q
+
+      - name: Upload results/ artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ matrix.python-version }}
+          path: results/
+          if-no-files-found: ignore
+          retention-days: 7

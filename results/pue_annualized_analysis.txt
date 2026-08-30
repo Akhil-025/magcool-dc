@@ -10,11 +10,11 @@ very cold (<0C)           -5.0      0.08     40.0      0.00      2.73     25.00
 cold (0-10C)               5.0      0.20     30.0      0.00      3.78     25.00
 mild (10-18C)             14.0      0.27     21.0      0.00      5.58     25.00
 warm (18-24C)             21.0      0.25     14.0      0.00      8.58     18.43
-hot (24-30C)              27.0      0.15      8.0      2.70     15.34     21.14
-very hot (>30C)           33.0      0.05      2.0      3.69     62.61     40.04
+hot (24-30C)              27.0      0.15      8.0      2.72     15.34     21.14
+very hot (>30C)           33.0      0.05      2.0      3.76     62.61     40.04
 
 Annual (bin-weighted, power-averaged) effective COP:
-  AMR:              6.51  (computed over 45% of annual hours; 55% excluded -- span exceeds this repo's validated 20K AMR envelope / hits the documented 0-D structural span cap, see regenerator_1d.py)
+  AMR:              6.57  (computed over 45% of annual hours; 55% excluded -- span exceeds this repo's validated 20K AMR envelope / hits the documented 0-D structural span cap, see regenerator_1d.py)
   Vapor-compression:5.87
   Liquid cooling:   22.77 (includes economizer-mode credit below 18.0C)
 

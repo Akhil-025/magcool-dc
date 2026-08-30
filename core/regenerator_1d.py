@@ -152,6 +152,26 @@ Known limitations (stated, not hidden)
   conductivity instead (standard packed-bed literature result: point
   contacts contribute a limited enhancement over the stagnant-fluid
   conduction path), which is what produces the interior maximum above.
+- PHASE 31 UPDATE to the conductivity note above: the "modest multiple of
+  fluid conductivity" placeholder (min(3.0, 1+(1-porosity)) * k_fluid) has
+  been replaced with the Maxwell-Eucken packed-bed composite-conductivity
+  model (see _packed_bed_effective_axial_conductivity()'s own docstring
+  for the formula and why this specific, independently re-derivable model
+  was chosen over the more commonly-cited but harder-to-verify-from-memory
+  Zehner-Schlunder correlation). HONEST RESULT: this did NOT fix the
+  undershoot described in the next bullet -- it made it slightly WORSE on
+  two of the three benchmark rows (Maxwell-Eucken predicts ~2.7x HIGHER
+  effective conductivity than the old placeholder at porosity=0.365, i.e.
+  more damping, not less). See validate_against_benchmarks()'s own
+  "PHASE 31 UPDATE" output text for the full before/after numbers. This is
+  a genuine, disappointing-but-informative finding, kept rather than
+  reverted: it demonstrates the direction-inconsistent error below is NOT
+  simply "the axial conductivity constant is a little off in one
+  direction" -- a legitimately different, textbook-derived conductivity
+  value moves the same two rows further the same wrong way, which points
+  more strongly at the regenerator-effectiveness/NTU coupling or the
+  single-blow reference itself as the remaining calibration gap, not
+  solely this conductivity term.
 - NEW OPEN ISSUE (found by fixing the one above): with the interior
   maximum now well-defined, the model's PEAK predicted span materially
   UNDERSHOOTS the literature value on the case checked directly
@@ -191,6 +211,78 @@ Known limitations (stated, not hidden)
 
 import numpy as np
 from core.thermal import regenerator_effectiveness, water_properties, CP_SOLID_GD, K_SOLID_GD
+
+# Phase 31 fix: bumped whenever a change to simulate_amr_1d()'s physics
+# would silently invalidate previously-cached no_load_span() results
+# without changing any of their INPUT parameters (e.g. the axial-
+# conductivity correlation change below). _cache_key() folds this into
+# every cache key, so on-disk results/.regenerator_1d_cache.json entries
+# computed under the OLD physics are automatically treated as cache
+# misses instead of being silently (and incorrectly) reused.
+_MODEL_VERSION = 2
+# v1: original axial-conduction fix (ad hoc capped multiplier of stagnant
+#     fluid conductivity: k_eff_axial = min(3.0, 1.0+(1-porosity))*k_fluid).
+# v2: replaced with the Maxwell-Eucken packed-bed composite-conductivity
+#     model -- see _packed_bed_effective_axial_conductivity() below.
+
+
+def _packed_bed_effective_axial_conductivity(porosity, k_fluid, k_solid):
+    """Effective axial thermal conductivity of a packed bed of spherical
+    particles, via the Maxwell-Eucken two-phase composite-conductivity
+    model (Maxwell, "A Treatise on Electricity and Magnetism", 1873 --
+    exact solution for a dilute suspension of non-touching spheres in a
+    continuous matrix; Eucken's later extension applies the same
+    closed-form expression at non-dilute solid fractions as a standard
+    engineering approximation, widely used for packed-bed and composite-
+    material conductivity, e.g. Kaviany, "Principles of Heat Transfer in
+    Porous Media"):
+
+        k_eff = k_f * [2*k_f + k_s - 2*(1-eps)*(k_f - k_s)]
+                     / [2*k_f + k_s +    (1-eps)*(k_f - k_s)]
+
+    where eps = porosity (fluid volume fraction), k_f/k_s are the bulk
+    fluid/solid conductivities.
+
+    WHY THIS FORMULA, NOT ZEHNER-SCHLUNDER: the packed-bed heat-transfer
+    literature's most frequently cited correlation for this exact
+    quantity is Zehner & Schlunder (1970) (as tabulated in, e.g., the VDI
+    Heat Atlas), which adds an explicit particle-deformation/contact-area
+    parameter on top of the same two-phase starting point used here.
+    Maxwell-Eucken is used instead, deliberately: (a) it is simple enough
+    to be re-derived and sanity-checked from first principles (an exact
+    dilute-suspension result, not a multi-parameter fitted correlation
+    transcribed from memory of a source paper this repo's corpus does not
+    contain -- the same book/paper-access limitation already flagged
+    elsewhere in this repo, e.g. core/thermal.py's own docstring); (b) it
+    is bounded and well-conditioned for every porosity in (0, 1), with no
+    fitted deformation-parameter singularity to guard against; (c) it
+    still captures the same qualitative physics the correlation it
+    replaces was reaching for -- axial conduction dominated by the fluid
+    path, with a solid-conduction enhancement that grows as porosity
+    falls -- while being a real, named, independently re-derivable
+    formula instead of a hand-picked capped multiplier
+    (`min(3.0, 1.0 + (1-porosity)) * k_fluid`, this module's previous
+    placeholder, chosen only to be "physically defensible", not derived
+    from any specific model).
+
+    HONEST FRAMING (unchanged from what this replaces): this is still a
+    MODEL CHOICE, not a device-measurement-calibrated value. It replaces
+    one reasoned approximation with a better-justified, independently
+    re-derivable one -- it does NOT eliminate the "axial conductivity is
+    not independently calibrated against this repo's own benchmark
+    devices" limitation already documented in this module's own
+    docstring and in validate_against_benchmarks()'s output. Re-run
+    validate_against_benchmarks() after this change and read its
+    err_1d_pct column fresh rather than assuming the old
+    undershoot/overshoot pattern is now fixed."""
+    if not (0.0 < porosity < 1.0) or k_fluid <= 0 or k_solid <= 0:
+        return max(k_fluid, 1e-9)  # degenerate inputs -> fall back to pure fluid conduction
+    eps = porosity
+    numerator = 2 * k_fluid + k_solid - 2 * (1 - eps) * (k_fluid - k_solid)
+    denominator = 2 * k_fluid + k_solid + (1 - eps) * (k_fluid - k_solid)
+    if denominator <= 0:
+        return max(k_fluid, 1e-9)
+    return k_fluid * numerator / denominator
 
 
 def _apply_axial_conduction(T, dt_total, dx, bed_area, k_eff_axial, m_node, cp_solid_eff):
@@ -241,7 +333,7 @@ def simulate_amr_1d(material, mu0H_max, mass_total, frequency, mdot,
                      n_nodes=20, blow_fraction=0.5, max_cycles=800, tol=1e-4,
                      particle_diameter=0.0005, porosity=0.365,
                      bed_cross_section_area=0.002, T_K_for_ntu=300.0,
-                     cp_solid=None, T_init=None, n_substeps=None):
+                     cp_solid=None, k_solid=None, T_init=None, n_substeps=None):
     """Runs the blow-by-blow simulation described in this module's own
     docstring to periodic steady state.
 
@@ -279,6 +371,7 @@ def simulate_amr_1d(material, mu0H_max, mass_total, frequency, mdot,
     fluid = water_properties(T_K_for_ntu)
     cp_f = fluid["cp"]
     cp_solid_eff = CP_SOLID_GD if cp_solid is None else cp_solid
+    k_solid_eff = K_SOLID_GD if k_solid is None else k_solid
 
     # Axial (node-to-node) conduction, applied once per cycle over the full
     # cycle period 1/frequency -- see _apply_axial_conduction()'s docstring
@@ -286,29 +379,27 @@ def simulate_amr_1d(material, mu0H_max, mass_total, frequency, mdot,
     # growth as mdot -> 0, which the fluid-only coupling below cannot do
     # since its own effectiveness increases, not decreases, in that limit).
     #
-    # Conductivity: NOT a naive porosity-weighted parallel mix of bulk-solid
-    # and fluid conductivity. A packed bed of spheres is solid-solid
-    # point-contact, not a continuous rod -- true contact area between
-    # particles is a small fraction of the particle cross-section, so bulk
-    # metal conductivity (K_SOLID_GD, 10.5 W/m/K) is NOT the right transport
-    # coefficient for the axial solid path (confirmed by direct test: using
-    # a naive parallel mix here collapsed the same Tusek benchmark's span
-    # from a physically-reasonable few K down to ~0.1-0.2K and stopped the
-    # simulation from converging at all in 1500 cycles -- diffusion time
-    # across one node spacing came out ~25x SHORTER than one cycle period,
-    # i.e. the naive mix homogenizes the whole bed every cycle, an
-    # overcorrection in the opposite direction from the original bug). The
-    # standard packed-bed result (Kunii-Smith/Zehner-Schlunder-type
-    # correlations) is that point-contact conduction contributes only a
-    # modest enhancement over the STAGNANT-FLUID conduction path through the
-    # void space -- fluid conductivity, not solid conductivity, sets the
-    # scale. Approximated here as fluid conduction plus a modest
-    # solid-contact enhancement (capped at 3x k_fluid, well below the ~18x
-    # a naive full-solid-conductivity mix would imply at this porosity).
+    # Conductivity (Phase 31: replaced the ad hoc capped multiplier below
+    # with the Maxwell-Eucken packed-bed composite-conductivity model --
+    # see _packed_bed_effective_axial_conductivity()'s own docstring for
+    # the formula, why this specific model was chosen over the more
+    # commonly cited but harder-to-independently-verify Zehner-Schlunder
+    # correlation, and the honest framing of what this change does and
+    # does not establish). This is NOT a naive porosity-weighted parallel
+    # mix of bulk-solid and fluid conductivity -- a packed bed of spheres
+    # is solid-solid point-contact, not a continuous rod, so bulk metal
+    # conductivity (k_solid_eff, ~10.5 W/m/K for Gd) is NOT directly the
+    # right transport coefficient for the axial solid path (confirmed by
+    # direct test during the ORIGINAL fix in this area: a naive parallel
+    # mix collapsed the Tusek benchmark's span from a physically-
+    # reasonable few K down to ~0.1-0.2K and stopped the simulation from
+    # converging at all in 1500 cycles -- diffusion time across one node
+    # spacing came out ~25x SHORTER than one cycle period, i.e. the naive
+    # mix homogenizes the whole bed every cycle).
     V_bed = mass_total / (7900.0 * (1 - porosity))  # RHO_GD; avoids a new import cycle
     L_bed = V_bed / bed_cross_section_area
     dx = L_bed / n_nodes if n_nodes > 0 else L_bed
-    k_eff_axial = min(3.0, 1.0 + (1 - porosity)) * fluid["k"]
+    k_eff_axial = _packed_bed_effective_axial_conductivity(porosity, fluid["k"], k_solid_eff)
     cycle_period = 1.0 / frequency if frequency > 0 else 0.0
     # material.delta_T_adiabatic() expects the field strength H in A/m, not
     # mu0H in Tesla -- same conversion core/amr_cycle.py's own
@@ -494,6 +585,7 @@ def _cache_key(material, mu0H_max, mass_total, frequency, n_nodes, mdot_search,
               round(float(getattr(material, "Tc", 0.0)), 6),
               round(float(getattr(material, "J", 0.0)), 6))
     payload = {
+        "model_version": _MODEL_VERSION,
         "material": mat_id,
         "mu0H_max": round(float(mu0H_max), 6),
         "mass_total": round(float(mass_total), 6),
@@ -681,22 +773,36 @@ def validate_against_benchmarks(verbose=True,
                   "well-defined: the model's quantitative accuracy is inconsistent in DIRECTION "
                   "across devices -- it undershoots on two of the three rows above and overshoots "
                   "on the third, unlike the old bug (which at least always overshot in the same "
-                  "direction). This means the axial-conductivity approximation used (a modest "
-                  "multiple of stagnant-fluid conductivity, chosen to avoid the opposite failure "
-                  "mode of over-damping every row's span to near zero -- see module docstring) is "
-                  "not yet independently calibrated and should not be tuned to fit these three "
-                  "points without a literature source for packed-bed axial conductivity at this "
-                  "geometry. What IS established: this model produces spans several times the "
-                  "underlying material's own single-blow dT, using a genuine multi-cycle transient "
-                  "simulation rather than an assumed multiplier, AND that the resulting span is "
-                  "now a bounded, convergent prediction rather than an open-ended one -- i.e. "
-                  "regenerative amplification is a real, computable, finite-magnitude effect, "
-                  "which is what this module set out to demonstrate. Treat the specific err_1d "
-                  "percentages as illustrative of that magnitude and of the remaining calibration "
-                  "gap, not as a validated replacement for core/amr_cycle.py's cooling_capacity() "
-                  "in the rest of this codebase -- it is still not wired into any other function "
-                  "here, and should not be until the direction-inconsistent error above is "
-                  "resolved with an independently-sourced conductivity correlation.")
+                  "direction).")
+    lines.append("PHASE 31 UPDATE: the axial-conductivity approximation was replaced with the "
+                  "Maxwell-Eucken packed-bed composite-conductivity model (a real, named, "
+                  "independently re-derivable formula -- see "
+                  "_packed_bed_effective_axial_conductivity()'s docstring) in place of the "
+                  "previous ad hoc capped multiplier of stagnant-fluid conductivity. HONEST "
+                  "RESULT, stated plainly rather than smoothed over: this did NOT improve the "
+                  "err_1d percentages above -- it made the two already-undershooting rows "
+                  "undershoot MORE (Tusek -92.1%->-96.9%, DTU/MAGGIE -61.4%->-62.0%) while "
+                  "leaving the overshooting row (Lozano) essentially unchanged (+112.3%->+111.1%), "
+                  "because Maxwell-Eucken predicts a HIGHER effective conductivity than the old "
+                  "placeholder at these bed porosities (~2.7x higher at porosity=0.365), i.e. MORE "
+                  "axial damping, not less. This is a genuine, if disappointing, finding: swapping "
+                  "in a more rigorously-justified conductivity model does not by itself resolve the "
+                  "direction-inconsistent error -- the discrepancy is not simply 'the axial "
+                  "conductivity constant is a little off', since a legitimately different, "
+                  "textbook-derived constant moves the SAME two rows further in the SAME wrong "
+                  "direction. What IS still established, unchanged by this update: this model "
+                  "produces spans several times the underlying material's own single-blow dT, "
+                  "using a genuine multi-cycle transient simulation rather than an assumed "
+                  "multiplier, AND that the resulting span is a bounded, convergent prediction "
+                  "rather than an open-ended one -- i.e. regenerative amplification is a real, "
+                  "computable, finite-magnitude effect, which is what this module set out to "
+                  "demonstrate. Treat the specific err_1d percentages as illustrative of that "
+                  "magnitude and of the remaining calibration gap -- now more likely to be in the "
+                  "regenerator-effectiveness/NTU coupling or the single-blow reference itself, not "
+                  "solely the axial-conductivity constant -- not as a validated replacement for "
+                  "core/amr_cycle.py's cooling_capacity() in the rest of this codebase. It is still "
+                  "not wired into any other function here, and should not be until this is "
+                  "resolved.")
 
     if verbose:
         for line in lines:

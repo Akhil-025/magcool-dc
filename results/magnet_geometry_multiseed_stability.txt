@@ -8,9 +8,9 @@ Settings: pop_size=40, n_gen=25, seeds=[1, 2, 3]
 
   seed  mean_FLAT_T  mean_GEOM_T  front_FLAT  front_GEOM
 --------------------------------------------------------
-     1        1.28        1.24          22          22
-     2        1.35        1.51          23          22
-     3        1.28        1.05          24          21
+     1        1.16        1.18          24          21
+     2        1.16        1.61          26          22
+     3        1.19        1.15          22          22
 --------------------------------------------------------
 
 RESULT: NOT STABLE (or does not reverse cleanly). At least one seed's

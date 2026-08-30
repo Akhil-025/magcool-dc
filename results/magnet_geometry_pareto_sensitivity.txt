@@ -7,19 +7,19 @@ non-dominated Pareto front, FLAT vs. GEOMETRIC magnet-mass cost term.
 Material                                       FLAT    GEOMETRIC    Delta
 --------------------------------------------------------------------------
 Ga1-xCMn3+x (tuned, Tc=295.5K)                    1            1       +0
-Gd5(SixGe1-x)4(-Ga) (tuned, Tc=285.3K)            2            0       -2
-La(Fe,Si)13Hy (tuned, Tc=285.3K)                 21           13       -8
+Gd                                                0            2       +2
+La(Fe,Si)13Hy (tuned, Tc=285.3K)                 19           18       -1
 --------------------------------------------------------------------------
-TOTAL front size                                 24           14      -10
+TOTAL front size                                 20           21       +1
 
-mu0H_max_T range: FLAT 1.00-2.53 T (mean 1.31 T)  |  GEOMETRIC 1.02-2.88 T (mean 1.54 T)
+mu0H_max_T range: FLAT 1.00-1.56 T (mean 1.27 T)  |  GEOMETRIC 1.00-1.33 T (mean 1.09 T)
 A GEOMETRIC mean field noticeably below the FLAT mean field would be
 the expected direction if the nonlinear magnet-mass cost is actually
 discouraging the optimizer from choosing very high fields -- reported
 directly above rather than asserted; see the printed conclusion below
 for whether that expectation held in this specific run.
 
-FINDING: the geometric cost term does NOT pull the merged front's mean mu0H_max_T down relative to the flat-ratio baseline in this run -- stated plainly rather than assumed; possible reasons include NSGA-III search noise at this reduced pop_size/n_gen (see honesty flag above) or the field/COP/Qc trade-off already favoring moderate fields for other reasons (e.g. eddy-current loss ~f^2*H^2) even before the geometric cost term is added.
+FINDING: the geometric cost term pulls the merged front's mean mu0H_max_T DOWN relative to the flat-ratio baseline, consistent with the nonlinear magnet-mass cost genuinely discouraging very-high-field designs in the cost-vs-COP-vs-Qc trade-off.
 
-Wrote results/pareto_front_magnet_flat.csv (24 rows, FLAT magnet-mass cost term)
-Wrote results/pareto_front_magnet_geometric.csv (14 rows, GEOMETRIC magnet-mass cost term)
+Wrote results/pareto_front_magnet_flat.csv (20 rows, FLAT magnet-mass cost term)
+Wrote results/pareto_front_magnet_geometric.csv (21 rows, GEOMETRIC magnet-mass cost term)

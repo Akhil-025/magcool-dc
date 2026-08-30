@@ -17,7 +17,10 @@ from core.mce_material import GADOLINIUM
 _SELF_CONSISTENCY_SPANS = {
     "Astronautics_rotary_2014": 11.0,
     "DTU_Eriksen_rotary_Gd_2015": 10.2,
-    "Tusek_singlebed_Gd_2010": 15.0,
+    # Phase 31: updated from the old 15.0K guessed span to the genuinely
+    # digitized 7.26K point now used in CALIBRATION_POINTS_CORE (see that
+    # module's comment for the fig10_data.csv/fig11_data.csv provenance).
+    "Tusek_singlebed_Gd_2010": 7.26,
     "Okamura_Hirano_2013": 5.0,
     "Lozano_POLO_UFSC_2016_r4": 6.1,
     "Lozano_POLO_UFSC_2016_r6": 5.0,
@@ -26,7 +29,10 @@ _SELF_CONSISTENCY_SPANS = {
 }
 _SELF_CONSISTENCY_MASS = {
     "Astronautics_rotary_2014": 1.52, "DTU_Eriksen_rotary_Gd_2015": 1.7,
-    "Tusek_singlebed_Gd_2010": 0.196,  # pre-correction mass -- see loss_model.py note
+    # Phase 31: updated from the pre-correction 0.196kg placeholder to the
+    # paper-verified 0.1763kg used in CALIBRATION_POINTS_CORE and
+    # data/amr_experimental_benchmarks.csv (Table 1 / Abstract).
+    "Tusek_singlebed_Gd_2010": 0.1763,
 }
 T_COLD_ASSUMED_K = 294.0 - 5.0
 

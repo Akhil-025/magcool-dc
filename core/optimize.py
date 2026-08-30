@@ -474,6 +474,103 @@ def _layered_pareto_filter(rows):
     return [r for r, d in zip(rows, dominated) if not d]
 
 
+def run_layered_optimization_material_family_cross_product(
+        family_candidates=None, n_layers_range=(1, 2, 3), pop_size=20, n_gen=10,
+        seed=1, out_csv="results/layered_pareto_front_material_cross_product.csv",
+        per_combo_out_dir="results/layered_pareto_front_by_material_and_n",
+        use_geometric_magnet_mass=False, n_processes=1):
+    """Phase 31: the material x n_layers cross-product this repo's own
+    Phase 29 docstring (run_layered_optimization(), above) explicitly
+    left as "a documented, concretely-scoped follow-up, not attempted
+    here to keep this phase's own runtime and scope bounded". Runs
+    run_layered_optimization() once per family candidate (each already
+    doing its own internal n_layers_range sweep + merge), then applies
+    ONE further _layered_pareto_filter() pass across every row from every
+    family -- i.e. a "separate-then-merge-then-merge-again" extension of
+    the exact same pattern run_optimization() and run_layered_optimization()
+    each already use for their own single dimension (material-only, or
+    n_layers-only, respectively). No new NSGA-III problem formulation or
+    merging logic was needed -- every row this function produces already
+    carries its own "family" label field (see _layered_row_from_xf()), so
+    the existing _layered_pareto_filter() Pareto-dominance check on
+    [-COP_cascade, -Qc_W, cost_index_USD] is directly reusable across
+    families with no modification.
+
+    `family_candidates` defaults to the same 5 options
+    run_optimization()'s own `_material_candidates()` draws from for the
+    single-stage problem -- (label, family_object, family_name_for_cost)
+    tuples, where `family_object=None` means plain (ungraded) Gd (this
+    module's and run_graded_cascade()'s own convention). Unlike
+    `_material_candidates()`, NO Tc-in-range pre-filtering is applied
+    here: a graded cascade spans a RANGE of per-stage Tc targets (not one
+    fixed composition at one operating point), and
+    LayeredAMRDesignProblem already has a well-defined, tested fallback
+    for any stage/family combination that turns out to be infeasible
+    (`_INFEASIBLE_PENALTY`, see that class's own docstring) -- so letting
+    NSGA-III itself discover and penalize infeasible corners of the
+    search space is both simpler and more directly faithful to how
+    run_layered_optimization_for_n_layers() already handles this for a
+    single family, rather than re-deriving a second, cascade-specific
+    feasibility pre-check.
+
+    Default `pop_size`/`n_gen`/`n_layers_range` are deliberately SMOKE-SCALE
+    (20/10/(1,2,3), matching main.py step "11f."'s own already-reduced
+    defaults) rather than run_layered_optimization()'s own un-reduced
+    40/25/(1..6) -- this function multiplies total NSGA-III wall time by
+    len(family_candidates) on top of that, so the smaller of the two
+    "reduced settings" conventions already established in this module
+    (Phase 15's material loop vs. Phase 29's n_layers loop) is used here,
+    not both compounded at full scale. Increase deliberately, and budget
+    runtime accordingly, before using this for a final report figure."""
+    if family_candidates is None:
+        family_candidates = [
+            ("Gd", None, "Gd"),
+            ("La(Fe,Si)13Hy", LAFESIH_FAMILY, "LaFeSiHy"),
+            ("(Mn,Fe)2(P,Si)", MNFEPSI_FAMILY, "MnFePSi"),
+            ("Ga1-xCMn3+x", GA1XCMN3X_FAMILY, "Ga1xCMn3x"),
+            ("Mn-Cu-Co-Ge", MNCUCOGE_FAMILY, "MnCuCoGe"),
+        ]
+
+    all_rows = []
+    per_combo_rows = {}
+    print(f"Phase 31 material x n_layers cross-product: "
+          f"{len(family_candidates)} family candidate(s) x "
+          f"{len(n_layers_range)} n_layers value(s) = "
+          f"{len(family_candidates) * len(n_layers_range)} total NSGA-III run(s)")
+    for label, family_obj, family_name in family_candidates:
+        safe_label = "".join(c if c.isalnum() else "_" for c in label)
+        out_path = os.path.join(per_combo_out_dir, f"{safe_label}.csv") \
+            if per_combo_out_dir else None
+        rows = run_layered_optimization(
+            n_layers_range=n_layers_range, family=family_obj, family_name=family_name,
+            pop_size=pop_size, n_gen=n_gen, seed=seed, out_csv=out_path,
+            per_n_layers_out_dir=None,  # avoid a second, redundant per-n_layers file per family
+            use_geometric_magnet_mass=use_geometric_magnet_mass, n_processes=n_processes)
+        per_combo_rows[label] = rows
+        all_rows.extend(rows)
+        print(f"  {label:<20} {len(rows)} Pareto-optimal design(s) found across "
+              f"{len(n_layers_range)} n_layers value(s)"
+              + (f" -> {out_path}" if out_path else ""))
+
+    merged = _layered_pareto_filter(all_rows)
+    _write_csv(merged, out_csv, fieldnames=_LAYERED_ROW_FIELDNAMES)
+
+    print(f"\nMerged across {len(family_candidates)} family candidate(s) x "
+          f"{len(n_layers_range)} n_layers value(s): {len(all_rows)} total designs -> "
+          f"{len(merged)} globally non-dominated design(s) after full cross-product "
+          f"Pareto filtering.")
+    print(f"Wrote {out_csv}\n")
+
+    if merged:
+        family_counts = {}
+        for r in merged:
+            family_counts[r["family"]] = family_counts.get(r["family"], 0) + 1
+        print("Family representation in the merged, globally non-dominated front:")
+        for family_label, count in sorted(family_counts.items()):
+            print(f"  {family_label:<20} {count} design(s) ({100*count/len(merged):.0f}%)")
+    return merged
+
+
 def run_layered_optimization(n_layers_range=LAYERED_N_LAYERS_RANGE, family=None,
                               family_name="Gd", pop_size=40, n_gen=25, seed=1,
                               out_csv="results/layered_pareto_front.csv",
@@ -516,13 +613,22 @@ def run_layered_optimization(n_layers_range=LAYERED_N_LAYERS_RANGE, family=None,
               + (f" -> {out_path}" if out_path else ""))
 
     merged = _layered_pareto_filter(all_rows)
-    _write_csv(merged, out_csv, fieldnames=_LAYERED_ROW_FIELDNAMES)
+    if out_csv:
+        # Phase 31: guarded, matching per_n_layers_out_dir's existing
+        # None-skips-the-write convention just above -- previously this
+        # call was unconditional, so out_csv=None (a natural ask for a
+        # caller that only wants the returned rows, e.g. this module's own
+        # run_layered_optimization_material_family_cross_product() calling
+        # this once per family without wanting a redundant per-family
+        # top-level CSV) crashed inside _write_csv() with a TypeError from
+        # os.path.dirname(None) instead of simply skipping the write.
+        _write_csv(merged, out_csv, fieldnames=_LAYERED_ROW_FIELDNAMES)
 
     rows = merged
     print(f"\nMerged across {len(n_layers_range)} n_layers value(s): "
           f"{len(all_rows)} total designs -> {len(rows)} globally non-dominated "
           f"design(s) after cross-n_layers Pareto filtering.")
-    print(f"Wrote {out_csv}\n")
+    print(f"Wrote {out_csv}\n" if out_csv else "(out_csv=None -- rows returned, nothing written)\n")
 
     if rows:
         n_layers_counts = {}

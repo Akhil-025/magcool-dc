@@ -22,7 +22,7 @@ Naming-collision systems (NOT magnetocaloric, documented for disambiguation):
 
 This model vs. Cooltech's own data-center-oriented claim:
 ------------------------------------------------------------
-  model COP_electrical = 2.77
+  model COP_electrical = 2.80
   Cooltech claimed COP range = 5-6
-  gap vs. claimed midpoint = -49.7%
+  gap vs. claimed midpoint = -49.2%
   (see docstring / run this module directly for full honest framing)

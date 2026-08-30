@@ -14,9 +14,10 @@ search, to keep this file's total runtime bounded.
 import numpy as np
 import pytest
 
-from core.cascade import run_graded_cascade, GD_FAMILY
+from core.cascade import run_graded_cascade, GD_FAMILY, LAFESIH_FAMILY
 from core.optimize import (
     LayeredAMRDesignProblem, run_layered_optimization_for_n_layers,
+    run_layered_optimization, run_layered_optimization_material_family_cross_product,
     _layered_pareto_filter, LAYERED_N_LAYERS_RANGE, T_COLD_K, SPAN_K,
 )
 
@@ -116,3 +117,48 @@ def test_run_layered_optimization_for_n_layers_smoke(tmp_path):
         out_csv=str(tmp_path / "layered_n1.csv"))
     assert len(rows) >= 1
     assert any(r["Qc_W"] > 0 for r in rows)
+
+
+def test_run_layered_optimization_out_csv_none_does_not_write_or_crash(tmp_path):
+    """Phase 31 regression test: run_layered_optimization() used to call
+    _write_csv() unconditionally, so out_csv=None crashed with a TypeError
+    from os.path.dirname(None) instead of simply skipping the write (an
+    asymmetry with per_n_layers_out_dir, which already guarded None
+    correctly) -- surfaced by
+    run_layered_optimization_material_family_cross_product() below, which
+    needs exactly this to avoid a redundant per-family top-level CSV."""
+    rows = run_layered_optimization(
+        n_layers_range=(1,), family=GD_FAMILY, family_name="Gd",
+        pop_size=8, n_gen=2, seed=1, out_csv=None, per_n_layers_out_dir=None)
+    assert len(rows) >= 1
+    assert not any(f.endswith(".csv") for f in __import__("os").listdir(tmp_path))
+
+
+def test_run_layered_optimization_material_family_cross_product_smoke(tmp_path):
+    """Phase 31 addition: the material x n_layers cross-product explicitly
+    left as a documented follow-up by run_layered_optimization()'s own
+    docstring. Small-scale (2 families x 2 n_layers values, pop_size=6,
+    n_gen=2) purely to keep this test fast -- not representative of
+    production-quality Pareto-front resolution."""
+    rows = run_layered_optimization_material_family_cross_product(
+        family_candidates=[("Gd", None, "Gd"), ("La(Fe,Si)13Hy", LAFESIH_FAMILY, "LaFeSiHy")],
+        n_layers_range=(1, 2), pop_size=6, n_gen=2, seed=1,
+        out_csv=str(tmp_path / "cross_product.csv"), per_combo_out_dir=None)
+    assert len(rows) >= 1
+    assert any(r["Qc_W"] > 0 for r in rows)
+    # Every returned row's family label must be one of the two candidates
+    # actually searched -- guards against a label/family mismatch in the
+    # per-family loop silently mixing up which rows came from where.
+    assert set(r["family"] for r in rows) <= {"Gd", "La(Fe,Si)13Hy"}
+
+
+def test_run_layered_optimization_material_family_cross_product_writes_merged_csv(tmp_path):
+    out_path = tmp_path / "cross_product.csv"
+    run_layered_optimization_material_family_cross_product(
+        family_candidates=[("Gd", None, "Gd"), ("La(Fe,Si)13Hy", LAFESIH_FAMILY, "LaFeSiHy")],
+        n_layers_range=(1,), pop_size=6, n_gen=2, seed=1,
+        out_csv=str(out_path), per_combo_out_dir=None)
+    assert out_path.exists()
+    with open(out_path) as f:
+        header = f.readline()
+    assert "family" in header and "COP_cascade" in header

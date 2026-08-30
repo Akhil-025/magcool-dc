@@ -41,6 +41,9 @@ actual comparison against Jacobs et al. (2014)'s reported numbers.
 import numpy as np
 import csv
 import os
+import time
+import logging
+import threading
 import contextlib
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
@@ -218,6 +221,148 @@ def _single_threaded_blas_env():
                 os.environ.pop(v, None)
             else:
                 os.environ[v] = val
+
+
+logger = logging.getLogger(__name__)
+
+# --------------------------------------------------------------------------
+# Phase 31: process-pool HANG robustness fix.
+#
+# What was actually wrong (found by directly running this project's own
+# test suite in a sandboxed/restricted container, not by inspection alone):
+# `tests/test_cascade.py::test_magqueen_mass_sensitivity_parallel_matches_sequential`
+# and its `test_cooltech_mass_sensitivity_parallel_matches_sequential`
+# analog hung INDEFINITELY (confirmed via manual per-test wall-clock
+# bisection, >60s with no output and no exception) in an environment where
+# ProcessPoolExecutor's worker processes are created but never actually
+# complete a submitted task. Every existing `except Exception:` guard
+# around a pool block in this module is a real, working fallback for pool
+# CREATION failing outright (which raises immediately, e.g.
+# PermissionError) -- but none of them protect against a pool that is
+# created successfully and then simply never returns a result, because
+# NONE of `pool.map(...)`, `future.result()`, or `pool.shutdown(wait=True)`
+# were ever called with a timeout anywhere in this module. In that failure
+# mode nothing raises, so the bare `except Exception:` never fires -- the
+# calling process (or `pytest`, or a live `main.py` run, or, worst case, a
+# grading/demo run under time pressure) just hangs forever. This is a
+# genuinely different failure mode from the ones this module's own Phase 16
+# docstring above already anticipated (unrecognized family objects,
+# single-cell sweeps, outright pool-creation failure) -- it was not
+# previously covered by any fallback.
+#
+# The three helpers below are used at every remaining
+# ProcessPoolExecutor call site in this module and share one rule: ANY
+# pool failure -- an exception, OR simply exceeding a wall-clock timeout --
+# is treated identically, and always results in returning `None` (for the
+# two "do the work" helpers) or in giving up on waiting (for the shutdown
+# helper), so the CALLING process itself can never hang past
+# `timeout_s` (+ a small constant shutdown grace period) no matter what the
+# worker processes are doing. Every call site that uses these already has
+# its own pre-existing, already-tested sequential fallback path, so a
+# `None` return here changes nothing about correctness -- only about
+# whether the parallel speedup was actually obtained this time.
+# --------------------------------------------------------------------------
+
+_DEFAULT_POOL_TIMEOUT_S = 120
+
+# `run_graded_cascade()` (via _pool_map_or_none below) is called from
+# INSIDE a `scipy.optimize.brentq` root-finding loop by every
+# validate_*_graded_bed() calibration function (each brentq call re-runs
+# the whole cascade, including its Tc-target pool.map(), once per
+# iteration -- commonly 10-40+ times to converge). A naive per-call
+# timeout would cost up to `timeout_s` seconds on EVERY iteration if the
+# pool is chronically broken/slow, i.e. it would make a stuck pool cost
+# `timeout_s * n_brentq_iterations` instead of a single bounded delay --
+# the opposite of what this fix is supposed to guarantee. So once a given
+# executor instance is observed to fail or time out, it is marked
+# "poisoned" (a plain attribute set directly on the executor object) and
+# every subsequent _pool_map_or_none() call against that SAME instance
+# short-circuits to `None` immediately, without retrying the pool at all,
+# for the rest of that instance's lifetime. A fresh pool built later
+# (e.g. by the next call to validate_astronautics_graded_bed()) starts
+# unpoisoned and gets its own single chance.
+_MAP_TIMEOUT_S = 20
+
+
+def _pool_map_or_none(executor, worker_fn, args_list, timeout_s=_MAP_TIMEOUT_S):
+    """`list(executor.map(worker_fn, args_list, timeout=timeout_s))`, but
+    ANY exception (including `concurrent.futures.TimeoutError` once the
+    batch's wall-clock time is exceeded) is caught and turned into a
+    logged warning + a `None` return, instead of propagating or hanging.
+    See the "poisoned executor" comment directly above this function for
+    why a broken executor is only ever retried once, not on every call.
+    Does not shut the executor down -- callers that own the executor's
+    lifecycle (rather than borrowing one built elsewhere) do that
+    themselves via `_safe_pool_shutdown()` below."""
+    if getattr(executor, "_phase31_poisoned", False):
+        return None
+    try:
+        return list(executor.map(worker_fn, args_list, timeout=timeout_s))
+    except Exception as exc:
+        logger.warning(
+            "Phase 31: ProcessPoolExecutor.map() failed or exceeded its "
+            "%ss timeout (%s: %s) -- falling back to the sequential path "
+            "for the rest of this executor's lifetime.",
+            timeout_s, type(exc).__name__, exc)
+        try:
+            executor._phase31_poisoned = True
+        except Exception:
+            pass  # best-effort marker only; worst case we retry once more
+        return None
+
+
+def _pool_submit_all_or_none(pool, worker_fn, items, timeout_s=_DEFAULT_POOL_TIMEOUT_S):
+    """Submits `worker_fn(item)` for every `item` in `items` to `pool`, then
+    waits up to `timeout_s` seconds TOTAL (not per-future) for every result.
+    Returns the list of results in the same order as `items`, or `None` if
+    any future raised or the overall timeout was exceeded. This is the
+    direct fix for the two mass-sensitivity hangs described above, which
+    used bare `future.result()` (no timeout at all) on exactly this
+    submit-then-collect pattern."""
+    deadline = time.monotonic() + timeout_s
+    futures = [pool.submit(worker_fn, item) for item in items]
+    try:
+        results = []
+        for fut in futures:
+            remaining = max(0.0, deadline - time.monotonic())
+            results.append(fut.result(timeout=remaining))
+        return results
+    except Exception as exc:
+        logger.warning(
+            "Phase 31: a pool.submit()/future.result() call failed or "
+            "exceeded its overall %ss timeout (%s: %s) -- falling back to "
+            "the sequential path.", timeout_s, type(exc).__name__, exc)
+        for fut in futures:
+            fut.cancel()  # best-effort only; no effect on already-running tasks
+        return None
+
+
+def _safe_pool_shutdown(pool, wait_s=5):
+    """Shuts a ProcessPoolExecutor down without ever blocking the calling
+    process indefinitely. `pool.shutdown(wait=True)` has no timeout
+    parameter of its own and can itself hang forever if any worker process
+    never completes/exits -- the same failure mode the two helpers above
+    guard against for in-flight work, but for the cleanup step instead.
+    This does a best-effort wait of `wait_s` seconds on a background daemon
+    thread, then gives up and returns either way. It does not guarantee
+    the pool's OS-level child processes are reaped, only that THIS process
+    does not hang -- which is the actual bug being fixed (see this
+    section's module-level comment above)."""
+    if pool is None:
+        return
+    t = threading.Thread(target=pool.shutdown, kwargs={"wait": True}, daemon=True)
+    t.start()
+    t.join(timeout=wait_s)
+    if t.is_alive():
+        logger.warning(
+            "Phase 31: pool.shutdown(wait=True) did not complete within "
+            "%ss -- abandoning the wait (worker processes may still be "
+            "running in the background; this process itself will not "
+            "hang).", wait_s)
+        try:
+            pool.shutdown(wait=False, cancel_futures=True)
+        except Exception:
+            pass
 
 
 def _family_name(family):
@@ -909,11 +1054,15 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
         T_local += span_per_stage
 
     family_name = _family_name(family)
+    Tc_targets = None
     if executor is not None and family_name is not None and n_stages > 1:
-        Tc_targets = list(executor.map(
-            _stage_target_worker,
-            [(t, mu0H_max, family_name) for t in mid_temps]))
-    else:
+        Tc_targets = _pool_map_or_none(
+            executor, _stage_target_worker,
+            [(t, mu0H_max, family_name) for t in mid_temps])
+    if Tc_targets is None:
+        # Phase 31: also the path taken on any pool timeout/failure above,
+        # not just when executor is None/unsuitable -- bit-for-bit
+        # identical to the pre-Phase-31 sequential result either way.
         Tc_targets = [_target_composition_for_peak(t, mu0H_max, family) for t in mid_temps]
 
     stage_materials = []
@@ -1024,15 +1173,28 @@ def compare_graded_cascade(T_cold_C=18.0, spans=range(5, 21), stage_counts=(1, 2
     if parallel and family_name is not None and len(cells) > 1:
         workers = max_workers or min(len(cells), os.cpu_count() or 1)
         args = [(T_cold_K, span, n, mass_per_stage, family_name) for span, n in cells]
+        pool = None
         try:
-            cell_results = {}
             with _single_threaded_blas_env():
-                with ProcessPoolExecutor(max_workers=workers,
-                                          initializer=_pool_worker_init) as pool:
-                    for span, n, res in pool.map(_compare_graded_cascade_cell, args):
-                        cell_results[(span, n)] = res
-        except Exception:
-            cell_results = None  # any pool failure -> fall back below
+                pool = ProcessPoolExecutor(max_workers=workers, initializer=_pool_worker_init)
+                raw = _pool_map_or_none(pool, _compare_graded_cascade_cell, args)
+            if raw is not None:
+                cell_results = {(span, n): res for span, n, res in raw}
+        except Exception as exc:
+            # Pool CREATION itself failed outright (e.g. a sandboxed
+            # environment without subprocess spawn rights) -- distinct
+            # from the map()-level timeout/failure _pool_map_or_none
+            # already handles internally, but the same fallback applies.
+            logger.warning("Phase 31: ProcessPoolExecutor creation failed "
+                            "(%s: %s) -- falling back to sequential.",
+                            type(exc).__name__, exc)
+            cell_results = None
+        finally:
+            # Phase 31: never `with ProcessPoolExecutor(...) as pool:` here --
+            # that context manager's own __exit__ calls the blocking
+            # pool.shutdown(wait=True), which can hang exactly like the
+            # bare future.result()/pool.map() calls this fix targets.
+            _safe_pool_shutdown(pool)
 
     if cell_results is None:
         cell_results = {}
@@ -1200,8 +1362,9 @@ def validate_astronautics_graded_bed(apply_correction=None, cycle_type="brayton"
                                      cycle_type=cycle_type, shared_hardware=True)
 
     finally:
-        if pool is not None:
-            pool.shutdown(wait=True)
+        # Phase 31: bounded, non-hanging shutdown -- see _safe_pool_shutdown()'s
+        # own docstring for why plain pool.shutdown(wait=True) is unsafe here.
+        _safe_pool_shutdown(pool)
         if _blas_env_cm is not None:
             _blas_env_cm.__exit__(None, None, None)
 
@@ -1314,8 +1477,9 @@ def validate_magqueen_graded_bed(mass_total_kg=1.0, n_stages=10,
                                      cycle_type=cycle_type, shared_hardware=True)
 
     finally:
-        if pool is not None:
-            pool.shutdown(wait=True)
+        # Phase 31: bounded, non-hanging shutdown -- see _safe_pool_shutdown()'s
+        # own docstring for why plain pool.shutdown(wait=True) is unsafe here.
+        _safe_pool_shutdown(pool)
         if _blas_env_cm is not None:
             _blas_env_cm.__exit__(None, None, None)
 
@@ -1371,13 +1535,20 @@ def run_magqueen_mass_sensitivity(masses_kg=(0.5, 1.0, 2.0, 5.0, 10.0), verbose=
             _blas_env_cm.__enter__()
             pool = ProcessPoolExecutor(max_workers=min(len(masses_kg), os.cpu_count() or 1),
                                         initializer=_pool_worker_init)
-            futures = [pool.submit(_magqueen_mass_worker, m) for m in masses_kg]
-            results = [f.result() for f in futures]
-        except Exception:
+            # Phase 31 fix: this exact line -- bare `f.result()` with no
+            # timeout on a submit-then-collect pattern -- is the reproduced
+            # cause of test_magqueen_mass_sensitivity_parallel_matches_sequential
+            # hanging indefinitely in a sandboxed environment. See this
+            # module's "Phase 31" comment block above _pool_submit_all_or_none
+            # for the full diagnosis.
+            results = _pool_submit_all_or_none(pool, _magqueen_mass_worker, masses_kg)
+        except Exception as exc:
+            logger.warning("Phase 31: ProcessPoolExecutor creation failed "
+                            "(%s: %s) -- falling back to sequential.",
+                            type(exc).__name__, exc)
             results = None  # fall through to the sequential path below
         finally:
-            if pool is not None:
-                pool.shutdown(wait=True)
+            _safe_pool_shutdown(pool)
             if _blas_env_cm is not None:
                 _blas_env_cm.__exit__(None, None, None)
 
@@ -1495,8 +1666,9 @@ def validate_risoe_dtu_graded_bed(n_stages=6, apply_correction=None,
                                      fluid_mdot=mdot_cal, family=family, executor=pool,
                                      cycle_type=cycle_type)
     finally:
-        if pool is not None:
-            pool.shutdown(wait=True)
+        # Phase 31: bounded, non-hanging shutdown -- see _safe_pool_shutdown()'s
+        # own docstring for why plain pool.shutdown(wait=True) is unsafe here.
+        _safe_pool_shutdown(pool)
         if _blas_env_cm is not None:
             _blas_env_cm.__exit__(None, None, None)
 
@@ -1624,13 +1796,18 @@ def run_cooltech_mass_sensitivity(masses_kg=(0.5, 1.0, 2.0, 5.0, 10.0), verbose=
             _blas_env_cm.__enter__()
             pool = ProcessPoolExecutor(max_workers=min(len(masses_kg), os.cpu_count() or 1),
                                         initializer=_pool_worker_init)
-            futures = [pool.submit(_cooltech_mass_worker, m) for m in masses_kg]
-            results = [f.result() for f in futures]
-        except Exception:
+            # Phase 31 fix: same reproduced hang as
+            # run_magqueen_mass_sensitivity() above (bare `f.result()` with
+            # no timeout) -- see this module's "Phase 31" comment block
+            # above _pool_submit_all_or_none for the full diagnosis.
+            results = _pool_submit_all_or_none(pool, _cooltech_mass_worker, masses_kg)
+        except Exception as exc:
+            logger.warning("Phase 31: ProcessPoolExecutor creation failed "
+                            "(%s: %s) -- falling back to sequential.",
+                            type(exc).__name__, exc)
             results = None
         finally:
-            if pool is not None:
-                pool.shutdown(wait=True)
+            _safe_pool_shutdown(pool)
             if _blas_env_cm is not None:
                 _blas_env_cm.__exit__(None, None, None)
 

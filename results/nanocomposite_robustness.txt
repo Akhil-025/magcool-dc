@@ -5,8 +5,8 @@ when the FIXED, already-built composition operates away from its design span?
 Both candidates tuned ONCE at design_span_K=10.0K's own T_mid=296.15K (Tc_design=285.40K), then evaluated WITHOUT retuning at every span below:
 
  span_K  nanocomp_COP  nanocomp_Qc_W  single_COP  single_Qc_W
-    5.0         3.417          863.9       0.000          0.0
-   10.0         4.616         1753.7       6.726       4995.8  <- design span
+    5.0         3.492          863.9       0.000          0.0
+   10.0         4.795         1753.7       7.166       4995.8  <- design span
    15.0         0.000            0.0       0.000          0.0
    20.0         0.000            0.0       0.000          0.0
 
