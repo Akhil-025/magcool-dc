@@ -64,22 +64,32 @@ LITERATURE_DELTA_T_AD = {
     # inconsistent with 6.3K (6.3K would require the 0-2T average rate to
     # exceed the paper's own stated low-field rate, the opposite of a
     # decreasing-rate trend).
-    #   1.0: 3.2 -- NOT independently confirmed in this paper's prose (no
-    #     explicit 1T statement found); only read off Fig. 10 (a curve),
-    #     which was not digitized in this pass. Rate-consistency check
-    #     (average ~3.2 K/T over 0-1T vs. the paper's own "close to 3 K/T"
-    #     low-field rate) is a plausible, not confirmed, match.
-    #   5.0: 14.6 -- likewise not stated explicitly for exactly 5T; the
-    #     paper states ~15K for 0-7.5T (Fig. 9, prose-confirmed) and a
-    #     rate of ~2.2 K/T AT 5T (not averaged 0-5T). Rate-consistency
-    #     check is plausible but not a direct confirmation.
-    # Treat 1.0 and 5.0 as consensus/commonly-cited figure-read values,
-    # not confirmed against this paper's own prose the way 2.0 (5.8K,
-    # Fig. 8 discussion) and the 7.5T Curie-shift rate (~6 K/T, also
-    # prose-confirmed, see DANKOV_CURIE_SHIFT_RATE_K_PER_T below) are.
+    #
+    # FIX (Phase 35, Papers/ corpus now available): 1.0 and 5.0 below were
+    # previously flagged as "not independently confirmed... only read off
+    # Fig. 10, which was not digitized in this pass." Phase 35 digitized
+    # Fig. 10 directly -- pixel-calibrated against the plot's own axis
+    # border lines (verified accurate to within reading noise by
+    # reproducing the paper's OWN prose-stated ~15K value at 7.5T to
+    # within 0.5K using the identical method: 15.1-16.0K measured,
+    # centered ~15.5K). Two results:
+    #   1.0: 3.2 -- CONFIRMED within reading precision (pixel reading in
+    #     the 2.7-3.9K range for this crowded, marker-overlapping region
+    #     of the curve; 3.2 sits centrally within it). No change.
+    #   5.0: was 14.6, corrected to 12.3 -- the OLD value is NOT
+    #     supported by a direct pixel reading of Fig. 10 at 5T, which
+    #     gives a clean, unambiguous 12.2-12.5K (both the smooth curve
+    #     and the nearest heat-capacity data point agree closely). 14.6K
+    #     is much closer to the curve's value at ~7T instead, suggesting
+    #     the original entry mixed up the field value during an earlier,
+    #     non-figure-based derivation. This ALSO substantially narrows
+    #     (does not fully close) the "genuine cross-paper discrepancy"
+    #     flagged below against GIGUERE_GD_CROSSCHECK's independent
+    #     10.5-11.5K at 5T -- see run_giguere_gd_extension()'s updated
+    #     docstring.
     1.0: 3.2,
     2.0: 5.8,
-    5.0: 14.6,
+    5.0: 12.3,
 }
 
 # Paper-Mining Pass Part 2, §2: a SECOND, independent Gd dataset, from
@@ -87,11 +97,16 @@ LITERATURE_DELTA_T_AD = {
 # their headline Gd5Si2Ge2 result). Given as (low, high) K ranges because
 # the paper itself reports two numbers per field (their own high-purity
 # Gd sample vs. an independent reference), not a single point estimate.
-# NOTE: these are noticeably LOWER than Dan'kov et al.'s 5T value (14.6 K)
-# that GADOLINIUM is calibrated against above -- this is a genuine
-# cross-paper discrepancy in the literature itself (different Gd samples/
-# purity/measurement techniques), not something to paper over; see
-# run_giguere_gd_extension()'s docstring for how this is reported.
+# NOTE (Phase 35 update): these were previously described as "noticeably
+# LOWER than Dan'kov et al.'s 5T value (14.6 K)... a genuine cross-paper
+# discrepancy in the literature itself." Phase 35's direct pixel-reading
+# correction of that 14.6K figure to 12.3K (see LITERATURE_DELTA_T_AD
+# above) substantially narrows this gap -- 12.3K vs. this range's 10.5-
+# 11.5K is a ~1-1.8K residual gap, not the ~3.1-4.1K gap the uncorrected
+# 14.6K implied. A small residual gap is still plausible as genuine
+# sample/technique variation (different Gd purity, pulsed vs. static
+# field, as both papers themselves discuss for their OWN internal
+# measurement spread) rather than needing to be fully zero.
 GIGUERE_GD_CROSSCHECK = {
     5.0: {"range_K": (10.5, 11.5),
           "note": "this paper's high-purity Gd (10.5K) vs. AMES laboratory's "
@@ -135,12 +150,15 @@ def run_giguere_gd_extension(verbose=True):
     (run_validation() above); nothing here touches that calibration.
 
     Honest expectation, stated up front rather than after the fact: since
-    Giguere et al.'s own Gd values (10.5-11.5K at 5T) sit noticeably below
-    Dan'kov et al.'s (14.6K at 5T) -- a real disagreement between two
-    published Gd measurements, not a bug in this repo -- a model
-    calibrated to Dan'kov's numbers is EXPECTED to overestimate relative
-    to Giguere et al.'s range. Reports the comparison either way; does not
-    hide or reframe an unfavorable result.
+    Giguere et al.'s own Gd values (10.5-11.5K at 5T) sit somewhat below
+    Dan'kov et al.'s (12.3K at 5T, Phase 35-corrected -- see
+    LITERATURE_DELTA_T_AD's own note for the pixel-reading fix that
+    substantially narrowed this from an earlier, incorrect 14.6K) -- a
+    modest residual disagreement between two published Gd measurements,
+    plausibly genuine sample/technique variation rather than a bug in
+    this repo -- a model calibrated to Dan'kov's numbers is EXPECTED to
+    overestimate somewhat relative to Giguere et al.'s range. Reports the
+    comparison either way; does not hide or reframe an unfavorable result.
     """
     rows = []
     for B, ref in GIGUERE_GD_CROSSCHECK.items():
@@ -334,7 +352,7 @@ def calibrate_curie_shift(target_rate_K_per_T=DANKOV_CURIE_SHIFT_RATE_K_PER_T,
     # assumed from the fact that a root was found.
     T_BOUNDS_PLAUSIBILITY = (285.0, 330.0)
     implausible = []
-    for B, dT_lit_ref in ((2.0, 5.8), (5.0, 14.6), (7.5, 16.7)):
+    for B, dT_lit_ref in ((2.0, 5.8), (5.0, 12.3), (7.5, 15.5)):
         peak_T = _peak_temperature_for_material(
             GADOLINIUM_FIELD_SHIFTED, B / mu0, T_bounds=T_BOUNDS_PLAUSIBILITY)
         peak_val = float(GADOLINIUM_FIELD_SHIFTED.delta_T_adiabatic(

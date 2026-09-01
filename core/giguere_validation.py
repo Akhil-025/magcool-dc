@@ -62,6 +62,15 @@ nominal Tc) against Giguere's directly measured 7 T value. It is a
 single-field, single-composition check -- exactly the kind of thing
 honesty flag #2 asked for, not a full re-validation across field and
 composition (no such multi-field direct dataset exists in this repo).
+
+Phase 35 verification note: this module's docstring already said "PDF
+present in this repo" before Phase 35 -- re-confirmed directly again this
+phase (Papers/ is now actually included in the delivered project, closing
+a gap where these citations referenced a Papers/ folder that had been
+omitted from earlier deliveries of this codebase). All four numbers above
+(10.0 K direct, 9.9 K Clausius-Clapeyron, 14.9 K indirect Maxwell, 272.2/
+278.2 K zero-field Tc) were independently re-read from the primary-source
+PDF this phase and match exactly.
 """
 
 import numpy as np

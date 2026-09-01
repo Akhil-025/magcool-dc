@@ -32,9 +32,21 @@ Calibration targets (literature, gadolinium, polycrystalline, ~294 K):
     mu0*DeltaH = 1 T  -> DeltaT_ad ~ 3.0-3.3 K   (Pecharsky & Gschneidner, 1999)
     mu0*DeltaH = 2 T  -> DeltaT_ad ~ 6.1-6.6 K
     mu0*DeltaH = 5 T  -> DeltaT_ad ~ 14-15 K
-    Peak isothermal DeltaS_M at 5 T ~ -9.5 J/kg/K (Pecharsky & Gschneidner,
+    Peak isothermal DeltaS_M at 5 T ~ -18 J/kg/K (Pecharsky & Gschneidner,
         Phys. Rev. Lett. 78, 4494 (1997) for the giant-MCE Gd5Si2Ge2 family;
-        pure Gd baseline ~ -4.2 to -4.8 J/kg/K at 2 T near Tc)
+        pure Gd baseline ~ -4.2 to -4.8 J/kg/K at 2 T near Tc). Phase 35
+        correction: this line previously read "~-9.5 J/kg/K", inconsistent
+        with giguere_validation.py's own correctly-cited ~18 J/(kg K) for
+        the SAME quantity/paper -- re-checked directly against Ref. [Phys.
+        Rev. Lett. 78, 4494 (1997)]'s Fig. 4 (now in this repo's
+        Papers/Magnetocaloric effect and materials physics/), which shows
+        the 0-5 T Gd5Si2Ge2 curve peaking at very close to 18 J/(kg K) near
+        276 K -- 9.5 J/kg/K is not supported by the figure at 5 T (it is
+        closer to the paper's own 0-2 T curve's peak instead). This
+        constant is documentation/context only -- not read by any function
+        in this module or first_order_mce.py -- so the error had no
+        effect on any computed result, only on this docstring's own
+        accuracy.
 
 These are used only to validate the mean-field parameters below (see
 validation.py) — this module does not hard-code the answer, it computes it

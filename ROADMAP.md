@@ -2588,6 +2588,373 @@ explicitly or wire in later.
 
 ---
 
+## Phase 31 — BOM/economics improvement pass: sensitivity band, independent VCC cross-check, current commercial MCM price reality check — done
+
+**Scope, per an explicit user request to "improve the BOM and economics
+part," referring to `Papers/` for inspiration and permitting web search
+for anything not already in the corpus.** Re-confirmed first (as every
+prior phase does) that the specific gap this module has flagged since
+Phase 7 -- a genuine bottom-up AMR-specific HX/pump/motor/controls/
+enclosure hardware cost breakdown -- is still not published anywhere:
+neither the two unused `Papers/Economics/` PDFs (Tura & Rowe 2013's
+Concentric Halbach cost-optimization paper; Rowe 2011's "Configuration
+and performance analysis" paper) nor a dedicated web search ("active
+magnetic regenerator refrigerator bill of materials manufacturing cost
+breakdown heat exchanger pump motor"; "techno-economic analysis
+magnetocaloric refrigeration system cost 2023 2024 heat exchanger
+drive") turned up a bottom-up figure -- both source papers explicitly
+fold "other components" cost into the materials-cost term rather than
+quantifying it separately. That specific gap remains genuinely open, not
+resolved here, exactly as ROADMAP.md has said since Phase 7. What THIS
+phase closes instead, in `core/economics.py`:
+
+1. **Non-materials multiplier exposed as a LOW/MID/HIGH band, not a
+   single point.** `full_system_cost_estimate_range()` -- same Russek &
+   Zimm (2006) source range `NON_MATERIALS_COST_MULTIPLIER`'s own
+   pre-existing comment already described in prose (roughly 8x-40x) but
+   had never exposed as three usable numbers. Purely additive: the
+   existing `full_system_cost_estimate()` and its 10x default are
+   completely unchanged (`NON_MATERIALS_COST_MULTIPLIER_MID` is a direct
+   alias of the pre-existing constant), confirmed by a direct test that
+   the new function's MID value exactly matches the old function's point
+   estimate.
+2. **A second, independent VCC cost cross-check.** Tura, A. & Rowe, A.,
+   "Configuration and performance analysis of magnetic refrigerators,"
+   Int. J. Refrigeration 34 (2011) 168-177 -- a paper already sitting in
+   `Papers/Economics/` but not previously used for costing in this
+   module. Its Table 4 worked example gives an independent (non-ASHRAE)
+   compressor-cost benchmark ($0.5/W_c at COP=1.6, $1.9/W_c at COP=2.6,
+   i.e. $500-1900/kW_c for a 70W_c residential-scale unit) --
+   substantially higher than `VAPOR_COMPRESSION`'s existing $350/kW_c
+   ASHRAE Datacom ballpark. `rowe2011_vcc_compressor_cost_cross_check()`
+   reports both figures side by side rather than reconciling them into
+   one number (reconciling compressor-only vs. installed-system cost at
+   very different scales would require assumptions this corpus doesn't
+   support) -- an honest discrepancy surfaced, not hidden. The same
+   Table 4 also independently re-confirms this module's existing $40/kg
+   PM / $20/kg MCM unit costs from a source other than Bjørk et al.
+   (2011), for what that's worth as corroboration.
+3. **A current (2024) commercial MCM price reality check, located via
+   this phase's own web search and NOT previously in this project's
+   local `Papers/` corpus.** Ihnfeldt, R., "Scale-up of Magnetocaloric
+   Materials for High Efficiency Refrigeration," California Energy
+   Commission, CEC-500-2024-057 (June 2024) -- a DOE/CEC-funded report
+   from an actual commercial magnetocaloric-material vendor (General
+   Engineering & Research) on scaling up production of an engineered
+   giant-MCE-class material. Their own reported numbers: current (2024)
+   pilot-scale commercial price "<$10,000/kg...almost entirely labor and
+   facility costs," their own stated FUTURE target price at industrial
+   scale "$1,000/kg," and a raw-material-plus-processing cost floor of
+   roughly $400/kg. `commercial_mcm_price_reality_check()` reports these
+   against this module's own $20/kg Gd working figure (Bjørk et al.
+   2011) -- a ~50x gap even at the vendor's own stated future-scale
+   target, ~500x at today's actual pricing. `COST_MCM_PER_KG_BY_FAMILY`
+   is DELIBERATELY left unchanged (see the new section's own docstring
+   for why: GE&R's price is for a different, proprietary composition at
+   a still-ramping production volume, not a like-for-like drop-in
+   replacement for Gd's commodity-metal price with its own validated
+   mass-scaling law) -- this is surfaced as an explicit caveat a reader
+   can weigh, not silently substituted.
+
+**Tests.** 5 new tests added to `tests/test_economics.py` (band
+ordering; range-vs-point-estimate consistency at the MID value;
+Rowe cross-check reports both figures unchanged; commercial reality
+check doesn't mutate `MCM_COST_PER_KG_BY_FAMILY`; unrecognized
+family_name falls back to Gd). Full `test_economics.py` (22 tests) and
+`test_main.py` re-run after this phase: all passing, 0 regressions.
+
+**Not done in this phase.** No change to `MCM_COST_PER_KG_BY_FAMILY`,
+`COST_MAGNET_PER_KG`, `NON_MATERIALS_COST_MULTIPLIER`,
+`full_system_cost_estimate()`, or any other pre-existing function's
+default numeric behavior -- every addition here is a new, additive
+function/constant, matching this repo's established backward-
+compatibility discipline. `main.py`'s own pipeline was not modified to
+call any of the three new functions as a new step -- they exist as
+standalone, directly-callable functions (same status several prior
+phases' own new economics functions had before any wiring decision was
+made), left for the paper-writing pass to invoke as needed.
+
+## Phase 32 — closing the non-materials BOM gap with a genuine bottom-up, market-catalog-priced estimate — done
+
+**Explicit user request: "fill the gap... scourge the net."** Phase 31
+had confirmed (again) that no published, AMR-SPECIFIC bottom-up cost
+breakdown of the heat exchangers, pump, motor, drive, and enclosure a
+real AMR system needs exists anywhere in this project's corpus or a web
+search -- every source either explicitly excludes it (Bjørk et al. 2011:
+"motor and pump costs...were not included") or folds it into the
+materials-cost term (Tura & Rowe 2011, 2013). This phase did NOT find
+that published figure either -- it doesn't exist -- but instead of
+leaving the gap as a single borrowed multiplier, built a genuine
+bottom-up estimate a different way: by pricing the ACTUAL component
+categories (heat exchangers, pump, motor, drive, controls/enclosure)
+from real, current commercial vendor-catalog and market-pricing data,
+cross-checked across at least two independent sources per component
+category. New in `core/economics.py`:
+
+- `HX_COST_PER_KW_RANGE`, `PUMP_COST_PER_KW_RANGE`,
+  `MOTOR_COST_PER_KW_RANGE`, `DRIVE_COST_PER_KW_RANGE`,
+  `CONTROLS_ENCLOSURE_FIXED_COST_RANGE` -- LOW/MID/HIGH $/kW (or fixed $)
+  ranges sourced from: an industry plate-heat-exchanger pricing benchmark
+  (IndexBox) cross-checked against ato.com/Alfa Laval/Bell & Gossett
+  catalog units; a pump-industry cost-estimation reference cross-checked
+  against ato.com's small-centrifugal-pump catalog; a 2026 motor-cost
+  aggregator cross-checked against ato.com's NEMA motor catalog and
+  retail TEFC-motor listings; Thunder Said Energy's VFD-economics
+  data-file (average $250/kW from 15 real project case studies)
+  cross-checked against retail VFD catalog pricing; and a PLC-pricing
+  reference plus control-panel-enclosure vendor/buying-guide data for the
+  fixed controls+enclosure allowance.
+- `bottom_up_non_materials_bom()` -- sizes heat-exchanger duty off
+  `Qc_avg_W` (times a flagged `hx_duty_multiplier`, default 2.0, to
+  roughly account for both cold- and hot-side duty) and pump/motor/drive
+  off electrical input power (`Qc_avg_W / COP_electrical`, the same
+  quantity `lifetime_cost()`/`levelized_cost_of_cooling()` already use),
+  plus the fixed controls/enclosure allowance. Returns a LOW/MID/HIGH
+  breakdown by component.
+- `full_system_cost_estimate_bottom_up()` -- combines this with
+  `bom_cost()`'s materials-only BOM into a THIRD, methodologically
+  independent full-system cost estimate, alongside (not replacing)
+  `full_system_cost_estimate()`/`full_system_cost_estimate_range()`'s
+  borrowed-VCC-multiplier methods.
+- `cross_check_full_system_cost_methods()` -- runs both methods at the
+  same design point and reports both plus their ratio.
+
+**Honest finding from actually running the cross-check (this is the
+main substantive result of this phase, not just new code).** The two
+methods do NOT agree, and the disagreement WIDENS with scale rather than
+narrowing: at this repo's own ~500W lab-scale representative point
+(1.5T, 5kg regenerator, COP~5.26), the borrowed-multiplier method gives
+a MID estimate ~5.3x the bottom-up component method; at a ~5kW
+design-target point (same field, 50kg regenerator), that ratio grows to
+~8.3x. The likely reason, stated plainly rather than resolved: Russek &
+Zimm's (2006) 10x-ish multiplier is derived from a MASS-PRODUCED,
+retail MANUFACTURED cost for a mature technology (including assembly
+labor, engineering overhead, distribution, and margin), while
+`bottom_up_non_materials_bom()` prices bare COMPONENT PARTS ONLY (off-
+the-shelf steady-flow hardware at roughly the right power class, with no
+labor, no AMR-specific engineering premium for oscillating-flow-rated
+seals/manifolds/a synchronized drive matched to the AMR cycle, and no
+margin). The bottom-up number is thus plausibly a FLOOR and the
+borrowed-multiplier number a more realistic (if technology-mismatched)
+retail figure -- but this repo does not have the data to adjudicate
+between the two explanations and does not attempt to. Both are reported
+together, with the actual size of the disagreement stated explicitly,
+rather than either being presented as the answer.
+
+**What this does and does not close.** It genuinely prices, for the
+first time in this codebase, the specific hardware categories (HX,
+pump, motor, drive, controls/enclosure) that had been an entirely
+unquantified gap since Phase 7 -- that is real, additive progress. It
+does NOT produce an AMR-specific vendor quote (see the new section's own
+"HONESTY FLAG" in its module docstring) and does NOT resolve which of
+the two now-available methods is closer to a real AMR device's actual
+manufactured cost -- an actual vendor RFQ or a built prototype's own bill
+of materials remains the only way to close that residual gap, and
+neither is available to this project.
+
+**Tests.** 6 new tests in `tests/test_economics.py` (component-range
+ordering; non-materials BOM scales with power while controls/enclosure
+stays fixed; band ordering; COP validation; full-system total
+consistency; cross-check reports both methods with the documented
+ratio direction). Full `test_economics.py` (23 tests), `test_main.py`,
+and `test_amr_cycle.py` re-run after this phase: all passing, 0
+regressions.
+
+**Not done in this phase.** No change to any Phase 1-31 function's
+default numeric behavior. `main.py`'s pipeline was not modified to call
+any Phase 31/32 function as a new step -- all remain standalone,
+directly-callable functions for the paper-writing pass to invoke.
+
+---
+
+## Phase 33 — completing the "remaining" items from Phase 32's own closing note
+
+**User request: "complete them," referring to the five remaining items
+this session had itself listed after Phase 32.** Four closed here; the
+fifth (an actual AMR-specific vendor quote or built-prototype BOM) is
+not something a literature/web search can produce and remains open --
+stated plainly, not worked around.
+
+1. **`hx_duty_multiplier` now defaults to the EXACT energy-balance
+   formula, not a flat 2.0x approximation.** New
+   `exact_hx_duty_multiplier(COP_electrical)` returns
+   `2 + 1/COP_electrical` (cold-side duty = Qc; hot-side duty =
+   Qc*(1+1/COP), by energy balance -- all cooling load plus all
+   electrical input must be rejected at the hot side).
+   `bottom_up_non_materials_bom()`'s `hx_duty_multiplier` parameter now
+   defaults to `None`, meaning "compute it exactly from the
+   `COP_electrical` already being passed in," rather than silently using
+   2.0x; an explicit float still overrides with a flat value if a caller
+   wants one. At this repo's own representative COP_electrical~5.26, the
+   exact multiplier is ~2.19x (about 9-10% more HX cost than the old flat
+   2.0x approximation); at a more conservative COP of 2, it is 2.5x (25%
+   more). 4 new tests.
+
+2. **Phase 31/32/33's cost-comparison functions are now wired into
+   `main.py`'s `run_economics()`.** Previously these were standalone,
+   directly-callable-but-uninvoked functions (as explicitly noted in
+   Phase 32's own "not done" section). `run_economics()` now also calls
+   `economics.cross_check_full_system_cost_methods()` at the SAME design
+   point as the existing Phase 15 full-system estimate and logs both
+   methods (borrowed-multiplier and bottom-up-component) plus their
+   disagreement ratio, so every pipeline run now surfaces this finding
+   rather than requiring someone to call the function by hand. Smoke-
+   tested directly (not just via the full pipeline, which is slow): ran
+   `run_economics()` against a representative row and confirmed correct,
+   readable log output.
+
+3. **`MAGNET_TO_MCM_MASS_RATIO_PER_TESLA` cross-checked against 11 REAL
+   reported AMR devices, not the "two worked examples" it was flagged as
+   a rough fit to since Phase 1.** Rowe (2011)'s Table 1 -- read from a
+   RENDERED PAGE IMAGE this time, specifically to avoid the garbled raw-
+   PDF-text-extraction problem that made this same table's numbers
+   untrustworthy in Phase 31 -- lists magnet volume, MCM volume, and peak
+   field for 11 actual devices (Engelbrecht, Kim & Jeong, Lee, Lu,
+   Okamura, Tura & Rowe, Vasile & Muller, Zheng, two Zimm devices, and
+   Tusek's continuous design). Converting volume ratios to mass ratios
+   per Tesla (using Tura & Rowe 2013's own PM/MCM density figures, the
+   same ones Phase 31 already used) gives a real-device range of
+   3.98-22.65, median 13.47, mean 12.07 -- this module's existing
+   `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA = 3.0` sits AT the low end of that
+   range, not the middle, suggesting magnet mass/cost may be
+   systematically UNDERESTIMATED throughout this module by a factor of
+   roughly 4-5x at the median. Following this repo's Phase 31/32
+   discipline, the load-bearing constant is DELIBERATELY LEFT UNCHANGED;
+   `rowe2011_magnet_mass_ratio_cross_check()` reports the finding
+   (including the honest caveat that "V_B" in the 2011 table is read as
+   V_MCM based on the paper's own prose, not independently confirmed
+   against the underlying Bjørk et al. 2010 source table) without
+   silently propagating it into every downstream cost figure. 5 new
+   tests, including one that explicitly asserts the cross-check does not
+   mutate the existing constant.
+
+4. **Searched again for real AMR prototype or commercial-product cost
+   data** (queries: "Dall'Olio Bahl rotary active magnetic regenerator
+   prototype cost gadolinium"; "Cooltech Applications magnetocaloric
+   refrigeration commercial price cost 2024 2025"). Found detailed
+   PERFORMANCE data for several real rotary AMR prototypes (DTU's 13-bed
+   rotary device: 818W at COP 4.2 over a 10K span, 3.83kg Gd, 1.44T --
+   Dall'Olio/Masche/Bahl et al., Applied Thermal Engineering 204 (2022)
+   117947) but no published cost figures for any of them. Cooltech
+   Applications (Holtzheim, France) was the one company that reached
+   actual commercial launch of a magnetocaloric cooling product (the
+   MRS400, 200-700W, launched 2016) -- no unit price was ever made
+   public, and the company has since closed ("deadpooled" per Tracxn,
+   having raised $12.5M across 3 rounds). This is noted here as relevant
+   real-world context for the paper's own discussion of commercial
+   viability, NOT as a cost figure -- it confirms, rather than closes,
+   that no public bottom-up or retail AMR cost data exists anywhere,
+   including from the one company that actually tried to sell the
+   technology.
+
+**Tests.** 9 new tests total (4 for the exact HX-duty-multiplier fix, 5
+for the Rowe 2011 magnet-ratio cross-check). Full `tests/test_economics.py`
+now has 32 tests, all passing. `main.py` re-verified to parse and
+`run_economics()` smoke-tested directly with a representative row.
+
+**Not done in this phase / still genuinely open.** No actual AMR-vendor
+quote or built-prototype bill of materials exists publicly, and none was
+producible from a literature/web search -- this specific residual gap
+cannot be closed without access to a real quote or built device's own
+cost records, neither of which is available to this project. The V_B=
+V_MCM reading of Rowe (2011) Table 1 is a plausible-but-not-independently-
+confirmed interpretation (see item 3 above). `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA`
+itself was NOT updated despite the cross-check's finding -- whether and
+how to act on that finding (update the constant, keep both figures
+side by side going forward, or investigate the V_B assumption further
+first) is left as a decision for the paper-writing pass, not made here.
+
+---
+
+## Phase 34 — acting on the Phase 33 finding: update the working default AND keep the legacy value
+
+**Explicit user instruction: "act on the Rowe magnet-ratio finding
+(update the constant vs. keep both) -- do both."** `core/economics.py`
+now does both, rather than choosing one:
+
+- **`MAGNET_TO_MCM_MASS_RATIO_PER_TESLA` (no suffix) is now the module's
+  WORKING DEFAULT**, set to `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_ROWE2011_MEDIAN
+  = 13.47` -- the 11-real-device median from Phase 33's cross-check.
+  Every function that reads this constant without an explicit override --
+  `material_cost()`, `material_cost_by_family()`, `bom_cost()`, and
+  therefore every Phase 15-33 function built on top of them
+  (`full_system_cost_estimate()`, `lifetime_cost()`,
+  `levelized_cost_of_cooling()`, `full_system_cost_estimate_range()`,
+  `full_system_cost_estimate_bottom_up()`,
+  `cross_check_full_system_cost_methods()`) -- now uses this updated
+  value automatically.
+- **The original value is fully preserved and directly usable**, as
+  `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY = 3.0`.
+  `material_cost()`, `material_cost_by_family()`, and `bom_cost()` all
+  gained a new `mass_ratio_per_tesla=None` parameter (`None` = use the
+  module default; pass the legacy constant explicitly to reproduce this
+  module's exact pre-Phase-34 numbers).
+- **New `compare_legacy_and_updated_magnet_ratio()`** runs `bom_cost()`
+  at the same design point with both values and reports them side by
+  side (magnet mass, magnet cost, materials BOM total, and the ratio
+  between the two totals) -- the direct "keep both" deliverable, so
+  nothing from before Phase 34 requires digging through git history to
+  reproduce.
+- `rowe2011_magnet_mass_ratio_cross_check()`'s own note text was rewritten
+  to describe the update having happened (it previously said the constant
+  was "deliberately left unchanged"; that framing no longer describes
+  the module's state and would have been actively misleading to leave in
+  place).
+
+**Sanity-checked, not just unit-tested.** At this repo's Phase 15
+representative design point (2T, 5kg Gd regenerator), magnet mass goes
+from 30.0kg (legacy ratio, 3.0 x 2T x 5kg) to 134.7kg (updated ratio,
+13.47 x 2T x 5kg), and materials BOM total from ~$1,300 to ~$5,825 -- a
+roughly 4.5x jump, exactly matching the constant's own median-vs-legacy
+ratio. This is a large change and was cross-checked against the source
+material itself, not just accepted numerically: Engelbrecht & Bahl's own
+"The lifetime cost of a magnetic refrigerator" abstract (already cited
+elsewhere in this module) states directly that "the cost of the magnet
+is largest, followed closely by the cost of operation, while the cost of
+the magnetocaloric material is almost negligible" -- i.e. the literature
+this repo already draws from independently supports a magnet-dominated
+(large magnet-to-MCM ratio) cost structure, which corroborates rather
+than contradicts this update.
+
+**Blast-radius check before committing to this change.** Searched the
+whole codebase for other hardcoded couplings to the old ratio before
+editing: `core/magnet_geometry.py` imports the constant only inside its
+own comparison function (automatically picks up the new default, no
+edit needed there); `core/optimize.py` calls `material_cost()`/
+`bom_cost()`/`bom_cost_geometric()` without hardcoding the ratio itself
+(same, automatic pickup); no test file anywhere in `tests/` asserts a
+literal, hardcoded magnet-cost dollar figure that this change would
+break (`tests/test_optimize_material_geometry.py` and
+`tests/test_magnet_geometry.py` were checked directly and use only
+comparative assertions, e.g. `cost_a < cost_b`, not fixed values).
+
+**Tests.** 9 new tests in `tests/test_economics.py` (default equals the
+median constant; the hardcoded median constant stays in sync with the
+cross-check function's own live computation, so the two can't silently
+drift apart; legacy constant unchanged from its original 3.0; default
+vs. legacy comparison for both `material_cost()` and `bom_cost()`; a
+pinned regression test for the exact pre-Phase-34
+`material_cost(1.5, 5.0)` value reproduced via the legacy override;
+`compare_legacy_and_updated_magnet_ratio()`'s output matches direct
+`bom_cost()` calls; cross-check note reflects the Phase 34 update).
+`tests/test_economics.py` now has 41 tests. Full regression run across
+`test_economics.py` + `test_main.py` + `test_amr_cycle.py` +
+`test_magnet_geometry.py` + `test_optimize_material_geometry.py`: 97
+tests, all passing, 0 regressions. `main.py`'s `run_economics()`
+re-smoke-tested directly with the new default active -- log output
+reads correctly end to end (materials BOM, Phase 15 full-system
+estimate, and the Phase 31/32/33 cross-check all update consistently
+together).
+
+**Not done in this phase / still open.** The V_B=V_MCM reading of Rowe
+(2011) Table 1 (Phase 33's own caveat) is unchanged by this phase -- it
+was a precondition for the median value now in use, not something this
+phase re-investigated. No actual AMR-vendor quote or built-prototype BOM
+was found or fabricated; that residual gap remains exactly as open as
+Phase 33 left it.
+
+---
+
 **All four items from the second user-supplied document (Phases 26-29)
 are now addressed**, with one (the Tc(H) mean-field limitation, Phase 26)
 confirmed as a genuine dead end rather than fixed, one (the Qc floor,

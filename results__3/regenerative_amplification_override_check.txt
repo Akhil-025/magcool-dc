@@ -1,0 +1,12 @@
+====================================================================================================
+REGENERATIVE-AMPLIFICATION OVERRIDE CHECK
+(does no_load_span_override actually recover a prediction where the old 2*dTad_noload
+ cap makes cooling_capacity() structurally return Qc=0, and how close is it?)
+====================================================================================================
+3 structurally-infeasible, COP-bearing row(s) checked (out of 13 unique span>0 rows scanned).
+
+  DTU_Eriksen_MAGGIE_2016                span=  15.5K  old_cap=  11.9K  1D_span_cap=  8.61K  -> STILL infeasible (override doesn't reach this span either)
+  Risoe_DTU_Gd_2011                      span=  30.0K  old_cap=   6.2K  1D_span_cap=  2.02K  -> STILL infeasible (override doesn't reach this span either)
+  Lozano_POLO_UFSC_2016_r1               span=   7.1K  old_cap=   6.3K  1D_span_cap= 23.24K  COP_lit= 0.37  COP_pred= 0.318 (err= -14.1%)
+----------------------------------------------------------------------------------------------------
+Read this as: does the opt-in override make the OLD model's hard structural zero into a usable, evaluable prediction, and is that prediction any good? A device that 'reaches span' but has a large |err_pct| means the override fixes cooling_capacity()'s FEASIBILITY (it can now represent the span at all) without yet fixing its ACCURACY (the underlying 1D span-cap model is still directionally inconsistent -- see results/regenerator_1d_validation.txt). This is exactly the honest outcome AMRSystem.no_load_span_override's own docstring predicts: a real, usable capability, not yet a validated one. Still opt-in, still off by default everywhere else in this codebase.

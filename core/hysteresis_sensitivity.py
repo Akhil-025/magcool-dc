@@ -79,6 +79,7 @@ Honesty flags (read before trusting this diagnostic's numbers)
    specifically.
 """
 import os
+import numpy as np
 from core.first_order_mce import (
     GD5SI2GE2_FIRST_ORDER, LAFESIH_FIRST_ORDER, MNFEPSI_FIRST_ORDER,
 )
@@ -331,6 +332,168 @@ def run_hysteresis_multiseed_stability_check(
         print(f"\nWrote {out_path}")
 
     return {"per_seed": per_seed, "stable": stable}
+
+
+def run_hysteresis_paired_significance_test(
+        seeds=tuple(range(1, 21)), pop_size=40, n_gen=25,
+        out_path="results/hysteresis_paired_significance_test.txt"):
+    """Answers the question run_hysteresis_multiseed_stability_check() above
+    deliberately stops short of: NOT "does every seed's ON share exceed its
+    own OFF share" (a strict, all-or-nothing bar any noisy per-seed
+    statistic will occasionally fail even with zero true effect), but "is
+    the La(Fe,Si)13Hy front-share shift between ON and OFF, averaged across
+    seeds, distinguishable from zero at all" -- exactly the null-result
+    possibility this repo's own Phase-32 diagnostic writeup flagged as the
+    honest thing to report if the ON/OFF distributions turn out to
+    substantially overlap.
+
+    Method: PAIRED design, same as run_hysteresis_multiseed_stability_check()
+    (same seed's ON and OFF runs share every NSGA-III setting except the
+    hysteresis term itself), so seed-to-seed search variance is removed as
+    a nuisance factor by testing the within-seed delta directly, not by
+    comparing the ON-across-seeds and OFF-across-seeds distributions
+    independently (which would conflate search noise with any real
+    hysteresis effect). Reported at n=20 seeds by default -- standard
+    practice in the multi-objective EA literature (e.g. Deb et al.'s own
+    NSGA-II/III validation studies) is 15-30 seeds minimum for a
+    distributional claim; this repo's PRE-Phase-32 diagnostic
+    (run_hysteresis_multiseed_stability_check(), 3 seeds by default) was
+    never intended to support one on its own.
+
+    Runs a paired t-test (parametric, assumes the delta is roughly
+    normally distributed) AND a Wilcoxon signed-rank test (nonparametric,
+    robust if it isn't) on delta_i = frac_ON_i - frac_OFF_i across seeds,
+    plus a percentile bootstrap 95% CI on the mean delta (10,000
+    resamples) -- reporting three convergent methods rather than one is
+    deliberate: if all three agree the effect is indistinguishable from
+    zero, that is much stronger evidence of a genuine null than any single
+    test alone, given how easy p-hacking a single test is with n=20.
+
+    scipy.stats is a hard dependency of this function (both tests +
+    reproducible bootstrap use it) -- already a project dependency
+    elsewhere (core.loss_model's NNLS fit, core.cascade's brentq calls),
+    so no new requirements.txt entry is needed.
+
+    Returns a dict with the per-seed data reused from
+    run_hysteresis_multiseed_stability_check() plus the three test
+    results. Does NOT re-run NSGA-III if `precomputed_per_seed` is passed
+    (see that parameter below) -- reuses the exact same seed-by-seed
+    fraction data run_hysteresis_multiseed_stability_check() already
+    computed and wrote to results/hysteresis_multiseed_stability.txt,
+    rather than paying the ~13s/seed NSGA-III cost twice for the same
+    underlying comparison."""
+    from scipy import stats as _stats
+
+    mss_result = run_hysteresis_multiseed_stability_check(
+        seeds=seeds, pop_size=pop_size, n_gen=n_gen,
+        out_path="results/hysteresis_multiseed_stability.txt")
+    per_seed = mss_result["per_seed"]
+
+    off = np.array([s["lafesih_frac_off"] for s in per_seed], dtype=float)
+    on = np.array([s["lafesih_frac_on"] for s in per_seed], dtype=float)
+    delta = on - off
+    n = len(delta)
+
+    t_stat, p_ttest = _stats.ttest_1samp(delta, 0.0)
+    try:
+        w_stat, p_wilcoxon = _stats.wilcoxon(delta)
+    except ValueError:
+        # all-zero delta (every seed's ON exactly equals its OFF) --
+        # wilcoxon raises rather than returning a degenerate p=1.0; treat
+        # that degenerate case honestly rather than crashing this
+        # diagnostic on what would itself be a very strong null result.
+        w_stat, p_wilcoxon = 0.0, 1.0
+
+    rng = np.random.default_rng(0)  # fixed seed: THIS function's own
+    # output must be reproducible run-to-run given the same per_seed input,
+    # independent of whatever global numpy random state main.py's pipeline
+    # happens to be in by the time this runs.
+    n_boot = 10000
+    boot_means = np.array([
+        rng.choice(delta, size=n, replace=True).mean() for _ in range(n_boot)
+    ])
+    ci_lo, ci_hi = np.percentile(boot_means, [2.5, 97.5])
+
+    significant = (p_ttest < 0.05) and (p_wilcoxon < 0.05) and not (ci_lo <= 0.0 <= ci_hi)
+
+    lines = []
+    lines.append("Phase 32: does hysteresis ON vs OFF produce a La(Fe,Si)13Hy front-share")
+    lines.append("shift distinguishable from zero, averaged across seeds -- or is the")
+    lines.append(f"per-seed direction-flipping already seen at n={n} (see")
+    lines.append("hysteresis_multiseed_stability.txt) evidence of a genuine null effect,")
+    lines.append("not just an unlucky minority of seeds?")
+    lines.append("")
+    lines.append(f"Settings: pop_size={pop_size}, n_gen={n_gen}, n_seeds={n}, paired design")
+    lines.append("(within-seed delta = frac_ON - frac_OFF, same seed used for both runs)")
+    lines.append("")
+    # lafesih_frac_off/_on are fractions in [0,1] (same convention as
+    # run_hysteresis_multiseed_stability_check()'s own `:>9.0%` prints
+    # above, which use Python's %-format specifier to do the x100
+    # conversion implicitly) -- pp (percentage points) below are always
+    # delta*100, and the mean/median/std lines below multiply explicitly
+    # rather than relying on a format-spec, since delta's raw scale
+    # (fractions of a percentage point) would otherwise silently render
+    # as e.g. "0.01pp" instead of the intended "+1.0pp".
+    lines.append(f"OFF share: mean={100*off.mean():.1f}%  median={100*np.median(off):.1f}%")
+    lines.append(f"ON  share: mean={100*on.mean():.1f}%  median={100*np.median(on):.1f}%")
+    lines.append(f"delta (ON-OFF): mean={100*delta.mean():+.2f}pp  median={100*np.median(delta):+.1f}pp  "
+                 f"std={100*delta.std(ddof=1):.2f}pp")
+    lines.append(f"seeds with ON>OFF: {int((delta > 0).sum())}/{n}   "
+                 f"ON==OFF: {int((delta == 0).sum())}/{n}   ON<OFF: {int((delta < 0).sum())}/{n}")
+    lines.append("")
+    lines.append(f"Paired t-test:          t={t_stat:.3f}, p={p_ttest:.4f}")
+    lines.append(f"Wilcoxon signed-rank:   W={w_stat:.3f}, p={p_wilcoxon:.4f}")
+    lines.append(f"Bootstrap 95% CI on mean delta ({n_boot} resamples): "
+                 f"[{100*ci_lo:+.2f}pp, {100*ci_hi:+.2f}pp]")
+    lines.append("")
+    if significant:
+        lines.append("RESULT: the ON-OFF shift IS statistically distinguishable from zero by")
+        lines.append("all three methods (both p<0.05, bootstrap CI excludes zero) at this")
+        lines.append(f"sample size (n={n}) -- there IS a real, if modest, average hysteresis")
+        lines.append("effect on material selection, on top of the seed-to-seed noise that")
+        lines.append("makes any SINGLE seed's direction unreliable on its own.")
+    else:
+        lines.append("RESULT: NO statistically distinguishable effect at this sample size")
+        lines.append(f"(n={n}). Both the paired t-test and the Wilcoxon signed-rank test fail")
+        lines.append("to reject the null of zero average shift (p>0.05), and the bootstrap 95%")
+        lines.append("CI on the mean delta straddles zero. Per this repo's own stated")
+        lines.append("standard (see this function's own docstring and the Phase-32 diagnostic")
+        lines.append("writeup that motivated it): this should be reported as 'no statistically")
+        lines.append("distinguishable effect of hysteresis on material selection at current")
+        lines.append("sample size', NOT as a hedged directional claim in either direction. The")
+        lines.append("original pop_size=32/n_gen=15/seed=1 finding (88% OFF -> 100% ON) was")
+        lines.append("one realization of search noise, not a real hysteresis-driven shift --")
+        lines.append("this does NOT mean hysteresis loss has no effect on any individual")
+        lines.append("design's own COP/cost (it clearly does, via AMRSystem._hysteresis_power_W(),")
+        lines.append("see core/amr_cycle.py), only that it is not large enough, at these")
+        lines.append("hysteresis_loss_J_per_kg magnitudes, to reliably move which MATERIAL")
+        lines.append("wins the Pareto-optimal-front competition against the alternatives.")
+    lines.append("")
+    lines.append("Caveat carried over unchanged from run_hysteresis_multiseed_stability_check()'s")
+    lines.append("own honesty flag: the hysteresis_loss_J_per_kg VALUES this whole comparison")
+    lines.append("depends on remain literature analogs for different exact compositions, not")
+    lines.append("measurements of the calibrated compositions themselves. A null result here")
+    lines.append("means 'no detectable effect AT THESE PLACEHOLDER MAGNITUDES', not 'hysteresis")
+    lines.append("loss is provably irrelevant to material selection at the true magnitudes' --")
+    lines.append("those could plausibly be several times larger or smaller (see e.g.")
+    lines.append("MNFEPSI_FIRST_ORDER's own block comment in core/first_order_mce.py, citing a")
+    lines.append("~3x composition-driven swing in a closely related system's Wy_peak).")
+
+    if out_path:
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        with open(out_path, "w") as f:
+            f.write("\n".join(lines) + "\n")
+
+    print()
+    print("\n".join(lines))
+    if out_path:
+        print(f"\nWrote {out_path}")
+
+    return {"per_seed": per_seed, "delta": delta.tolist(),
+            "t_stat": float(t_stat), "p_ttest": float(p_ttest),
+            "w_stat": float(w_stat), "p_wilcoxon": float(p_wilcoxon),
+            "bootstrap_ci_95": [float(ci_lo), float(ci_hi)],
+            "significant": significant}
 
 
 if __name__ == "__main__":

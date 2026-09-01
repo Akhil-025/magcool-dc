@@ -1590,6 +1590,145 @@ def run_magqueen_mass_sensitivity(masses_kg=(0.5, 1.0, 2.0, 5.0, 10.0), verbose=
     return results
 
 
+def validate_magqueen_masche2021_real_graded_bed(cycle_type="brayton"):
+    """REAL (not hypothetical, not composition-searched) reproduction of
+    MagQueen using its actual reported per-layer alloy compositions,
+    measured Curie temperatures, AND measured per-layer masses -- same
+    pattern as validate_maggie_real_graded_bed() above, one step better:
+    that function had to assume an EVEN mass split across its 4 layers
+    (Eriksen et al. only report the 1.7kg total); this device's own
+    primary source reports the per-layer mass directly, so no such
+    assumption is needed here.
+
+    This function and DTU_MagQueen_2018/validate_magqueen_graded_bed()
+    above describe the SAME physical prototype (both are literally named
+    "MagQueen") but are NOT reproductions of the same operating point or
+    even the same source tier, and should not be compared to each other
+    as if a "fix" of one produced the other:
+      - DTU_MagQueen_2018 (existing row/function): SECONDARY citation
+        (Greco, Aprea, Maiorino & Masselli 2019), itself citing an
+        unlocated 2018 conference source (Johra et al. 2019 / Dall'Olio
+        et al. 2018), describing HEAT PUMP mode at 1.6T/25K span, with
+        Qc=1200W/COP=4.0 DERIVED (not measured) via the Qh=Qc+W identity
+        applied to the paper's own reported Qh=1500W/COP_heating=5.
+      - This function: PRIMARY source, M. Masche, J. Liang, S. Dall'Olio,
+        K. Engelbrecht, C.R.H. Bahl, "Performance analysis of a
+        high-efficiency multi-bed active magnetic regenerator device,"
+        Applied Thermal Engineering 199 (2021) 117569 (now in this repo's
+        Papers/) -- COOLING mode, all three of span/Qc/COP DIRECTLY
+        measured together at one operating point, not derived. This is a
+        later, more complete, peer-reviewed characterization of the same
+        hardware than the 2018 conference-derived numbers, not a
+        correction of a wrong reading of the same paper.
+
+    Sources (both facts below from the same Masche et al. 2021 paper):
+      - Table 3: "Distribution of Curie temperatures, peak temperature
+        (Tpeak) ... and refrigerant mass across the regenerator bed" for
+        the ten La(Fe,Mn,Si)13Hy (CALORIVAC-HS) layers, hot to cold:
+          TCurie (K):  292.1  290.1  288.7  287.0  283.8
+                       282.6  280.6  278.4  275.8  273.1
+          Mass (g):     40.5   29.0   25.5   28.0   23.0
+                        22.5   19.0   21.0   25.0   28.8
+        (sums to 262.3g, matching the paper's own per-bed total of "about
+        262 g" -- Sec. 2.1 -- to within the table's own rounding; total
+        across all 13 beds = 3.41kg, also independently stated directly
+        in Sec. 2.3: "The total mass of the MCM is ms = 3.41 kg.")
+      - Sec. 3.3 (Fig. 9): at a hot reservoir temperature of 295 K
+        (the paper's own reported OPTIMUM Thot -- "the highest cooling
+        powers are obtained at a hot reservoir temperature of 295 K"),
+        cycle frequency 0.5 Hz, blow fractions 36%/36%, flow rate ~500
+        L/h (U=0.34): "a maximum cooling power of about 288 W at a
+        temperature span of 10.3 K could be achieved... the temperature
+        span and cooling COP were 10.3 K and 5.7, respectively." This is
+        also the paper's own peak second-law-efficiency point (20.6%),
+        internally self-consistent: COPideal=27.6 as reported, matching
+        Carnot T_cold/span = (295-10.3)/10.3 = 27.64 to within rounding.
+      - Field: device spec Table 2, "High field flux density: 1.44 T"
+        (the two-pole permanent magnet's actual maximum -- NOT the 1.6T
+        used by the unrelated 2018-conference-derived heat-pump-mode
+        row/function above, which may describe an earlier prototype
+        iteration or a misreported field in that secondary source; this
+        repo's corpus does not contain the original 2018 conference paper
+        to check directly).
+
+    T_cold_K = 295 - 10.3 = 284.7K, NOT validation_system.T_COLD_LAFESIH_K
+    (a generic fallback used elsewhere for LAFESIH_FAMILY rows without
+    their own directly-reported cold-side temperature) -- this device's
+    own T_hot IS directly reported, so no fallback is needed.
+
+    Modeling choice: La(Fe,Mn,Si)13Hy is the same first-order giant-MCE
+    material class LAFESIH_FAMILY/lafesih_composition_tuned_material()
+    were built for (unlike validate_maggie_real_graded_bed()'s Gd-Y
+    solid-solution layers, which are second-order and use
+    GADOLINIUM.with_Tc() instead) -- same simplifying assumption as
+    every other LAFESIH_FAMILY use in this module: only Tc is shifted
+    per layer, (A,B,C)/theta_D/M_molar held fixed at the single
+    LAFESIH_FIRST_ORDER calibration (see lafesih_composition_tuned_material()'s
+    own docstring for why this is a real, flagged simplification -- Si:H
+    ratio and hydrogenation level, not just Tc, are known to shift
+    |DeltaS_M| independently in this material class, and this repo's
+    corpus does not contain composition-specific Landau coefficients for
+    the ten individual CALORIVAC-HS layers actually used here).
+
+    fluid_mdot is calibrated (brentq) to reproduce the reported Qc=288W
+    exactly, then COP_cascade is compared to the reported COP=5.7 --
+    mirroring validate_astronautics_graded_bed()/
+    validate_maggie_real_graded_bed()'s own methodology.
+
+    shared_hardware=True: MagQueen's 13 beds are driven by ONE rotating
+    two-pole magnet and characterized as one combined-flow system in this
+    paper's own reported numbers (Sec. 2.1-2.2) -- same reasoning as
+    validate_maggie_real_graded_bed()'s own shared_hardware=True."""
+    T_hot_K = 295.0
+    span_K = 10.3
+    T_cold_K = T_hot_K - span_K
+    mu0H = 1.44
+    freq = 0.5
+    Qc_lit = 288.0
+    cop_lit = 5.7
+
+    # Table 3, hot-to-cold as tabulated; run_explicit_material_cascade
+    # wants coldest-stage-first (matches its T_local increment from
+    # T_cold_K up), same convention as validate_maggie_real_graded_bed().
+    layer_Tc_K_hot_to_cold = [292.1, 290.1, 288.7, 287.0, 283.8,
+                              282.6, 280.6, 278.4, 275.8, 273.1]
+    layer_mass_g_hot_to_cold = [40.5, 29.0, 25.5, 28.0, 23.0,
+                                22.5, 19.0, 21.0, 25.0, 28.8]
+
+    materials = [lafesih_composition_tuned_material(Tc)
+                 for Tc in reversed(layer_Tc_K_hot_to_cold)]
+    mass_per_stage_kg = [g / 1000.0 for g in reversed(layer_mass_g_hot_to_cold)]
+    n_stages = len(materials)
+
+    def qc_residual(mdot):
+        r = run_explicit_material_cascade(T_cold_K, span_K, materials, mu0H_max=mu0H,
+                                           mass_per_stage=mass_per_stage_kg, frequency=freq,
+                                           fluid_mdot=max(mdot, 1e-6), cycle_type=cycle_type,
+                                           shared_hardware=True)
+        return (r["Qc_W"] if r["feasible"] else 0.0) - Qc_lit
+
+    try:
+        mdot_cal = brentq(qc_residual, 1e-6, 5.0, xtol=1e-6)
+    except ValueError:
+        return {"feasible": False, "n_stages": n_stages,
+                "status": f"no calibration found (reported Qc={Qc_lit}W unreachable within "
+                f"mdot in [1e-6, 5.0] kg/s for the real 10-layer La(Fe,Mn,Si)13Hy bed at "
+                f"T_cold={T_cold_K}K, mu0H={mu0H}T, f={freq}Hz)"}
+
+    result = run_explicit_material_cascade(T_cold_K, span_K, materials, mu0H_max=mu0H,
+                                            mass_per_stage=mass_per_stage_kg, frequency=freq,
+                                            fluid_mdot=mdot_cal, cycle_type=cycle_type,
+                                            shared_hardware=True)
+    result["mdot_calibrated_kg_s"] = round(mdot_cal, 5)
+    result["Qc_lit_W"] = Qc_lit
+    result["COP_lit"] = cop_lit
+    result["T_cold_K"] = T_cold_K
+    result["mass_total_kg"] = round(sum(mass_per_stage_kg), 4)
+    if result["feasible"]:
+        result["COP_error_pct"] = round(100 * (result["COP_cascade"] - cop_lit) / cop_lit, 1)
+    return result
+
+
 def validate_risoe_dtu_graded_bed(n_stages=6, apply_correction=None,
                                    cycle_type="brayton", family=None):
     """Extends the graded-bed structural-fix pattern (ROADMAP.md Phase 9,

@@ -162,8 +162,11 @@ below, and `ROADMAP.md` for the full phase-by-phase reasoning.
 - **Phase 22** -- three sub-items: item 1 -- Gaussian
   inhomogeneous/polycrystalline Tc-broadening
   (`core/inhomogeneous_broadening.py`), which narrows the model's 1T
-  ΔT_ad overestimate but widens its 5T underestimate, a genuine trade-off
-  rather than a clean fix; item 2 -- an engineered multi-phase
+  ΔT_ad overestimate and (Phase 35 correction -- the 5T literature
+  reference value itself was wrong before this phase, see
+  `LIMITATIONS.md` Section 1.1) also narrows its 5T overestimate --
+  broadening helps both fields simultaneously, not a trade-off after
+  all; item 2 -- an engineered multi-phase
   nanocomposite material family (`core/nanocomposite_material.py`), which
   underperforms a perfectly-tuned single phase at its own design span but
   uniquely survives at an off-design span where the sharply-tuned single
@@ -232,7 +235,7 @@ below, and `ROADMAP.md` for the full phase-by-phase reasoning.
 | `core/fluid_mce_cycle.py` | **Phase 20 addition**: `FerrofluidMCESystem`, a sibling to `AMRSystem` for magnetocaloric fluids/ferrofluids as a continuous-flow working body (no packed-bed regenerator) — `krieger_dougherty_viscosity()`, `suspension_delta_T_adiabatic()` (mixture heat-capacity dilution), `pumping_power_pipe_flow()` (Darcy-Weisbach); `eta_2nd_law_fluid` is an explicitly uncalibrated constant (no benchmark device exists for this working-body class) |
 | `core/fluid_mce_analysis.py` | **Phase 20 addition**: `volume_fraction_sweep()` (finds an interior COP optimum near phi≈0.10-0.20) and `compare_to_solid_amr_and_liquid_cooling()` (headline finding: no regeneration collapses usable span to well under a Kelvin vs. solid AMR at the same field/flow) → `results/fluid_mce_analysis.txt` |
 | `core/passive_regenerator_analysis.py` | **Phase 21 addition**: `compare_candidate_materials()`/`span_sweep()` for passive/hybrid magnetic regenerators — a conventional gas cycle's internal regenerator loaded with an MCE material to exploit its Curie-point heat-capacity anomaly, built by recombining this repo's own existing material and baseline-COP models (Tishin & Spichkin's relevant chapter is an image-only PDF, unreadable here) → `results/passive_regenerator_analysis.txt` |
-| `core/inhomogeneous_broadening.py` | **Phase 22 item 1 addition**: `BroadenedMagnetocaloricMaterial` (Gauss-Hermite-quadrature ensemble over a Gaussian-distributed grain-to-grain Curie temperature, `with_Tc()` on `MagnetocaloricMaterial`) — sweeping `sigma_Tc` narrows the mean-field model's 1T ΔT_ad overestimate but widens its 5T underestimate, a genuine trade-off rather than a clean fix → `results/inhomogeneous_broadening.txt` |
+| `core/inhomogeneous_broadening.py` | **Phase 22 item 1 addition**: `BroadenedMagnetocaloricMaterial` (Gauss-Hermite-quadrature ensemble over a Gaussian-distributed grain-to-grain Curie temperature, `with_Tc()` on `MagnetocaloricMaterial`) — sweeping `sigma_Tc` narrows the mean-field model's 1T and 5T ΔT_ad overestimate simultaneously (Phase 35 correction: previously reported as a trade-off, which was an artifact of a wrong 5T literature reference value -- see `LIMITATIONS.md` Section 1.1) → `results/inhomogeneous_broadening.txt` |
 | `core/nanocomposite_material.py` | **Phase 22 item 2 addition**: `WeightedMaterialEnsemble`/`nanocomposite_tuned_material()` — a 3-phase triangular-weighted blend of composition-tuned La(Fe,Si)13Hy phases mixed at the ΔT_ad level (not entropy/heat-capacity, since `dTad_correction` is a whole-ratio correction); underperforms a perfectly-tuned single phase at its own design span, but uniquely survives at an off-design span where the single phase collapses to zero → `results/nanocomposite_robustness.txt` |
 | `core/optimize.py` | NSGA-III multi-objective optimization — **Phase 15: 7 design variables (field, frequency, flow, mass, effectiveness, blow fraction, + new particle diameter), material now co-optimized as a design choice (Gd + 3 composition-tunable giant-MCE families, each run separately through NSGA-III and merged post-hoc into one globally non-dominated Pareto front — see `ROADMAP.md` Phase 15 for why "merge post-hoc" was chosen over a native mixed-variable formulation); cost objective upgraded to `economics.bom_cost()` (family-specific MCM pricing + SMM yoke term). Phase 19: `cost_index()` gained an opt-in `use_geometric_magnet_mass=False` flag to use the super-linear Halbach-geometry magnet-mass model instead of the flat $/T ratio** |
 | `core/cascade.py` | Multi-stage cascade AMR design; Curie-graded beds pluggable across Gd5Si2Ge2, La(Fe,Si)13Hy, and (Mn,Fe)2(P,Si) families — **Phase 16-18 follow-up: `cycle_type` threaded through `run_graded_cascade()`/`validate_astronautics_graded_bed()`; `run_astronautics_cycle_type_sensitivity()` finds the Ericsson reclassification does NOT narrow the Astronautics graded-bed's -81.1% error, unlike the single-bed DTU case** |
@@ -453,8 +456,11 @@ still modest — COP gain (+0.24%), shrinking as span widens.
 
 **Phase 22 — three sub-items**: item 1's Gaussian Tc-broadening
 (`core/inhomogeneous_broadening.py`) narrows the mean-field model's 1T
-ΔT_ad overestimate (+48.9%→+20.9% at σ_Tc=5K) but widens its 5T
-underestimate (-7.5%→-14.2%) — a genuine trade-off, not a clean fix. Item
+ΔT_ad overestimate (+48.9%→+20.9% at σ_Tc=5K) and (Phase 35 correction —
+see `LIMITATIONS.md` Section 1.1 for why the 5T literature reference
+value itself was wrong before this phase) ALSO narrows its 5T
+overestimate (+9.8%→+1.8% at the same σ_Tc=5K) — broadening turns out to
+help both fields simultaneously, not a trade-off after all. Item
 2's nanocomposite family (`core/nanocomposite_material.py`) underperforms
 a perfectly-tuned single La(Fe,Si)13Hy phase at its own design span, but
 is the only candidate that still delivers cooling capacity at an
@@ -947,11 +953,20 @@ required Phase 3 upgrade, not silently patched.
 |---|---|---|---|
 | 1 T | 3.2 K | 4.76 K | +48.9% |
 | 2 T | 5.8 K | 7.49 K | +29.2% |
-| 5 T | 14.6 K | 13.51 K | -7.5% |
+| 5 T | 12.3 K | 13.51 K | +9.8% |
 
 Mean-field theory is known to overpredict ΔT_ad near T_c because it
 neglects short-range spin correlations / critical fluctuations (de Oliveira
-& von Ranke, *Phys. Rep.* 489 (2010) 89-159).
+& von Ranke, *Phys. Rep.* 489 (2010) 89-159). Phase 35 note: the 5 T row
+was previously 14.6 K / 13.51 K / **-7.5%** (an apparent underestimate) --
+corrected after a pixel-calibrated re-digitization of Dan'kov et al.'s own
+Fig. 10 found the correct value is 12.3 K, not 14.6 K (see
+`LIMITATIONS.md` Section 1.1 for the full digitization methodology and
+cross-validation). The corrected table above is now monotonic and
+internally consistent with the stated theory -- the model overpredicts at
+every field, with the relative error shrinking as field increases (a
+textbook mean-field-near-a-critical-point pattern), rather than
+mysteriously flipping sign at 5 T only.
 
 <a id="repo-layout"></a>
 ## Repo layout

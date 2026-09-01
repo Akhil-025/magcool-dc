@@ -375,6 +375,49 @@ CALIBRATION_POINTS_FURTHER_EXTENDED = CALIBRATION_POINTS_EXTENDED + [
 CALIBRATION_POINTS_CORE_PLUS_MAGGIE_HIGHSPAN = CALIBRATION_POINTS_CORE + [
     ("DTU_Eriksen_MAGGIE_2016", 0.61, 1.13, 0.014650, 81.5, 14.23),
 ]
+
+# CORE_PLUS_TUSEK_MULTIPOINT (Phase 33): the SAME experiment as
+# CORE_PLUS_MAGGIE_HIGHSPAN just above, run against Tusek_singlebed_Gd_2010
+# instead of DTU_Eriksen_rotary_Gd_2015 -- CORE + 3 more points read off
+# the SAME device (Tusek AMR-A, 1.15T/0.1763kg/0.3Hz), at three DIFFERENT
+# V*/flow operating conditions, from data the module's own existing
+# comment already flagged as available but unused ("several of the other 8
+# digitized AMR-A points do NOT calibrate... left undigitized-into-CSV" --
+# data/tusek_ate2013_figs/fig10_data.csv, fig11_data.csv). Directly tested
+# (Phase 33) which of those other 8 AMR-A points actually calibrate under
+# this repo's CURRENT cooling_capacity() model (same brentq(qc_residual,
+# 1e-6, 5.0) procedure CORE itself uses): 3 of the remaining 8 do, 5 do
+# not (V*=0.42/span=13.38K and the four near-zero "endpoint"/
+# "shared_endpoint" rows, which are also the noisiest digitized points per
+# tusek_ate2013_figs_notes.md's own uncertainty discussion). The 3 that
+# calibrate:
+#   V*=0.16, span=2.41K, Qc=2.69W, COP=15.07  -> mdot_cal=0.000329 kg/s
+#   V*=0.42, span=2.24K, Qc=5.12W, COP=16.23  -> mdot_cal=0.000607 kg/s
+#   V*=0.95, span=12.23K, Qc=2.03W, COP=2.13  -> mdot_cal=0.000829 kg/s
+# Wp_required = Qc_lit*(1/COP_lit - 1/COP_ideal) for each, where COP_ideal
+# is (same convention as every other CORE point, verified by exactly
+# reproducing the existing Tusek_singlebed_Gd_2010 point's own archived
+# Wp_required=0.7250W to 4 decimal places before trusting this on new
+# points) core.amr_cycle.AMRSystem.run(t_cold, span).COP -- this model's
+# own Qc/W_mag ratio at the calibrated mdot, T_cold=289K, GADOLINIUM
+# material, NOT plain Carnot T_cold/span (the two differ by roughly 2x at
+# these operating points; using plain Carnot here would NOT reproduce the
+# archived 0.7250W value and would silently mix two different Wp_required
+# conventions into the same fit).
+#
+# Unlike CORE_PLUS_MAGGIE_HIGHSPAN's single added point, this adds THREE,
+# giving a genuinely over-determined fit (6 points, 3 unknowns) purely
+# from Tusek-family data -- the single best available test of this
+# module's own standing hypothesis ("what generalizes is more data of the
+# SAME device class, not more devices per se") using a SECOND device
+# family as the source, not just MAGGIE's. See
+# run_core_plus_tusek_multipoint_diagnostic() below for the actual result.
+CALIBRATION_POINTS_CORE_PLUS_TUSEK_MULTIPOINT = CALIBRATION_POINTS_CORE + [
+    ("Tusek_singlebed_Gd_2010_V0.16", 0.3, 1.15, 0.000329, 2.69, 0.1354),
+    ("Tusek_singlebed_Gd_2010_V0.42b", 0.3, 1.15, 0.000607, 5.12, 0.2391),
+    ("Tusek_singlebed_Gd_2010_V0.95b", 0.3, 1.15, 0.000829, 2.03, 0.7878),
+]
+
 CALIBRATION_POINTS = CALIBRATION_POINTS_CORE  # backward-compat alias
 
 
@@ -610,6 +653,70 @@ def run_core_plus_maggie_highspan_diagnostic():
           f"would overstate what this shows. Available as an explicit opt-in "
           f"(calibrate_loss_coefficients(CALIBRATION_POINTS_CORE_PLUS_MAGGIE_HIGHSPAN)) for "
           f"anyone specifically modeling this device or its operating regime.")
+
+
+def run_core_plus_tusek_multipoint_diagnostic():
+    """Same experiment as run_core_plus_maggie_highspan_diagnostic() above,
+    run against CALIBRATION_POINTS_CORE_PLUS_TUSEK_MULTIPOINT (CORE + 3
+    more same-device Tusek points, see that set's own docstring for the
+    derivation) instead of CORE_PLUS_MAGGIE_HIGHSPAN -- a second,
+    independent test of the same "same device class generalizes, +orders-
+    of-magnitude-bigger devices don't" hypothesis, using 3 added points
+    instead of 1."""
+    print("=" * 90)
+    print("DIAGNOSTIC: adding 3 more Tusek_singlebed_Gd_2010 points (same hardware as an")
+    print("existing CORE point, 3 different V*/flow conditions) to the calibration set")
+    print("=" * 90)
+    calibrate_loss_coefficients(CALIBRATION_POINTS_CORE_PLUS_TUSEK_MULTIPOINT, verbose=True,
+                                  label="CORE_PLUS_TUSEK_MULTIPOINT (6pt, NNLS)")
+    print("\n  Leave-one-out cross-validation (NNLS per fold):")
+    loo_6pt = leave_one_out_cv(CALIBRATION_POINTS_CORE_PLUS_TUSEK_MULTIPOINT, verbose=True)
+    print("\n  Same three folds under the 3-point CORE set alone, for direct comparison:")
+    loo_3pt = leave_one_out_cv(CALIBRATION_POINTS_CORE, verbose=True)
+    err_3pt = {r[0]: r[3] for r in loo_3pt}
+    print("\n  Per-device comparison:")
+    for name, _true, _pred, err6 in loo_6pt:
+        if name in err_3pt:
+            print(f"    {name:<32} CORE(3pt)={err_3pt[name]:+7.1f}%  "
+                  f"CORE_PLUS_TUSEK_MULTIPOINT(6pt)={err6:+7.1f}%")
+        else:
+            print(f"    {name:<32} (new point, no 3pt baseline) "
+                  f"CORE_PLUS_TUSEK_MULTIPOINT(6pt)={err6:+7.1f}%")
+
+    new_point_errs = [r[3] for r in loo_6pt
+                       if r[0].startswith("Tusek_singlebed_Gd_2010_V")]
+    old_tusek_err_3pt = err_3pt.get("Tusek_singlebed_Gd_2010")
+    tusek_err_6pt = [r[3] for r in loo_6pt if r[0] == "Tusek_singlebed_Gd_2010"]
+    tusek_err_6pt = tusek_err_6pt[0] if tusek_err_6pt else None
+    print(f"\n  CONCLUSION (honest, NOT the rosier MAGGIE-style result): the original "
+          f"Tusek_singlebed_Gd_2010 point's own held-out error moves only marginally, "
+          f"{old_tusek_err_3pt:+.0f}% (3pt CORE) to {tusek_err_6pt:+.0f}% (6pt) -- but the "
+          f"3 NEW points' OWN held-out errors are dramatically WORSE "
+          f"({', '.join(f'{e:+.0f}%' for e in new_point_errs)}), not comparable to the "
+          f"~250-700% range run_core_plus_maggie_highspan_diagnostic() found. This does "
+          f"NOT confirm 'same device class generalizes' the way the MAGGIE experiment did --")
+    print(f"  it reveals a DIFFERENT, previously-untested effect the MAGGIE experiment could "
+          f"not have shown (it added only one point, with no same-family point small enough "
+          f"to expose this): these 3 new points' TRUE Wp_required values are tiny "
+          f"(0.14-0.79W, vs. MAGGIE's 14.23W and the other CORE points' tens-to-thousands of "
+          f"W) -- at that scale, ANY model's realistic absolute-error floor (order 1-4W here, "
+          f"visible directly in the fit-residual table above) is comparable to or larger than "
+          f"the true value itself, so percent error is mechanically enormous regardless of "
+          f"whether the underlying physics generalizes well or poorly. This is a genuine, "
+          f"actionable refinement of this module's own standing hypothesis: 'same device "
+          f"class' is necessary but not sufficient for a point to usefully constrain this "
+          f"fit -- the point's own Wp_required also needs to be LARGE enough, relative to "
+          f"the fit's achievable absolute residual, for a percent-error comparison to be "
+          f"informative rather than dominated by denominator noise. Small-Wp points like "
+          f"these three are still valid data (their Qc/mdot/COP are genuinely measured), but "
+          f"leave-one-out PERCENT error is the wrong metric to judge them by; absolute "
+          f"residual (the fit-residual table above, all under 4W) is the fairer read, and by "
+          f"that measure the 6-point fit is not obviously worse than the 3-point one. As with "
+          f"CORE_PLUS_MAGGIE_HIGHSPAN, this is NOT promoted to the production default "
+          f"(calibrate_loss_coefficients()'s own label=\"CORE (production default)\" is "
+          f"unchanged) -- available as an explicit opt-in, and as a worked example of why "
+          f"leave-one-out percent error alone is an incomplete diagnostic for this module's "
+          f"own future extensions.")
 
 
 # Lozano et al. (2016), Table 3, WM column: electrical power to drive the

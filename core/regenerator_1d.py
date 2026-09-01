@@ -557,6 +557,24 @@ def simulate_amr_1d(material, mu0H_max, mass_total, frequency, mdot,
     result = {"converged": converged, "n_cycles": n_cycles,
               "NTU_total": round(float(NTU_total), 3),
               "NTU_node": round(float(NTU_node), 4),
+              "U_bulk": round(float(ntu_result["U"]), 4),
+              # Phase 33 addition: ntu_result["U"] (Nielsen, Tusek, Engelbrecht,
+              # Schopfer, Kitanovski, Bahl, Smith, Pryds & Poredos, "Review on
+              # numerical modeling of active magnetic regenerators for room
+              # temperature applications," Int. J. Refrig. 34 (2011) 603-616 --
+              # now in this repo's Papers/ -- Eq. (16): utilization
+              # Phi = mdot_f*cf*tau2/(ms*cs), "related to the frequency of the
+              # operation... a lower frequency means a larger influence of the
+              # longitudinal thermal conduction") was ALREADY computed by
+              # core.thermal.regenerator_effectiveness() (called just above as
+              # `ntu_result`) but silently discarded here -- only NTU_total was
+              # pulled out of that dict into this function's own return value.
+              # This is a PURELY ADDITIVE fix (new dict key; every existing key
+              # is unchanged, so no existing caller's behavior changes) that
+              # surfaces it, motivated by this module's own honesty flag #2
+              # ("does span depend systematically on utilization, not just
+              # NTU?") -- see run_convergence_and_utilization_diagnostic()
+              # below, which is the first caller to actually use this key.
               "n_substeps": n_substeps,
               "T_nodes_K": T.copy(),
               "span_history_last10": [round(s, 3) for s in span_history[-10:]]}
@@ -814,6 +832,207 @@ def validate_against_benchmarks(verbose=True,
     if verbose:
         print(f"Wrote {out_path}")
     return results
+
+
+def run_convergence_and_utilization_diagnostic(
+        out_path="results/regenerator_1d_convergence_diagnostic.txt",
+        n_nodes_sweep=(10, 20, 40, 80), verbose=True):
+    """Phase 33 diagnostic, run BEFORE any further physics changes to this
+    module (per this repo's own established discipline -- see e.g. Phase
+    31's own "isolate axial conductivity as a suspect before touching
+    anything else" precedent): isolates WHICH of two candidate failure
+    points is actually responsible for the direction-inconsistent error
+    validate_against_benchmarks() reports (Tusek -96.9%, Lozano +111.1%,
+    DTU/MAGGIE -62.0%), on the same three directly-measured no-load-span
+    benchmark rows that function uses, at EACH row's own already-
+    calibrated best mdot (from no_load_span()'s own search, reused here
+    rather than re-searched, so this diagnostic's numbers are directly
+    comparable to validate_against_benchmarks()'s own).
+
+    Two checks, in order of cost (cheap numerics check first):
+
+    1. n_nodes CONVERGENCE. If span_K keeps changing materially as
+       n_nodes increases (10->20->40->80), the model has a numerical
+       discretization problem -- NOT a physics/calibration one -- and
+       reading err_1d_pct at any FIXED n_nodes (this module's own default,
+       n_nodes=20, used everywhere else including
+       validate_against_benchmarks()) would be comparing an
+       under-resolved number to a literature value, conflating numerics
+       error with modeling error. A converged model should show span_K
+       change by much less between 40->80 than between 10->20.
+
+    2. BULK UTILIZATION Phi (Nielsen et al. 2011, Int. J. Refrig. 34
+       (2011) 603-616 Eq. (16), now in this repo's Papers/ -- see
+       simulate_amr_1d()'s own U_bulk comment for the full citation) at
+       each device's own calibrated mdot, reported alongside NTU_total.
+       Nielsen et al.'s own review treats span as jointly a function of
+       BOTH NTU and utilization, not NTU alone -- if the three benchmarks'
+       own calibrated utilizations differ by an order of magnitude or
+       more from each other, that is direct, quantitative evidence (not
+       just a plausible-sounding hypothesis) that this module's single
+       NTU-only accounting is comparing devices that are NOT in the same
+       operating regime, which would explain direction-inconsistent
+       error without needing any further physics change to identify the
+       CAUSE (a fix would still be separate future work -- this
+       diagnostic's job is only to confirm or rule out this specific
+       candidate explanation with real numbers).
+
+    Does NOT change simulate_amr_1d()'s own DEFAULT n_nodes=20 anywhere
+    else in this codebase -- this is read-only diagnostic reporting, same
+    discipline as every other validate_*/run_*_diagnostic function in
+    this module (no caller elsewhere is affected by running this)."""
+    from core.validation_system import load_benchmarks, _material_for_row, _t_cold_for_row
+
+    rows = load_benchmarks()
+    noload_rows = [r for r in rows if float(r["Qc_W"]) == 0.0 and not r["COP"] and float(r["span_K"]) > 0]
+
+    lines = ["=" * 100,
+             "1-D TRANSIENT REGENERATOR MODEL -- n_nodes CONVERGENCE + BULK UTILIZATION",
+             "DIAGNOSTIC (Phase 33, see this function's own docstring for what each check",
+             "isolates and why, before any further physics change to this module)",
+             "=" * 100, ""]
+
+    convergence_results = []
+    utilization_results = []
+    for row in noload_rows:
+        material = _material_for_row(row)
+        t_cold = _t_cold_for_row(row)
+        mu0H = float(row["mu0H_T"])
+        mass = float(row["mass_MCM_kg"]) if row["mass_MCM_kg"] else 1.0
+        freq = float(row["frequency_Hz"]) if row["frequency_Hz"] else 1.0
+        span_lit = float(row["span_K"])
+
+        # Reuse the SAME calibrated best mdot validate_against_benchmarks()
+        # itself uses (no_load_span()'s own search, at this module's
+        # n_nodes=20 default) -- both checks below hold mdot fixed at this
+        # value, changing only n_nodes (check 1) or nothing at all, just
+        # reporting U_bulk (check 2), so results are directly comparable
+        # to validate_against_benchmarks()'s own err_1d_pct numbers.
+        r20 = no_load_span(material, mu0H, mass, freq, T_K_for_ntu=t_cold + span_lit / 2.0)
+        mdot_best = r20["mdot_kg_s"]
+
+        lines.append(f"--- {row['device']} (span_lit={span_lit:.1f}K, calibrated "
+                     f"mdot={mdot_best:.5f}kg/s) ---")
+
+        lines.append(f"  Utilization Phi (Nielsen et al. 2011 Eq. 16) at this mdot: "
+                     f"U_bulk={r20['U_bulk']:.4f}   NTU_total={r20['NTU_total']:.2f}")
+        utilization_results.append({"device": row["device"], "mdot_kg_s": mdot_best,
+                                     "U_bulk": r20["U_bulk"], "NTU_total": r20["NTU_total"],
+                                     "span_lit_K": span_lit})
+
+        lines.append(f"  {'n_nodes':>8} {'span_K':>10} {'delta_vs_prev':>16}")
+        prev_span = None
+        row_convergence = []
+        for nn in n_nodes_sweep:
+            r = simulate_amr_1d(material, mu0H, mass, freq, mdot_best, n_nodes=nn,
+                                 T_K_for_ntu=t_cold + span_lit / 2.0,
+                                 max_cycles=1200, tol=3e-3)
+            delta_str = f"{r['span_K'] - prev_span:+.3f}K" if prev_span is not None else "--"
+            lines.append(f"  {nn:>8} {r['span_K']:>9.3f}K {delta_str:>16}")
+            row_convergence.append({"n_nodes": nn, "span_K": r["span_K"]})
+            prev_span = r["span_K"]
+        lines.append("")
+        convergence_results.append({"device": row["device"], "sweep": row_convergence})
+
+    # Convergence verdict: comparing only the FIRST and LAST doubling's
+    # |delta| (as an earlier version of this function did) is NOT
+    # sufficient -- it can mislabel a WILDLY OSCILLATING, non-monotonic
+    # sequence as "converging" whenever the last swing happens to be
+    # smaller than the first by coincidence, even if the sequence swung
+    # up and down by many multiples of the eventual answer in between
+    # (confirmed happening in practice: an earlier run of this exact
+    # function, before this fix, labeled Lozano_POLO_UFSC_2016_maxspan
+    # "CONVERGING" from a span_K sequence of 3.41 -> 25.33 -> 9.59 ->
+    # 12.31K -- a first delta of +21.9K, then -15.7K, then +2.7K -- which
+    # is genuinely chaotic/non-monotonic across this n_nodes range, not
+    # smoothly settling, even though |+2.7K| < |+21.9K| made the OLD
+    # first-vs-last check say "CONVERGING"). This function instead checks
+    # (a) every delta has the SAME SIGN (strictly monotonic -- no
+    # overshoot/oscillation at all) AND (b) |delta| shrinks at every step,
+    # not just from first to last -- both must hold for "CONVERGING".
+    lines.append("-" * 100)
+    lines.append("CONVERGENCE VERDICT (per device: are ALL successive deltas the same sign AND")
+    lines.append("shrinking in magnitude at EVERY step, not just from first to last -- a")
+    lines.append("first-vs-last-only check can mislabel a wildly oscillating, non-monotonic")
+    lines.append("sequence as \"converging\" whenever the final swing is coincidentally smaller")
+    lines.append("than the first one, even with huge swings in between):")
+    any_not_converging = False
+    for cr in convergence_results:
+        sweep = cr["sweep"]
+        deltas = [sweep[i + 1]["span_K"] - sweep[i]["span_K"] for i in range(len(sweep) - 1)]
+        signs = [1 if d > 0 else (-1 if d < 0 else 0) for d in deltas]
+        same_sign = len(set(s for s in signs if s != 0)) <= 1
+        abs_deltas = [abs(d) for d in deltas]
+        strictly_shrinking = all(abs_deltas[i + 1] < abs_deltas[i] for i in range(len(abs_deltas) - 1))
+        converging = same_sign and strictly_shrinking
+        any_not_converging = any_not_converging or not converging
+        delta_str = " -> ".join(f"{d:+.2f}K" for d in deltas)
+        verdict = "CONVERGING (monotonic, shrinking)" if converging else \
+            ("NOT MONOTONIC (oscillating -- sign changes across the sweep, NOT just "
+             "coincidentally-smaller endpoints)" if not same_sign else
+             "MONOTONIC BUT NOT YET SHRINKING AT EVERY STEP")
+        lines.append(f"  {cr['device']:<38} deltas: {delta_str}")
+        lines.append(f"    -> {verdict}")
+    lines.append("")
+    if any_not_converging:
+        lines.append("At least one device's span_K has NOT clearly settled by n_nodes=80 -- ")
+        lines.append("err_1d_pct in validate_against_benchmarks() (computed at this module's ")
+        lines.append("n_nodes=20 default) for that device may be partly a numerics artifact, ")
+        lines.append("not purely a physics/calibration gap. Rerun that device's own row at ")
+        lines.append("higher n_nodes before drawing further physics conclusions from it.")
+    else:
+        lines.append("Every device's span_K sequence is strictly monotonic AND shrinking at ")
+        lines.append("every step from n_nodes=10 to 80 (no oscillation, no sign changes) -- ")
+        lines.append("validate_against_benchmarks()'s n_nodes=20 default is NOT the dominant ")
+        lines.append("source of its reported direction-inconsistent error; this rules OUT ")
+        lines.append("candidate explanation #1 (numerical discretization) and points back ")
+        lines.append("toward the physics/calibration candidates (utilization regime, ")
+        lines.append("single-blow reference asymmetry) -- see the utilization spread below.")
+    lines.append("")
+
+    u_vals = [u["U_bulk"] for u in utilization_results]
+    u_min, u_max = min(u_vals), max(u_vals)
+    lines.append("UTILIZATION SPREAD VERDICT:")
+    lines.append(f"  Range across the {len(u_vals)} benchmarks' own calibrated operating "
+                 f"points: U_bulk = {u_min:.4f} to {u_max:.4f} "
+                 f"({u_max / u_min if u_min > 0 else float('inf'):.1f}x spread)")
+    for u in utilization_results:
+        lines.append(f"    {u['device']:<38} U_bulk={u['U_bulk']:.4f}  "
+                     f"NTU_total={u['NTU_total']:.2f}  (lit. span={u['span_lit_K']:.1f}K)")
+    lines.append("")
+    if u_min > 0 and (u_max / u_min) > 3.0:
+        lines.append(f"The {u_max / u_min:.1f}x spread in calibrated utilization across these ")
+        lines.append("three benchmarks IS large enough to be a genuine, quantitative candidate ")
+        lines.append("explanation for direction-inconsistent error, consistent with (not yet a ")
+        lines.append("proof of causation for) Nielsen et al. (2011)'s own framing that span is a ")
+        lines.append("joint function of NTU AND utilization, not NTU alone -- this module's ")
+        lines.append("no_load_span() search selects mdot purely to MAXIMIZE span_K, with no ")
+        lines.append("constraint tying the resulting utilization across devices to a common ")
+        lines.append("regime, so three devices at three very different utilizations being ")
+        lines.append("compared as if NTU_total alone should predict a consistent relative error ")
+        lines.append("is not obviously a fair comparison. This does NOT by itself fix the ")
+        lines.append("direction-inconsistent error -- it identifies utilization-regime mismatch ")
+        lines.append("as the most evidence-backed remaining candidate (of the four this module's ")
+        lines.append("own docstring lists) for follow-up physics work, in preference to further ")
+        lines.append("tuning the axial-conductivity constant (already tried twice, see Phase 31).")
+    else:
+        lines.append("Utilization spread across these three benchmarks is NOT large -- this ")
+        lines.append("specific candidate explanation is not well-supported by this data; the ")
+        lines.append("single-blow reference/boundary-condition-asymmetry candidate (this ")
+        lines.append("module's own docstring, candidate #3) remains the most likely unexplored ")
+        lines.append("lead.")
+
+    if verbose:
+        for line in lines:
+            print(line)
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    with open(out_path, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    if verbose:
+        print(f"\nWrote {out_path}")
+
+    return {"convergence": convergence_results, "utilization": utilization_results,
+            "any_not_converging": any_not_converging}
 
 
 def regenerative_span_cap(material, mu0H_max, mass_total, frequency, **kwargs):

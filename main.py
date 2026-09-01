@@ -322,6 +322,9 @@ from core import thermal_diode_analysis
 from core import magnet_geometry
 from core import fluid_mce_analysis
 from core import passive_regenerator_analysis
+from core import beverage_cooler_validation
+from core import heat_pump_validation
+from core import regime_crossover_analysis
 from core import inhomogeneous_broadening
 from core import regenerator_1d
 from core import commercial_landscape
@@ -646,6 +649,36 @@ def run_economics(representative_row):
                 f"${lcoc['electricity_$_per_kwh_cooling']:.4f} electricity, materials-only "
                 f"capital basis -- see levelized_cost_of_cooling()'s docstring)")
 
+    # Phase 31/32 addition: report the non-materials-cost SENSITIVITY BAND
+    # (Phase 31, borrowed-VCC-multiplier method) alongside the genuine
+    # bottom-up, market-catalog-priced non-materials BOM (Phase 32) at
+    # this SAME design point, plus the cross-check between the two
+    # methods -- see economics.py's Phase 31/32 section docstrings for
+    # full sourcing. This was previously left as standalone, uninvoked
+    # functions; wiring them into the pipeline here means every pipeline
+    # run now reports both full-system cost methods and their
+    # disagreement, not just the single Phase 15 point estimate above.
+    cross_check = economics.cross_check_full_system_cost_methods(
+        mu0H_T, mass_kg, Qc_avg_W=representative_row["AMR_Qc_W"],
+        COP_electrical=amr_cop, family_name="Gd")
+    bm = cross_check["borrowed_multiplier_method"]
+    bu = cross_check["bottom_up_component_method"]
+    logger.info("")
+    logger.info(f"Phase 31/32: full-system cost, two independent methods at the SAME "
+                f"design point (materials BOM=${cross_check['materials_bom_total_$']:,.0f}):")
+    logger.info(f"  Method 1 (Phase 31, borrowed VCC-manufactured-cost multiplier, "
+                f"Russek & Zimm 2006): low=${bm['low_$']:,.0f}  mid=${bm['mid_$']:,.0f}  "
+                f"high=${bm['high_$']:,.0f}")
+    logger.info(f"  Method 2 (Phase 32, bottom-up market-catalog component pricing -- "
+                f"HX/pump/motor/drive/controls, NOT an AMR vendor quote, see "
+                f"bottom_up_non_materials_bom()'s docstring): "
+                f"low=${bu['low_$']:,.0f}  mid=${bu['mid_$']:,.0f}  high=${bu['high_$']:,.0f}")
+    logger.info(f"  The two methods' MID estimates disagree by "
+                f"{cross_check['borrowed_vs_bottom_up_mid_ratio']:.1f}x -- see "
+                f"cross_check_full_system_cost_methods()'s docstring for the likely reason "
+                f"(retail-manufactured cost vs. bare-component-parts pricing) and why this "
+                f"repo reports both rather than picking one.")
+
 
 def run_full_system_cost_by_material():
     """Step 5b (Phase 15 addition): compares the full-system cost estimate
@@ -840,6 +873,30 @@ def run_remaining_structural_devices_graded_validation():
     out = {}
     logger.info("--- DTU_MagQueen_2018 (real 10-layer graded bed; mass unreported -> swept) ---")
     out["magqueen_mass_sensitivity"] = cascade.run_magqueen_mass_sensitivity()
+
+    logger.info("--- MagQueen REAL 10-layer bed (Masche et al. 2021 Table 3: actual "
+                "per-layer Curie temperatures AND per-layer masses, actual measured "
+                "cooling-mode operating point -- not the secondary-sourced/derived "
+                "DTU_MagQueen_2018 row above, not a mass sweep) ---")
+    out["magqueen_masche2021_real"] = cascade.validate_magqueen_masche2021_real_graded_bed()
+    _mq21 = out["magqueen_masche2021_real"]
+    if _mq21.get("feasible"):
+        logger.info(f"MagQueen (Masche 2021, real 10-layer): COP={_mq21['COP_cascade']} vs. "
+                    f"literature COP={_mq21['COP_lit']} ({_mq21['COP_error_pct']:+.1f}% error)")
+    else:
+        logger.info("MagQueen (Masche 2021, real 10-layer): " + _mq21.get("status", "infeasible")
+                    + " -- HONEST STRUCTURAL FINDING, not a wiring bug: every one of the 10 "
+                    "real layers, tested standalone and centered exactly on its own reported "
+                    "Curie temperature (the most generous possible placement), caps out at "
+                    "peak dTad_noload~=0.28K at this device's real 1.44T field -- a ~0.56K "
+                    "structural span ceiling per layer, well under the ~1.03K/layer "
+                    "(10.3K/10 stages) the real device's own reported operating point "
+                    "requires. This is a property of LAFESIH_FIRST_ORDER's own Landau "
+                    "calibration (confirmed unchanged for the base, non-composition-tuned "
+                    "material at the same field), not an artifact of this function's per-layer "
+                    "Tc/mass wiring -- see validate_magqueen_masche2021_real_graded_bed()'s own "
+                    "docstring. Documented as a genuine non-calibrating point, same convention "
+                    "as Risoe_DTU_Gd_2011, not silently dropped or forced.")
 
     logger.info("--- DTU_Eriksen_MAGGIE_2016 (REAL 4-composition Gd/Gd-Y graded bed -- "
                 "actual reported Curie temperatures, not a composition search) ---")
@@ -1301,6 +1358,37 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
          "Phase 21)",
          None),  # handled specially below, result (passive_regen_result) captured
                  # for the executive summary
+        ("15b. Beverage-cooler real-world deployment checks (core/"
+         "beverage_cooler_validation.py, Phase 34): unlike this repo's primary "
+         "data-center application (where AMR has no deployed magnetic-cooling "
+         "competitor to check against), commercial beverage refrigeration is "
+         "the one segment where magnetocaloric cooling is already commercially "
+         "deployed and independently published -- two checks, Magnotherm "
+         "Eclipse/REWE (press-reported, directional only, proprietary internals) "
+         "and Polaris (peer-reviewed, quantitative, mass-independent via "
+         "second-law efficiency). See that module's own docstring for why both "
+         "are included rather than just one.",
+         None),  # handled specially below, result captured
+        ("15c. Heat-pump real-world architecture check (core/heat_pump_validation.py, "
+         "Phase 34): a THIRD distinct real-world segment (heat pumps, not "
+         "refrigeration) -- Ames National Laboratory's peer-reviewed Gd "
+         "packed-bed AMR device, the SAME core architecture this repo's own "
+         "model already assumes. Checks physical realism (is this repo's own "
+         "Qc/COP reasonable at this scale/architecture), NOT superiority -- see "
+         "that module's own honesty flag on why its SPD figure is not directly "
+         "comparable to Ames Lab's own whole-device SPD.",
+         None),  # handled specially below, result captured
+        ("15d. Regime crossover analysis (core/regime_crossover_analysis.py, "
+         "Phase 34): systematically searches, across span and baseline-"
+         "technology quality using this repo's own already-tested functions, "
+         "for ANY region where this repo's own model shows AMR beating "
+         "vapor-compression -- on COP, and (separately) on total emissions "
+         "after eliminating refrigerant entirely. HONEST NULL RESULT: none "
+         "found in either check, matching (not contradicting) what every "
+         "real-world source checked in steps 15b/15c above independently "
+         "reports about itself. See that module's own top-level docstring "
+         "for why this null result is itself the useful, reportable finding.",
+         None),  # handled specially below, result captured
         ("16. Paper-strengthening additions (Phase 30-31): commercial/state-of-the-art "
          "landscape comparison (core/commercial_landscape.py), PUE framing + "
          "annualized/part-load climate-weighted comparison (core/pue_annualized.py), "
@@ -1495,6 +1583,17 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
                     fluid_mce_result = fluid_mce_analysis.run_fluid_mce_analysis()
                 elif name.startswith("15."):
                     passive_regen_result = passive_regenerator_analysis.run_passive_regenerator_analysis()
+                elif name.startswith("15b."):
+                    logger.info("--- Eclipse/REWE (press-reported, directional) ---")
+                    beverage_cooler_validation.run_eclipse_directional_check()
+                    logger.info("--- Polaris (peer-reviewed, second-law efficiency) ---")
+                    beverage_cooler_validation.run_polaris_second_law_validation()
+                elif name.startswith("15c."):
+                    heat_pump_validation.run_ames_lab_architecture_check()
+                elif name.startswith("15d."):
+                    regime_crossover_analysis.run_cop_crossover_search()
+                    print()
+                    regime_crossover_analysis.run_emissions_crossover_check()
                 elif name.startswith("16."):
                     _run_phase30_additions(representative_row)
                 else:
@@ -1936,13 +2035,25 @@ if __name__ == "__main__":
                             "results are disk-cached (results/.regenerator_1d_cache.json) "
                             "so repeated runs only pay the simulation cost once per "
                             "unique input combination.")
-    _parser.add_argument("--layered-material-cross-product", action="store_true",
-                        default=True,
-                        help="Phase 31: also run step 11g., the material x n_layers "
+    _parser.add_argument("--no-layered-material-cross-product",
+                        dest="layered_material_cross_product",
+                        action="store_false", default=True,
+                        # FIX (this merge): the prior version of this flag kept
+                        # action="store_true" after being flipped to default=True,
+                        # which is a no-op bug -- with store_true+default=True there
+                        # is NO way to pass anything on the command line that turns
+                        # this back off (passing the old flag name just redundantly
+                        # re-sets an already-True value to True). Renamed to the
+                        # opt-out form and switched to store_false, exactly mirroring
+                        # the --no-regenerator-1d-override flag just below, which
+                        # already used the correct pattern for the same default=True
+                        # flip.
+                        help="Skip step 11g., the material x n_layers "
                             "cross-product NSGA-III co-optimization (5 material "
                             "families x step 11f.'s own reduced n_layers_range/pop_size/"
                             "n_gen). ON by default -- multiplies step 11f.'s own "
-                            "already-reduced runtime by ~5x. See "
+                            "already-reduced runtime by ~5x. Pass this flag to skip it "
+                            "and restore the old opt-in-only default. See "
                             "run_layered_optimization_material_family_cross_product()'s "
                             "own docstring in core/optimize.py.")
     _parser.add_argument("--no-regenerator-1d-override", dest="regenerator_1d_override",

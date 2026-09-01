@@ -45,10 +45,17 @@ def test_giguere_gd_extension_uses_same_fixed_temperature_methodology():
 
 def test_giguere_gd_extension_model_overestimates_relative_to_giguere_range():
     """Documents the actual (honest, not-hidden) finding: a model
-    calibrated to Dan'kov et al.'s HIGHER 5T value (14.6K) overestimates
-    relative to Giguere et al.'s LOWER Gd range (10.5-11.5K) -- this is a
-    real cross-paper literature discrepancy, not a bug, and should stay
-    reported rather than silently reconciled."""
+    calibrated to Dan'kov et al.'s 5T value (12.3K, Phase 32-corrected --
+    see LITERATURE_DELTA_T_AD's own note) overestimates relative to
+    Giguere et al.'s LOWER Gd range (10.5-11.5K) -- a modest residual
+    cross-paper discrepancy, plausibly genuine sample/technique variation,
+    not a bug, and should stay reported rather than silently reconciled.
+    Note: this assertion's direction (model overestimates) is UNCHANGED by
+    the Phase 32 correction -- what changed is the model's reported
+    behavior at 5T specifically against LITERATURE_DELTA_T_AD (flipped
+    from apparently underestimating by ~7.5% under the old, incorrect
+    14.6K reference to overestimating by ~9.8% under the corrected 12.3K
+    one -- see run_validation()'s own test for that comparison)."""
     rows = run_giguere_gd_extension(verbose=False)
     for B, lo, hi, dT_model, err_pct, in_range in rows:
         assert dT_model > hi

@@ -21,9 +21,68 @@ with magnetic field strength. This behaviour is approximated here as
 which provides a rough fit to the published examples but should not be
 interpreted as a validated scaling law.
 
+Phase 35 addition: this project's own `Papers/Economics/` corpus (present
+in the repo as of this phase; several of the citations below were
+previously made without local PDF access -- see LIMITATIONS.md Section 5
+for the full list of what was newly verified this phase) was used to
+directly re-check, rather than merely trust, the $40/$20 per kg figures
+above. Both are confirmed EXACTLY as quoted in Bjørk et al. (2011)'s own
+text ("...the magnet material was assumed to be $40 per kg and for the
+magnetocaloric material (MCM) the cost was $20 per kg", Sec. 5) --
+independent re-verification, not a correction. Two further independent
+data points from the same corpus corroborate these figures rather than
+just repeating them:
+    - Tura & Rowe, "Concentric Halbach Cylinder Magnetic Refrigerator Cost
+      Optimization", Int. J. Refrig. 37 (2014) 106-116 -- uses $42/kg for
+      NdFeB (citing Gutfleisch et al. 2010) and independently notes
+      "10-20 $/kg price of ... bulk gadolinium" as their own comparison
+      range -- both consistent with, and triangulating, Bjørk et al.'s
+      $40/kg magnet and $20/kg Gd figures from a different paper/year.
+    - Bjørk, Bahl & Nielsen (2016, cited below) report a SPECIFIC worked
+      example not previously extracted into this module: their own
+      lowest-cost 50 W-cooling-power device design has "capital costs...
+      around $100 and $40 for the magnet and the magnetocaloric material,
+      respectively" (Sec. "Required device performance") -- i.e. a
+      materials-only cost of $140 for 50 W_c = $2800/kW_c. This is a real,
+      independently-computed literature anchor for `AMR_MAGNETIC`'s
+      capex_per_kw_cooling=2200.0 figure below (see that dataclass's own
+      updated note) -- both numbers are materials-only (no HX/pump/motor/
+      controls), same order of magnitude, and the repo's existing 2200
+      figure is, if anything, the more conservative (lower) of the two.
+
+Phase 31 note (see the dedicated section near the end of this file): three
+further, genuinely new, literature-sourced additions close specific parts
+of the BOM/economics gap this module has flagged since Phase 7/15/30 --
+(1) a low/mid/high SENSITIVITY BAND for `NON_MATERIALS_COST_MULTIPLIER`
+instead of a single point value, using the same Russek & Zimm (2006) range
+this module's docstring already describes but had not previously exposed
+as three numbers; (2) a second, INDEPENDENT vapor-compression-compressor
+cost benchmark (Rowe, Int. J. Refrig. 34 (2011) 168-177, a different paper
+from the Bjørk-group studies already used everywhere else in this module)
+to cross-check `VAPOR_COMPRESSION`'s existing ASHRAE-derived CAPEX figure;
+and (3) a CURRENT (2024), commercial, primary-source MCM price reality
+check (Ihnfeldt, "Scale-up of Magnetocaloric Materials for High Efficiency
+Refrigeration," California Energy Commission CEC-500-2024-057) showing
+that a real vendor's actual and target commercial giant-MCE material
+pricing is roughly 20-50x this module's $20/kg Gd figure -- Gd's $20/kg
+(Bjørk et al. 2011) is left unchanged as the module's own working number
+(it is still the only literature figure with a matching, load-bearing
+mass-scaling law in this codebase), but the gap is now surfaced
+explicitly rather than left implicit. Phase 32 then closes the remaining
+part of that gap with a genuine bottom-up, market-catalog-priced non-
+materials BOM; Phase 33 cross-checks `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA`
+against 11 real reported AMR devices; and Phase 34 acts on that finding
+by updating this module's working default while preserving the original
+value for reproducibility. See the Phase 31-34 section near the end of
+this file for full detail on all four.
+
 Sources:
     - Bjørk, Bahl & Smith, Int. J. Refrig. 34 (2011) 1805-1816 — magnet and
       magnetocaloric material costs and worked mass examples
+    - Tura & Rowe, "Concentric Halbach Cylinder Magnetic Refrigerator Cost
+      Optimization", Int. J. Refrig. 37 (2014) 106-116 -- Phase 35: magnet
+      cost ($42/kg NdFeB) and MCM cost range ($10-20/kg bulk Gd)
+      triangulation, see paragraph above
     - Bjørk, Bahl & Nielsen, "The lifetime cost of a magnetic refrigerator",
       Int. J. Refrig. 63 (2016) 48-62 -- Phase 7 addition: this follow-up
       study by the same group adds device OPERATING cost (electricity over
@@ -33,34 +92,90 @@ Sources:
       paper, "actual manufacturing, transportation, maintenance and
       auxiliary systems are ignored" -- so it does NOT resolve the
       HX/pump/motor/controls capital-cost gap either; that remains open
-      (see `lifetime_cost()` docstring).
+      (see `lifetime_cost()` docstring). Phase 35 addition: also supplies
+      the specific $100 magnet + $40 MCM / 50 W_c worked example cited
+      above, used as an AMR_MAGNETIC capex cross-check.
     - Bahl, Engelbrecht et al., Int. J. Refrig. 37 (2014) 78-83 — AMR
       system cost breakdown context
     - Gauss, Homm & Gutfleisch, "The Resource Basis of Magnetic
       Refrigeration", J. Ind. Ecol. 21(5) (2016) 1291-1300 -- phase 15
       addition: raw-material supply-criticality assessment for Gd-,
       La-, and Mn-based magnetocaloric alloys plus the Nd2Fe14B magnet
-      material; see `resource_criticality_note()` below
+      material; see `resource_criticality_note()` below. Phase 35
+      re-check: this paper discusses La(Fe,Si)13 and (Mn,Fe)2P/Mn-Fe-P-Si
+      alloys only in terms of resource criticality/supply risk, NOT unit
+      cost in $/kg -- confirms (Mn,Fe)2(P,Si)'s missing $/kg figure in
+      MCM_COST_PER_KG_BY_FAMILY below is a genuine corpus gap, not an
+      oversight; still correctly left at the conservative Gd-price
+      placeholder rather than an invented number.
     - Lawrence Berkeley National Laboratory, "Data Center Cooling System
       Cost Benchmarks" — representative chilled-water OPEX
 """
 from dataclasses import dataclass
 
-COST_MCM_PER_KG = 20.0          # $/kg, Bjork et al. 2011
-COST_MAGNET_PER_KG = 40.0        # $/kg, Bjork et al. 2011 (NdFeB N42)
-MAGNET_TO_MCM_MASS_RATIO_PER_TESLA = 3.0  # rough fit to Bjork et al.'s two
-                                             # worked examples, see docstring
+COST_MCM_PER_KG = 20.0          # $/kg, Bjork et al. 2011 (Phase 35: verified
+                                   # verbatim against the primary-source PDF)
+COST_MAGNET_PER_KG = 40.0        # $/kg, Bjork et al. 2011 (NdFeB N42) (Phase 35:
+                                   # verified verbatim; independently triangulated
+                                   # by Tura & Rowe 2013's $42/kg, see module docstring)
+# --- magnet-to-MCM mass ratio: Phase 34 update -----------------------------
+# Originally a single point value (3.0), described honestly since Phase 1
+# as "a rough fit to Bjork et al.'s two worked examples...not a validated
+# scaling law." Phase 33 cross-checked that value against 11 REAL reported
+# AMR devices (Rowe 2011, Table 1 -- see `ROWE2011_DEVICE_MAGNET_MCM_DATA`
+# and `rowe2011_magnet_mass_ratio_cross_check()` below) and found the old
+# 3.0 sat at the LOW END of the real-device range (3.98-22.65), not the
+# middle -- the real-device MEDIAN is 13.47.
+#
+# Phase 34 acts on that finding by BOTH updating the module's working
+# default AND keeping the old value directly usable, rather than picking
+# one and discarding the other:
+#   - `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA` (no suffix) is now the module's
+#     WORKING DEFAULT, set to the Rowe (2011) 11-device median. Every
+#     function below that computes magnet mass/cost uses this value
+#     UNLESS a caller explicitly overrides it.
+#   - `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY` preserves the
+#     original point value UNCHANGED, so every number this module
+#     produced before Phase 34 remains exactly reproducible by passing it
+#     explicitly (`material_cost(..., mass_ratio_per_tesla=
+#     MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY)`,
+#     `bom_cost(..., mass_ratio_per_tesla=...)`, etc.) -- see
+#     `compare_legacy_and_updated_magnet_ratio()` below, which reports
+#     both side by side at a given design point.
+#
+# HONEST CAVEAT carried over from Phase 33, unchanged: the Rowe (2011)
+# median rests on reading that paper's "V_B[L]" column as V_MCM (matching
+# the paper's own prose, not independently confirmed against the
+# underlying Bjork et al. 2010 source table) and on a PM/MCM density
+# bridge from a companion paper (Tura & Rowe 2013). It is a materially
+# better-supported number than the old "two worked examples" fit (11 real
+# devices vs. 2), but it is not beyond revision either.
+MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY = 3.0
+MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_ROWE2011_MEDIAN = 13.47  # matches
+    # rowe2011_magnet_mass_ratio_cross_check()['median_mass_ratio_per_tesla'];
+    # hardcoded here (rather than computed at import time) so this module's
+    # working constant doesn't depend on a function call to define itself --
+    # `test_rowe2011_median_constant_matches_cross_check_function()`
+    # (tests/test_economics.py) asserts the two stay in sync.
+MAGNET_TO_MCM_MASS_RATIO_PER_TESLA = MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_ROWE2011_MEDIAN
 
 
-def material_cost(mu0H_max, mass_regenerator):
-    """Bottom-up magnet + MCM material cost, $ (Bjork et al. 2011 unit costs
-    and mass-ratio approximation -- see module docstring). This is a
+def material_cost(mu0H_max, mass_regenerator, mass_ratio_per_tesla=None):
+    """Bottom-up magnet + MCM material cost, $ (Bjork et al. 2011 unit
+    $/kg costs; magnet mass via `mass_ratio_per_tesla`, which defaults to
+    this module's working `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA` -- the
+    Rowe (2011) 11-device median as of Phase 34, see that constant's own
+    comment above for the full history and caveat). Pass
+    `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY` explicitly to
+    reproduce this module's pre-Phase-34 numbers exactly. This is a
     materials-only FLOOR, not full system cost (excludes heat exchangers,
     pumps, motor/drive, controls, enclosure -- Bahl et al. 2014 note these
-    dominate total AMR system cost, materials are a minority share, but no
-    specific multiplier is used here pending development of a detailed
-    bottom-up bill-of-materials (BOM) model."""
-    magnet_mass = MAGNET_TO_MCM_MASS_RATIO_PER_TESLA * mu0H_max * mass_regenerator
+    dominate total AMR system cost, materials are a minority share; see
+    Phase 32's `bottom_up_non_materials_bom()` for a genuine bottom-up
+    estimate of that gap)."""
+    if mass_ratio_per_tesla is None:
+        mass_ratio_per_tesla = MAGNET_TO_MCM_MASS_RATIO_PER_TESLA
+    magnet_mass = mass_ratio_per_tesla * mu0H_max * mass_regenerator
     return COST_MAGNET_PER_KG * magnet_mass + COST_MCM_PER_KG * mass_regenerator
 
 
@@ -130,7 +245,16 @@ AMR_MAGNETIC = TCOResult(
         "estimate a materials-only cost floor. This excludes heat "
         "exchangers, pumps, motor/drive, controls and enclosure, which "
         "Bahl et al. (2014) identify as major contributors to total AMR "
-        "system cost. A detailed bottom-up cost model is left for future work.")
+        "system cost. A detailed bottom-up cost model is left for future work. "
+        "Phase 35 cross-check: Bjork, Bahl & Nielsen (2016)'s own lowest-cost "
+        "50 W device design has a materials-only capital cost of $140 "
+        "($100 magnet + $40 MCM), i.e. $2800/kW_c -- same order of magnitude "
+        "as, and somewhat higher than, this row's 2200 figure, at a smaller "
+        "(50 W vs. datacenter-scale) device where per-kW costs are typically "
+        "higher, not lower. This is independent literature confirmation that "
+        "2200 is a reasonable, if anything conservative, placeholder -- not a "
+        "derivation, and not a resolution of the HX/pump/motor/controls gap "
+        "noted above (that paper's own cost model has the identical gap).")
 
 VAPOR_COMPRESSION = TCOResult(
     "Vapor-compression CRAC/CRAH", capex_per_kw_cooling=350.0,
@@ -265,10 +389,12 @@ MCM_COST_PER_KG_BY_FAMILY = {
 }
 
 
-def material_cost_by_family(mu0H_max, mass_regenerator, family_name="Gd"):
-    """Same magnet-mass scaling as `material_cost()`, but looks the MCM
-    unit cost up by family name (see MCM_COST_PER_KG_BY_FAMILY) instead of
-    always assuming Gd's $20/kg. `family_name` should match a
+def material_cost_by_family(mu0H_max, mass_regenerator, family_name="Gd",
+                              mass_ratio_per_tesla=None):
+    """Same magnet-mass scaling as `material_cost()` (including the same
+    `mass_ratio_per_tesla` override -- see that function's docstring), but
+    looks the MCM unit cost up by family name (see MCM_COST_PER_KG_BY_FAMILY)
+    instead of always assuming Gd's $20/kg. `family_name` should match a
     core.cascade.GradedFamily.name (or "Gd" for plain gadolinium) -- an
     unrecognized name falls back to Gd's cost with a printed warning
     rather than raising, so callers sweeping many candidate designs don't
@@ -278,16 +404,22 @@ def material_cost_by_family(mu0H_max, mass_regenerator, family_name="Gd"):
         print(f"material_cost_by_family: unrecognized family_name={family_name!r}, "
               f"falling back to Gd's ${COST_MCM_PER_KG}/kg")
         mcm_cost_per_kg = COST_MCM_PER_KG
-    magnet_mass = MAGNET_TO_MCM_MASS_RATIO_PER_TESLA * mu0H_max * mass_regenerator
+    if mass_ratio_per_tesla is None:
+        mass_ratio_per_tesla = MAGNET_TO_MCM_MASS_RATIO_PER_TESLA
+    magnet_mass = mass_ratio_per_tesla * mu0H_max * mass_regenerator
     return COST_MAGNET_PER_KG * magnet_mass + mcm_cost_per_kg * mass_regenerator
 
 
 def bom_cost(mu0H_max, mass_regenerator, family_name="Gd",
-             smm_mass_fraction=0.5):
+             smm_mass_fraction=0.5, mass_ratio_per_tesla=None):
     """Bottom-up magnet + MCM + soft-magnetic-material (SMM, flux-return
     yoke) cost, $ -- extends `material_cost()`/`material_cost_by_family()`
     with the SMM line item from Silva et al. (2017) (see section
-    docstring). `smm_mass_fraction` is the assumed SMM mass as a fraction
+    docstring). `mass_ratio_per_tesla` defaults to this module's working
+    `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA` (see that constant's own comment
+    for the Phase 34 update and how to reproduce pre-Phase-34 numbers via
+    `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY`).
+    `smm_mass_fraction` is the assumed SMM mass as a fraction
     of the magnet mass (soft-iron flux-return yokes are typically a
     comparable order of magnitude to the permanent-magnet mass in
     Halbach-style and C-core magnet circuits, but no single ratio is
@@ -296,7 +428,9 @@ def bom_cost(mu0H_max, mass_regenerator, family_name="Gd",
     placeholder, not a fitted value). Still a materials-only cost -- see
     section docstring for what remains excluded."""
     mcm_cost_per_kg = MCM_COST_PER_KG_BY_FAMILY.get(family_name, COST_MCM_PER_KG)
-    magnet_mass = MAGNET_TO_MCM_MASS_RATIO_PER_TESLA * mu0H_max * mass_regenerator
+    if mass_ratio_per_tesla is None:
+        mass_ratio_per_tesla = MAGNET_TO_MCM_MASS_RATIO_PER_TESLA
+    magnet_mass = mass_ratio_per_tesla * mu0H_max * mass_regenerator
     smm_mass = smm_mass_fraction * magnet_mass
     magnet_cost = COST_MAGNET_PER_KG * magnet_mass
     mcm_cost = mcm_cost_per_kg * mass_regenerator
@@ -644,9 +778,10 @@ def amorphous_material_cost_performance_note():
 # =============================================================================
 #
 # `material_cost()`/`bom_cost()` above scale magnet mass LINEARLY with
-# mu0H_max via MAGNET_TO_MCM_MASS_RATIO_PER_TESLA -- explicitly documented
-# as "a rough fit to Bjork et al.'s two worked examples," not a physical
-# model. ROADMAP.md's Phase 19 plan named the resulting gap directly:
+# mu0H_max via MAGNET_TO_MCM_MASS_RATIO_PER_TESLA -- a flat per-Tesla
+# proxy, not a physical model (see that constant's own comment for its
+# Phase 34 update to the Rowe (2011) 11-device median). ROADMAP.md's
+# Phase 19 plan named the resulting gap directly:
 # "achieving high mu0H should cost nonlinearly more magnet mass for a
 # fixed air-gap geometry, which is physically real and currently absent."
 #
@@ -748,4 +883,675 @@ def full_system_cost_estimate_geometric(
                 "term additionally uses core.magnet_geometry's closed-form "
                 "Halbach-cylinder relation instead of the flat per-Tesla ratio; "
                 "see that module's own honesty flags.",
+    }
+
+# =============================================================================
+# Phase 31 addition: non-materials cost SENSITIVITY BAND, a second
+# independent VCC compressor-cost cross-check, and a current (2024)
+# commercial MCM price reality check
+# =============================================================================
+#
+# Three separate, additive closures of specific parts of the still-open
+# "full bottom-up AMR BOM" gap this module has documented since Phase 7
+# (`full_system_cost_estimate()`'s own docstring, `lifetime_cost()`'s
+# docstring, and the Phase 15 section docstring above). None of these
+# fabricates the missing HX/pump/motor/controls/enclosure parts-and-labor
+# quote itself -- that specific gap searches in Phase 7, 15, and again in
+# this pass (web search: "active magnetic regenerator refrigerator bill of
+# materials manufacturing cost breakdown heat exchanger pump motor",
+# "techno-economic analysis magnetocaloric refrigeration system cost 2023
+# 2024 heat exchanger drive") turned up nothing beyond what this module
+# already cites -- it remains genuinely open. What follows instead:
+#
+#   1. A LOW/MID/HIGH band for the existing non-materials multiplier,
+#      instead of a single 10x point estimate, using the SAME Russek &
+#      Zimm (2006) numbers `NON_MATERIALS_COST_MULTIPLIER`'s own comment
+#      already describes (aggregate magnet+MCM cost $2.3-11.7/kW_c against
+#      $42.6-102.1/kW_c manufactured cost across their SEER 10-18 range) --
+#      no new source, just exposing the range that was already documented
+#      in prose as three numbers a caller can actually use, so a Pareto
+#      design's cost estimate can be reported with its own honest spread
+#      instead of one number that looks more precise than it is.
+#   2. Tura, A. and Rowe, A., "Configuration and performance analysis of
+#      magnetic refrigerators," Int. J. Refrigeration 34 (2011) 168-177 --
+#      a paper already in Papers/Economics/ but not previously used for
+#      costing in this module. Their Table 4 worked example gives an
+#      INDEPENDENT (non-ASHRAE, non-Bjørk-group) vapor-compression
+#      compressor cost benchmark -- $0.5/W_c at COP=1.6 and $1.9/W_c at
+#      COP=2.6, for a 70 W_c / 7.4 degC absorption / 54.4 degC rejection
+#      residential-scale application -- that can be cross-checked against
+#      `VAPOR_COMPRESSION`'s existing capex_per_kw_cooling=350 ASHRAE-
+#      derived figure. ($0.5-1.9/W_c = $500-1900/kW_c is a substantially
+#      HIGHER small-residential-scale benchmark than the $350/kW_c
+#      mass-produced-CRAC/CRAH figure already in this module -- flagged
+#      as a real, not-yet-reconciled discrepancy, most likely reflecting
+#      the very different scale/application, not an error in either
+#      source; see `rowe2011_vcc_compressor_cost_cross_check()`'s own
+#      note.) The same Table 4 also independently confirms this module's
+#      existing $40/kg PM / $20/kg MCM unit costs from a source other
+#      than Bjørk et al. (2011).
+#   3. Ihnfeldt, R., "Scale-up of Magnetocaloric Materials for High
+#      Efficiency Refrigeration," California Energy Commission,
+#      CEC-500-2024-057 (June 2024) -- located via this pass's own web
+#      search, NOT previously in this project's local `Papers/` corpus.
+#      A DOE/CEC-funded commercial vendor (General Engineering &
+#      Research) report on actually scaling up production of an
+#      engineered, giant-MCE-class magnetocaloric material. Their own
+#      reported figures (Table 3 and surrounding text): current pilot-
+#      scale commercial price "<$10,000/kg...almost entirely labor and
+#      facility costs"; their own STATED TARGET price at 1 kg/day
+#      low-rate-initial-production scale, "$1,000/kg (includes materials
+#      and processing)"; and a raw-material-plus-processing cost floor of
+#      "<$200/kg" bulk metals + "<$200/kg" processing (their own numbers,
+#      paraphrased) once produced at full industrial scale. This is a
+#      REAL, 2024-dated, commercial (not laboratory-reagent-catalog)
+#      price point for an actual giant-MCE-class material, roughly two
+#      orders of magnitude above Bjørk et al.'s (2011) $20/kg Gd figure
+#      this module has used throughout. `COST_MCM_PER_KG_BY_FAMILY`'s
+#      existing values are DELIBERATELY LEFT UNCHANGED here -- Gd's
+#      $20/kg is a commodity-rare-earth-metal price with a directly
+#      matching magnet-mass scaling law already validated against this
+#      module's other Bjørk-group sources, whereas GE&R's price is for a
+#      different, proprietary, engineered composition family not
+#      identified with any of this repo's own named material families, at
+#      a still-scaling-up production volume -- silently swapping one
+#      number for the other would conflate two different things. Instead,
+#      this is surfaced as an explicit, separate, current reality check a
+#      reader can weigh directly (see
+#      `commercial_mcm_price_reality_check()`).
+
+# ---- 1. Non-materials multiplier sensitivity band -------------------------
+
+NON_MATERIALS_COST_MULTIPLIER_LOW = 8.0    # Russek & Zimm (2006); see
+                                              # NON_MATERIALS_COST_MULTIPLIER's
+                                              # own comment for the source range
+NON_MATERIALS_COST_MULTIPLIER_MID = NON_MATERIALS_COST_MULTIPLIER  # = 10.0,
+                                              # unchanged existing default
+NON_MATERIALS_COST_MULTIPLIER_HIGH = 40.0   # same source range, upper end
+
+
+def full_system_cost_estimate_range(mu0H_max, mass_regenerator, family_name="Gd",
+                                      smm_mass_fraction=0.5):
+    """LOW/MID/HIGH counterpart of `full_system_cost_estimate()`: applies
+    `NON_MATERIALS_COST_MULTIPLIER_LOW/MID/HIGH` (see section docstring --
+    all three from the same Russek & Zimm (2006) range, not three separate
+    sources) to `bom_cost()`'s materials-only BOM total, so a caller gets
+    an honest spread instead of `full_system_cost_estimate()`'s single
+    10x point estimate. Does not replace `full_system_cost_estimate()` --
+    that function and its default behavior are unchanged; this is a new,
+    additive function callers can opt into."""
+    bom = bom_cost(mu0H_max, mass_regenerator, family_name, smm_mass_fraction)
+    materials_total = bom["materials_bom_total_$"]
+    return {
+        **bom,
+        "full_system_cost_low_$": round(materials_total * NON_MATERIALS_COST_MULTIPLIER_LOW, 2),
+        "full_system_cost_mid_$": round(materials_total * NON_MATERIALS_COST_MULTIPLIER_MID, 2),
+        "full_system_cost_high_$": round(materials_total * NON_MATERIALS_COST_MULTIPLIER_HIGH, 2),
+        "multiplier_low": NON_MATERIALS_COST_MULTIPLIER_LOW,
+        "multiplier_mid": NON_MATERIALS_COST_MULTIPLIER_MID,
+        "multiplier_high": NON_MATERIALS_COST_MULTIPLIER_HIGH,
+        "note": "Same order-of-magnitude, borrowed-from-vapor-compression-AC "
+                "caveats as full_system_cost_estimate() -- see that function's "
+                "docstring -- reported here as a LOW/MID/HIGH spread (Russek & "
+                "Zimm 2006's own $2.3-11.7/kW_c materials vs. $42.6-102.1/kW_c "
+                "manufactured-cost range) instead of a single point value, so "
+                "the estimate's own uncertainty is visible rather than hidden "
+                "behind one number.",
+    }
+
+
+# ---- 2. Rowe (2011) independent VCC compressor-cost cross-check -----------
+
+ROWE2011_VCC_COMPRESSOR_COST_REFERENCE = {
+    "application_cooling_power_W": 70.0,
+    "absorption_temperature_C": 7.4,
+    "rejection_temperature_C": 54.4,
+    "cost_per_Wc_at_COP_1_6": 0.5,
+    "cost_per_Wc_at_COP_2_6": 1.9,
+    "pm_cost_usd_per_kg": 40.0,   # independently matches COST_MAGNET_PER_KG
+    "mcm_cost_usd_per_kg": 20.0,  # independently matches COST_MCM_PER_KG
+    "source": "Tura, A. & Rowe, A., 'Configuration and performance analysis "
+              "of magnetic refrigerators,' Int. J. Refrigeration 34 (2011) "
+              "168-177, Table 4 worked example.",
+}
+
+
+def rowe2011_vcc_compressor_cost_cross_check():
+    """Returns Rowe (2011)'s independent VCC compressor cost-per-W_c
+    benchmark (Table 4 -- see `ROWE2011_VCC_COMPRESSOR_COST_REFERENCE` and
+    section docstring) alongside this module's existing ASHRAE-derived
+    `VAPOR_COMPRESSION.capex_per_kw_cooling`, so the two independently-
+    sourced VCC baselines can be compared directly. This is a CROSS-CHECK,
+    not a replacement for `VAPOR_COMPRESSION` -- `simple_tco()` and every
+    other existing caller of `VAPOR_COMPRESSION` are unaffected."""
+    r = ROWE2011_VCC_COMPRESSOR_COST_REFERENCE
+    rowe_low_usd_per_kw = r["cost_per_Wc_at_COP_1_6"] * 1000.0
+    rowe_high_usd_per_kw = r["cost_per_Wc_at_COP_2_6"] * 1000.0
+    return {
+        "ashrae_derived_capex_usd_per_kw": VAPOR_COMPRESSION.capex_per_kw_cooling,
+        "rowe2011_compressor_capex_usd_per_kw_range": (
+            rowe_low_usd_per_kw, rowe_high_usd_per_kw),
+        "rowe2011_application": f"{r['application_cooling_power_W']:.0f}W_c, "
+            f"{r['absorption_temperature_C']:.1f}C to "
+            f"{r['rejection_temperature_C']:.1f}C",
+        "note": "Rowe (2011)'s Table 4 compressor-only benchmark "
+                f"(${rowe_low_usd_per_kw:.0f}-${rowe_high_usd_per_kw:.0f}/kW_c) "
+                "is for a small residential-scale unit and compressor cost "
+                "ALONE (not a full installed CRAC/CRAH system), so it is not "
+                "directly comparable in scope to VAPOR_COMPRESSION's ASHRAE "
+                "Datacom-benchmark installed-system figure -- both are kept "
+                "and reported side by side as two independently-sourced "
+                "reference points rather than reconciled into one number, "
+                "since reconciling them would require assumptions (component "
+                "vs. installed-system cost ratio, scale effects) this corpus "
+                "does not support.",
+    }
+
+
+# ---- 3. Current (2024) commercial MCM price reality check -----------------
+
+GEANDR_CEC2024_MCM_PRICE_REFERENCE = {
+    "pilot_scale_price_usd_per_kg": 10000.0,   # upper bound ("<$10,000/kg"),
+                                                  # "almost entirely labor and
+                                                  # facility costs" at current
+                                                  # (2024) low-volume scale
+    "target_scaled_price_usd_per_kg": 1000.0,  # GE&R's own stated target at
+                                                  # 1 kg/day low-rate-initial-
+                                                  # production scale
+    "raw_material_price_usd_per_kg": 200.0,     # bulk metals, upper bound
+    "processing_cost_target_usd_per_kg": 200.0, # upper bound, at full scale
+    "source": "Ihnfeldt, R., 'Scale-up of Magnetocaloric Materials for High "
+              "Efficiency Refrigeration,' California Energy Commission, "
+              "CEC-500-2024-057 (June 2024), Table 3 and surrounding text.",
+}
+
+
+def commercial_mcm_price_reality_check(family_name="Gd"):
+    """Compares `MCM_COST_PER_KG_BY_FAMILY[family_name]` (this module's own
+    working $/kg, mostly Bjørk et al. 2011-derived) against
+    `GEANDR_CEC2024_MCM_PRICE_REFERENCE`'s current (2024) commercial giant-
+    MCE material pricing (see section docstring for why the working number
+    is deliberately NOT overwritten). Falls back to Gd's price for an
+    unrecognized family_name, matching `material_cost_by_family()`'s own
+    convention, rather than raising."""
+    working_price = MCM_COST_PER_KG_BY_FAMILY.get(family_name, COST_MCM_PER_KG)
+    r = GEANDR_CEC2024_MCM_PRICE_REFERENCE
+    target_ratio = r["target_scaled_price_usd_per_kg"] / working_price
+    pilot_ratio = r["pilot_scale_price_usd_per_kg"] / working_price
+    return {
+        "family_name": family_name,
+        "working_price_usd_per_kg": working_price,
+        "geandr_2024_pilot_scale_usd_per_kg": r["pilot_scale_price_usd_per_kg"],
+        "geandr_2024_target_scaled_usd_per_kg": r["target_scaled_price_usd_per_kg"],
+        "target_scaled_ratio_vs_working_price": round(target_ratio, 1),
+        "pilot_scale_ratio_vs_working_price": round(pilot_ratio, 1),
+        "note": f"A real commercial vendor's OWN 2024 target scaled price for "
+                f"an engineered giant-MCE material is "
+                f"~{target_ratio:.0f}x this module's ${working_price:.0f}/kg "
+                f"{family_name} working figure (and ~{pilot_ratio:.0f}x at "
+                "today's actual pilot-scale, pre-volume pricing). This does "
+                "NOT change MCM_COST_PER_KG_BY_FAMILY (see section docstring "
+                "for why -- different, proprietary composition, still-"
+                "scaling-up volume, not a like-for-like replacement for "
+                "Gd's commodity-metal price) but is a material caveat for "
+                "any dollar figure this module produces: those figures "
+                "reflect a 2011 commodity-Gd cost basis, not current (2024) "
+                "commercial giant-MCE material pricing, which remains far "
+                "higher even at the vendor's own stated future-scale target.",
+    }
+
+
+# =============================================================================
+# Phase 32 addition: a genuine BOTTOM-UP non-materials BOM, priced from real
+# commercial component/market data (not a borrowed multiplier)
+# =============================================================================
+#
+# Every prior pass (Phase 7, Phase 15, Phase 30, Phase 31) searched for a
+# published, AMR-SPECIFIC bottom-up cost breakdown of the heat exchangers,
+# pump, drive motor, motor controller, and enclosure a real AMR system
+# needs, and found none: Bjørk et al. (2011) states plainly that motor and
+# pump costs "were not included in its analysis"; Bjørk, Bahl & Nielsen
+# (2016) explicitly scopes out "actual manufacturing, transportation,
+# maintenance and auxiliary systems"; Tura & Rowe (2011, 2013) both fold
+# "other components" into the MCM cost term rather than pricing it
+# separately; and this phase's OWN extended web search (queries: "active
+# magnetic regenerator refrigerator bill of materials manufacturing cost
+# breakdown heat exchanger pump motor"; "techno-economic analysis
+# magnetocaloric refrigeration system cost 2023 2024 heat exchanger
+# drive") again found nothing published specific to AMR devices.
+#
+# Rather than leave that gap as a single borrowed 10x multiplier
+# (`full_system_cost_estimate()`) or a wider but still-borrowed band
+# (`full_system_cost_estimate_range()`, Phase 31), THIS section builds a
+# genuine, ADDITIVE bottom-up estimate by pricing the actual component
+# CATEGORIES a real AMR system needs -- cold+hot-side heat exchangers, a
+# circulation pump, a drive motor, a motor controller/VFD, and a
+# controls+enclosure allowance -- from real, current (2026) commercial
+# market/vendor-catalog pricing for those GENERIC component categories.
+# This is standard early-stage cost-engineering practice (price the parts
+# a system actually needs from real supplier data when no system-level
+# study exists), and it is explicitly flagged as a DIFFERENT epistemic
+# category from the rest of this module: every other $/kg or $/kW figure
+# in `core/economics.py` traces to a peer-reviewed AMR- or vapor-
+# compression-specific paper; the figures below trace to commercial
+# component vendor catalogs and market-pricing aggregators for GENERIC
+# industrial hardware (a brazed-plate heat exchanger, a small centrifugal
+# pump, a TEFC/BLDC motor, a VFD) that happens to be the right size class
+# for a lab/pilot-scale AMR device, not to an AMR-specific design study.
+# Each range below is cross-checked against at least two independent
+# retail/industry sources, and each is a LOW/MID/HIGH range, not a single
+# point, to keep the same honest-uncertainty discipline as Phase 31.
+#
+# Sources (all located via this phase's own web search, checked 2026):
+#   - Heat exchangers: IndexBox market-pricing benchmark ("Plate Heat
+#     Exchanger Price" aggregator, 2026) reports $15-25/kW for brazed
+#     plates at high-OEM-volume for water-to-water duty, $40-70/kW for
+#     gasketed industrial units -- independently cross-checked against
+#     vendor catalog units (ato.com's 250-plate BPHE, rated 150-450kW,
+#     priced ~$3900, implies ~$9-26/kW; Alfa Laval/Bell & Gossett
+#     smaller-duty units on supplyhouse.com are consistent in order of
+#     magnitude once normalized by their own rated BTU/hr).
+#   - Pump: a pump-industry cost-estimation reference ("centrifugal pump
+#     cost estimation," Zhilong, 2024 figures) gives a rule-of-thumb
+#     $100-500/HP ($134-670/kW) for small (1-10 HP) industrial
+#     centrifugal pumps -- cross-checked against ato.com's own small
+#     centrifugal-pump price list (0.75-15kW units, $957-4198, i.e.
+#     roughly $233-1275/kW depending on scale, higher at the smallest
+#     sizes as expected from fixed-cost effects).
+#   - Motor: a 2026 motor-cost-guide aggregator gives $250-2000 (average
+#     $600) for small (1-5 HP) industrial motors -- cross-checked against
+#     ato.com's own small NEMA induction-motor catalog (1-5 HP units,
+#     $676-1072) and eBay/vendor listings for small TEFC motors
+#     (0.5-2 HP units, roughly $125-400).
+#   - Motor drive/controller: Thunder Said Energy's "Variable frequency
+#     drives: the economics?" data-file reports an average $250/kW from
+#     15 REAL PROJECT case studies -- cross-checked against retail VFD
+#     catalog pricing at small scale (ato.com, gohz.com: 0.75-3.7kW units,
+#     roughly $150-300, i.e. ~$80-280/kW, falling toward ~$70/kW by
+#     30-40kW).
+#   - Controls + enclosure: a PLC-pricing reference (industrialmonitordirect.com,
+#     2026) gives entry-level standalone controllers under $100, rising to
+#     ~$500 with added I/O; a control-panel-enclosure buying guide
+#     (e-abel.com) and vendor catalog data (KDM Steel; used-equipment
+#     listings) put a populated small sheet-steel NEMA-rated control
+#     cabinet in the low-hundreds-to-~$2000 range depending on size/
+#     rating. Treated as a FIXED allowance (not $/kW) since a lab/pilot-
+#     scale device's control electronics and cabinet do not scale
+#     linearly with cooling capacity the way HX/pump/motor duty does.
+#
+# HONESTY FLAG, stated plainly: this is a market-catalog-based ENGINEERING
+# ESTIMATE for generic component categories at roughly the right duty/
+# power class, not a quote for an actual AMR-specific heat exchanger,
+# pump, or drive (which would need custom manifolding, oscillating-flow-
+# rated seals, a synchronized reciprocating or rotary drive mechanism
+# matched to the AMR cycle frequency, etc., all of which could cost more
+# than an off-the-shelf steady-flow component of the same power rating).
+# It should be read and cited as such -- a first bottom-up estimate that
+# genuinely prices the missing hardware categories from real numbers,
+# not as a substitute for an actual AMR-vendor quote or engineering BOM.
+
+HX_COST_PER_KW_RANGE = (15.0, 30.0, 70.0)        # $/kW cooling/heating duty
+PUMP_COST_PER_KW_RANGE = (150.0, 300.0, 650.0)    # $/kW electrical input
+MOTOR_COST_PER_KW_RANGE = (300.0, 600.0, 1000.0)  # $/kW electrical input
+DRIVE_COST_PER_KW_RANGE = (100.0, 250.0, 400.0)   # $/kW electrical input
+CONTROLS_ENCLOSURE_FIXED_COST_RANGE = (300.0, 800.0, 2000.0)  # $, fixed
+
+HX_DUTY_MULTIPLIER_DEFAULT = None
+# Default is None, meaning "use the EXACT formula" -- see
+# exact_hx_duty_multiplier() immediately below. An earlier version of this
+# function defaulted to a flat 2.0x approximation; this was replaced
+# because the exact quantity was cheap to compute correctly from
+# COP_electrical (already a required argument) rather than approximated.
+# A caller who wants the old flat behavior (or any other fixed multiple)
+# can still pass an explicit float for hx_duty_multiplier -- None is the
+# sentinel for "compute it exactly," not a literal 0x.
+
+
+def exact_hx_duty_multiplier(COP_electrical):
+    """Total heat-exchanger duty as a multiple of Qc_avg_W, computed
+    exactly rather than approximated. By energy balance, the cold-side
+    heat exchanger duty is Qc, and the hot-side heat exchanger duty is
+    Qc + W_electrical = Qc*(1 + 1/COP_electrical) (all of the cooling
+    load plus all of the electrical input must be rejected at the hot
+    side). Total duty = Qc + Qc*(1+1/COP_electrical) = Qc*(2 + 1/COP_electrical),
+    so the multiplier is (2 + 1/COP_electrical). This equals the
+    previous flat 2.0x approximation only in the COP_electrical -> infinity
+    limit; at this repo's own representative COP_electrical ~ 5.26
+    (Phase 32's cross-check point), the exact multiplier is ~2.19x, about
+    9-10% more heat-exchanger duty (and therefore cost) than the old flat
+    2.0x approximation implied. At a lower, more conservative COP of 2,
+    it is 2.5x -- 25% more than the flat approximation."""
+    if COP_electrical <= 0:
+        raise ValueError("COP_electrical must be positive")
+    return 2.0 + 1.0 / COP_electrical
+
+
+def bottom_up_non_materials_bom(Qc_avg_W, COP_electrical,
+                                  hx_duty_multiplier=HX_DUTY_MULTIPLIER_DEFAULT):
+    """Genuine bottom-up LOW/MID/HIGH cost estimate for the heat exchanger
+    + pump + motor + drive + controls/enclosure hardware that
+    `bom_cost()`/`material_cost()` explicitly do NOT price (see section
+    docstring for full sourcing and the honesty flag on what kind of
+    estimate this is). Sizing basis: heat-exchanger duty scales with
+    `Qc_avg_W * hx_duty_multiplier`, where `hx_duty_multiplier` defaults
+    to the EXACT energy-balance multiplier from
+    `exact_hx_duty_multiplier(COP_electrical)` (pass an explicit float to
+    override with a flat approximation instead); pump/motor/drive scale
+    with electrical input power `Qc_avg_W / COP_electrical` (the same
+    electrical-power quantity `lifetime_cost()` and
+    `levelized_cost_of_cooling()` already use); controls/enclosure is a
+    fixed allowance, not power-scaled (see section docstring)."""
+    if COP_electrical <= 0:
+        raise ValueError("COP_electrical must be positive")
+    if hx_duty_multiplier is None:
+        hx_duty_multiplier = exact_hx_duty_multiplier(COP_electrical)
+    Qc_kW = Qc_avg_W / 1000.0
+    electrical_kW = Qc_kW / COP_electrical
+    hx_kW = Qc_kW * hx_duty_multiplier
+
+    def _band(per_unit_range, basis_kW):
+        low, mid, high = per_unit_range
+        return (low * basis_kW, mid * basis_kW, high * basis_kW)
+
+    hx_low, hx_mid, hx_high = _band(HX_COST_PER_KW_RANGE, hx_kW)
+    pump_low, pump_mid, pump_high = _band(PUMP_COST_PER_KW_RANGE, electrical_kW)
+    motor_low, motor_mid, motor_high = _band(MOTOR_COST_PER_KW_RANGE, electrical_kW)
+    drive_low, drive_mid, drive_high = _band(DRIVE_COST_PER_KW_RANGE, electrical_kW)
+    ctrl_low, ctrl_mid, ctrl_high = CONTROLS_ENCLOSURE_FIXED_COST_RANGE
+
+    total_low = hx_low + pump_low + motor_low + drive_low + ctrl_low
+    total_mid = hx_mid + pump_mid + motor_mid + drive_mid + ctrl_mid
+    total_high = hx_high + pump_high + motor_high + drive_high + ctrl_high
+
+    return {
+        "heat_exchangers_$": (round(hx_low, 2), round(hx_mid, 2), round(hx_high, 2)),
+        "pump_$": (round(pump_low, 2), round(pump_mid, 2), round(pump_high, 2)),
+        "motor_$": (round(motor_low, 2), round(motor_mid, 2), round(motor_high, 2)),
+        "drive_$": (round(drive_low, 2), round(drive_mid, 2), round(drive_high, 2)),
+        "controls_and_enclosure_$": CONTROLS_ENCLOSURE_FIXED_COST_RANGE,
+        "non_materials_bom_total_low_$": round(total_low, 2),
+        "non_materials_bom_total_mid_$": round(total_mid, 2),
+        "non_materials_bom_total_high_$": round(total_high, 2),
+        "note": "Bottom-up, market-catalog-sourced estimate for generic "
+                "component categories at this device's power class -- NOT "
+                "an AMR-specific vendor quote. See this section's own "
+                "docstring for full sourcing and honesty flag.",
+    }
+
+
+def full_system_cost_estimate_bottom_up(mu0H_max, mass_regenerator, Qc_avg_W,
+                                          COP_electrical, family_name="Gd",
+                                          smm_mass_fraction=0.5,
+                                          hx_duty_multiplier=HX_DUTY_MULTIPLIER_DEFAULT):
+    """Combines `bom_cost()`'s materials-only BOM with
+    `bottom_up_non_materials_bom()`'s genuine bottom-up non-materials
+    estimate into a full-system LOW/MID/HIGH cost -- a THIRD, methodo-
+    logically-independent full-system estimate alongside
+    `full_system_cost_estimate()`'s borrowed-VCC-multiplier point value
+    and `full_system_cost_estimate_range()`'s borrowed-multiplier band.
+    All three should be reported together, not as competing single
+    answers: they disagree by construction (different methods, different
+    sources), and the spread across all three is itself the honest
+    uncertainty on this repo's full-system cost estimate."""
+    materials = bom_cost(mu0H_max, mass_regenerator, family_name, smm_mass_fraction)
+    non_materials = bottom_up_non_materials_bom(Qc_avg_W, COP_electrical,
+                                                  hx_duty_multiplier)
+    materials_total = materials["materials_bom_total_$"]
+    full_low = materials_total + non_materials["non_materials_bom_total_low_$"]
+    full_mid = materials_total + non_materials["non_materials_bom_total_mid_$"]
+    full_high = materials_total + non_materials["non_materials_bom_total_high_$"]
+    return {
+        **materials,
+        "non_materials_breakdown": non_materials,
+        "full_system_cost_bottom_up_low_$": round(full_low, 2),
+        "full_system_cost_bottom_up_mid_$": round(full_mid, 2),
+        "full_system_cost_bottom_up_high_$": round(full_high, 2),
+        "implied_non_materials_multiplier_mid": (
+            round(full_mid / materials_total, 2) if materials_total > 0 else None),
+        "note": "Bottom-up (component-catalog-priced) full-system estimate -- "
+                "see bottom_up_non_materials_bom()'s own docstring/honesty flag. "
+                "Report alongside full_system_cost_estimate()/"
+                "full_system_cost_estimate_range() (borrowed-VCC-multiplier "
+                "methods), not instead of them -- agreement or disagreement "
+                "between the two independent methods is itself informative.",
+    }
+
+
+def cross_check_full_system_cost_methods(mu0H_max, mass_regenerator, Qc_avg_W,
+                                           COP_electrical, family_name="Gd",
+                                           smm_mass_fraction=0.5):
+    """Runs `full_system_cost_estimate_range()` (borrowed VCC-manufactured-
+    cost multiplier) and `full_system_cost_estimate_bottom_up()` (bottom-up
+    component-catalog pricing) at the SAME design point and reports both
+    side by side, plus the ratio between their MID estimates.
+
+    HONEST FINDING FROM RUNNING THIS ACROSS THIS REPO'S OWN REPRESENTATIVE
+    OPERATING POINTS (documented here rather than only in ROADMAP.md, so
+    it travels with the code): the two methods do NOT agree, and the gap
+    WIDENS, not narrows, as device scale increases from a ~500W lab point
+    to a ~5kW design-target point -- because materials cost scales with
+    `mass_regenerator` (which the borrowed multiplier then re-multiplies
+    by 8-40x every time), while the bottom-up component costs scale with
+    `Qc_avg_W`/electrical power at $/kW rates that fall well short of
+    that multiplier once materials cost itself is large. The most likely
+    explanation, stated plainly rather than resolved: Russek & Zimm's
+    (2006) multiplier is derived from a MASS-PRODUCED, retail MANUFACTURED
+    cost (including assembly labor, engineering overhead, distribution,
+    and margin for a mature technology), whereas `bottom_up_non_materials_bom()`
+    prices bare COMPONENT PARTS ONLY (no labor, no AMR-specific engineering
+    premium for oscillating-flow-rated seals/manifolds/a synchronized
+    drive, no margin) -- so the bottom-up number is plausibly a FLOOR and
+    the borrowed-multiplier number a more realistic (if technology-
+    mismatched) retail figure. This repo does not have the data to
+    adjudicate between these two explanations and does not attempt to;
+    both estimates are reported so the reader can see the actual size of
+    the disagreement rather than a single falsely-precise number."""
+    ranged = full_system_cost_estimate_range(mu0H_max, mass_regenerator,
+                                               family_name, smm_mass_fraction)
+    bottom_up = full_system_cost_estimate_bottom_up(
+        mu0H_max, mass_regenerator, Qc_avg_W, COP_electrical,
+        family_name, smm_mass_fraction)
+    ratio_mid = (ranged["full_system_cost_mid_$"]
+                 / bottom_up["full_system_cost_bottom_up_mid_$"])
+    return {
+        "materials_bom_total_$": ranged["materials_bom_total_$"],
+        "borrowed_multiplier_method": {
+            "low_$": ranged["full_system_cost_low_$"],
+            "mid_$": ranged["full_system_cost_mid_$"],
+            "high_$": ranged["full_system_cost_high_$"],
+        },
+        "bottom_up_component_method": {
+            "low_$": bottom_up["full_system_cost_bottom_up_low_$"],
+            "mid_$": bottom_up["full_system_cost_bottom_up_mid_$"],
+            "high_$": bottom_up["full_system_cost_bottom_up_high_$"],
+        },
+        "borrowed_vs_bottom_up_mid_ratio": round(ratio_mid, 2),
+        "note": "The two methods' MID estimates disagree by the ratio above "
+                "-- see this function's own docstring for the likely reason "
+                "(retail-manufactured-cost multiplier vs. bare-component-"
+                "parts pricing) and why this repo reports both rather than "
+                "picking one.",
+    }
+
+
+# =============================================================================
+# Phase 33 addition: MAGNET_TO_MCM_MASS_RATIO_PER_TESLA cross-checked
+# against 11 REAL reported AMR devices (Rowe, Int. J. Refrig. 34 (2011)
+# 168-177, Table 1) -- historical account of the finding that led to
+# Phase 34's update below. `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA` no longer
+# equals 3.0 as of Phase 34 (see that constant's own comment); this
+# section's "3.0" references below describe the value AS IT STOOD WHEN
+# THIS CROSS-CHECK WAS FIRST RUN, not the module's current default.
+# =============================================================================
+#
+# `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA`'s ORIGINAL value (3.0, now
+# preserved as `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY`) had
+# been flagged since it was introduced as "a rough fit to Bjork et al.'s
+# two worked examples...not a validated scaling law." This phase closes
+# part of that gap using real, extractable data this time: Rowe (2011)'s
+# Table 1 -- read directly off a rendered page image, not the garbled raw
+# PDF text extraction, specifically to avoid misreading a numeric table --
+# lists V_mag[L] (permanent magnet volume) and V_B[L] (regenerator bed
+# volume, i.e. V_MCM) and B0[T] (peak field) for 11 REPORTED, REAL AMR
+# devices (Engelbrecht, Kim & Jeong, Lee, Lu, Okamura, Tura & Rowe, Vasile
+# & Muller, Zheng, two Zimm devices, and Tusek's continuous design) --
+# not two worked examples, eleven actual built or closely-specified
+# devices spanning a wide range of scales and configurations.
+#
+# Converting each device's volume ratio to a mass ratio per Tesla uses
+# Tura & Rowe's OWN companion paper's density figures (Tura & Rowe 2013,
+# "Concentric Halbach cylinder magnetic refrigerator cost optimization,"
+# already in this project's Papers/Economics/ folder): PM density
+# 7.45 g/cm^3, MCM (Gd) density 7.9 g/cm^3 -- i.e.
+#   mass_ratio_per_tesla = (V_mag/V_MCM) * (rho_mag/rho_MCM) / B0
+#
+# HONEST CAVEAT on this bridge: the 2011 table's "V_B[L]" column is
+# assumed here to mean the regenerator-bed (= MCM) volume the surrounding
+# text calls V_MCM -- the paper's own prose says "the magnet design
+# parameters (Vmag, VMCM, B0)... are largely taken from Bjork et al.
+# (2010)" while the printed table header abbreviates the same quantity
+# as V_B. This reading is very likely correct (bed volume = MCM volume is
+# a standard equivalence in this literature and matches the paper's own
+# prose) but is not 100% independently confirmed against the underlying
+# Bjork et al. (2010) source table, which is not in this project's corpus.
+#
+# THE FINDING: across all 11 devices, this repo's ORIGINAL
+# `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA` value of 3.0 sat AT OR BELOW THE
+# LOW END of the real-device range, not in the middle of it. The 11
+# real-device values range from ~4.0 (Okamura) to ~22.6 (Lee), with a
+# MEDIAN of ~13.5 and a MEAN of ~12.1 -- roughly 4-5x that original point
+# value, not a tight cluster around it. This suggested the original 3.0
+# value (and therefore every magnet mass, magnet cost, and full-system
+# cost estimate this module computed from it) was a substantial
+# UNDERESTIMATE relative to real reported devices, not merely "rough."
+#
+# Following this repo's own established discipline through Phase 32 --
+# don't silently overwrite a load-bearing constant on the strength of a
+# single new cross-check -- Phase 33 initially left
+# `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA` unchanged and reported this finding
+# as a standalone cross-check only. Phase 34 (explicit user instruction:
+# act on the finding, keeping both the old and new values available)
+# updates the module's WORKING DEFAULT to the Rowe (2011) 11-device
+# median -- see `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA`'s own comment near
+# the top of this file for the mechanics -- while preserving the original
+# value as `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY` and
+# adding `compare_legacy_and_updated_magnet_ratio()` immediately below
+# this function to report both side by side at any design point, so nothing
+# from before Phase 34 is lost, only superseded as the default.
+
+ROWE2011_DEVICE_MAGNET_MCM_DATA = [
+    # (device_name, V_mag_L, V_MCM_L, B0_T)
+    ("Engelbrecht", 0.5, 0.07, 1.03),
+    ("Kim and Jeong", 0.2, 0.01, 1.4),
+    ("Lee", 14.6, 0.32, 1.9),
+    ("Lu", 2.94, 0.14, 1.4),
+    ("Okamura", 3.38, 0.8, 1.0),
+    ("Tura and Rowe", 1.03, 0.05, 1.4),
+    ("Vasile and Muller", 9.2, 0.75, 1.9),
+    ("Zheng", 0.5, 0.09, 0.93),
+    ("Zimm 2007", 4.7, 0.15, 1.5),
+    ("Zimm 2006, 2010", 1.13, 0.034, 1.5),
+    ("Tusek (continuous)", 0.65, 0.11, 0.97),
+]
+# Source: Rowe, A., "Configuration and performance analysis of magnetic
+# refrigerators," Int. J. Refrigeration 34 (2011) 168-177, Table 1
+# (read from a rendered page image, not raw PDF text extraction).
+
+ROWE2011_PM_DENSITY_G_CM3 = 7.45   # Tura & Rowe (2013), same companion paper
+ROWE2011_MCM_DENSITY_G_CM3 = 7.9   # already used for Phase 31's cross-check
+
+
+def rowe2011_magnet_mass_ratio_cross_check():
+    """Computes mass_ratio_per_tesla = (V_mag/V_MCM) * (rho_mag/rho_MCM) / B0
+    for each of the 11 real devices in `ROWE2011_DEVICE_MAGNET_MCM_DATA`
+    and compares the resulting range to this module's own
+    `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA`. See section docstring for the
+    full finding, the density-bridge assumption, and Phase 34's update to
+    this module's working default in response to it."""
+    density_ratio = ROWE2011_PM_DENSITY_G_CM3 / ROWE2011_MCM_DENSITY_G_CM3
+    per_device = []
+    for name, v_mag, v_mcm, b0 in ROWE2011_DEVICE_MAGNET_MCM_DATA:
+        volume_ratio = v_mag / v_mcm
+        mass_ratio_per_tesla = volume_ratio * density_ratio / b0
+        per_device.append({
+            "device": name,
+            "V_mag_L": v_mag,
+            "V_MCM_L": v_mcm,
+            "B0_T": b0,
+            "volume_ratio": round(volume_ratio, 2),
+            "mass_ratio_per_tesla": round(mass_ratio_per_tesla, 2),
+        })
+    ratios = [d["mass_ratio_per_tesla"] for d in per_device]
+    ratios_sorted = sorted(ratios)
+    n = len(ratios_sorted)
+    median = (ratios_sorted[n // 2] if n % 2 == 1
+              else (ratios_sorted[n // 2 - 1] + ratios_sorted[n // 2]) / 2)
+    return {
+        "per_device": per_device,
+        "n_devices": n,
+        "min_mass_ratio_per_tesla": min(ratios),
+        "max_mass_ratio_per_tesla": max(ratios),
+        "median_mass_ratio_per_tesla": round(median, 2),
+        "mean_mass_ratio_per_tesla": round(sum(ratios) / n, 2),
+        "current_module_value": MAGNET_TO_MCM_MASS_RATIO_PER_TESLA,
+        "legacy_value": MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY,
+        "note": f"As of Phase 34, this module's working "
+                f"MAGNET_TO_MCM_MASS_RATIO_PER_TESLA="
+                f"{MAGNET_TO_MCM_MASS_RATIO_PER_TESLA} IS this 11-device "
+                f"median (range {min(ratios):.1f}-{max(ratios):.1f}) -- the "
+                f"pre-Phase-34 legacy value "
+                f"({MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY}, "
+                "a fit to Bjork et al.'s two worked examples) sat at or "
+                "below the minimum of this real-device range and is "
+                "preserved as MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY "
+                "for direct comparison/reproducibility -- see "
+                "compare_legacy_and_updated_magnet_ratio() to run both at "
+                "the same design point.",
+    }
+
+
+def compare_legacy_and_updated_magnet_ratio(mu0H_max, mass_regenerator,
+                                              family_name="Gd",
+                                              smm_mass_fraction=0.5):
+    """Runs `bom_cost()` at the SAME design point with BOTH
+    `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY` (this module's
+    pre-Phase-34 point value, a fit to Bjork et al.'s two worked
+    examples) and `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA` (the current
+    working default, the Rowe 2011 11-device median -- see
+    `rowe2011_magnet_mass_ratio_cross_check()`), and reports both side by
+    side. This is the direct answer to "keep both": every function in
+    this module now uses the updated (median) value by default, but nothing
+    from before Phase 34 is unreproducible -- this function runs both at
+    once, and any other function's `mass_ratio_per_tesla` parameter can
+    be set to the legacy constant directly for the same effect."""
+    legacy = bom_cost(mu0H_max, mass_regenerator, family_name, smm_mass_fraction,
+                       mass_ratio_per_tesla=MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY)
+    updated = bom_cost(mu0H_max, mass_regenerator, family_name, smm_mass_fraction,
+                        mass_ratio_per_tesla=MAGNET_TO_MCM_MASS_RATIO_PER_TESLA)
+    return {
+        "mu0H_max_T": mu0H_max,
+        "mass_regenerator_kg": mass_regenerator,
+        "family_name": family_name,
+        "legacy_bjork2011": {
+            "mass_ratio_per_tesla": MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY,
+            "magnet_mass_kg": legacy["magnet_mass_kg"],
+            "magnet_cost_$": legacy["magnet_cost_$"],
+            "materials_bom_total_$": legacy["materials_bom_total_$"],
+        },
+        "updated_rowe2011_median": {
+            "mass_ratio_per_tesla": MAGNET_TO_MCM_MASS_RATIO_PER_TESLA,
+            "magnet_mass_kg": updated["magnet_mass_kg"],
+            "magnet_cost_$": updated["magnet_cost_$"],
+            "materials_bom_total_$": updated["materials_bom_total_$"],
+        },
+        "materials_bom_total_ratio": (
+            round(updated["materials_bom_total_$"] / legacy["materials_bom_total_$"], 2)
+            if legacy["materials_bom_total_$"] > 0 else None),
+        "note": "The updated (Rowe 2011 median) magnet ratio is now this "
+                "module's default everywhere -- material_cost(), bom_cost(), "
+                "full_system_cost_estimate(), lifetime_cost(), and every "
+                "Phase 15-33 function built on them. Pass "
+                "mass_ratio_per_tesla=MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY "
+                "explicitly to any of them to reproduce this module's "
+                "pre-Phase-34 numbers instead.",
     }

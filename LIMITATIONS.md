@@ -21,14 +21,22 @@ extended, or fixed directly during Phase 31 (noted inline).
 
 ### 1.1 Mean-field Gd model overpredicts near the Curie point
 Mean-field (Brillouin/Weiss) theory systematically overpredicts Gd's
-adiabatic temperature change close to Tc=294K, worst at low field
-(+48.9% at 1T, narrowing to -7.5% at 5T vs. Dan'kov et al. 1998). This is
-a textbook, well-known limitation of mean-field theory near a critical
-point (it ignores short-range spin correlations) -- not a bug, and not
-fixable without a materially different (e.g. renormalization-group)
-theory.
-- Source: `core/mce_material.py` module docstring; `results/regenerator_1d_validation.txt`
-  quotes the exact per-field errors used in the ASHRAE-competition deck.
+adiabatic temperature change close to Tc=294K, worst at low field and
+shrinking as field increases (+48.9% at 1T, +29.2% at 2T, +9.8% at 5T vs.
+Dan'kov et al. 1998). This is a textbook, well-known limitation of
+mean-field theory near a critical point (it ignores short-range spin
+correlations) -- not a bug, and not fixable without a materially
+different (e.g. renormalization-group) theory.
+- Phase 35 correction: the 5T literature reference value was previously
+  wrong (14.6K, making the model APPEAR to underestimate by -7.5% at 5T
+  only -- an odd sign flip inconsistent with the theory above). A
+  pixel-calibrated re-digitization of Dan'kov et al.'s own Fig. 10 found
+  the correct value is 12.3K, not 14.6K -- see Section 5 below for the
+  full methodology and cross-validation. The corrected table (all three
+  fields overestimate, shrinking monotonically with field) is now
+  internally consistent with the stated mean-field-near-Tc theory.
+- Source: `core/mce_material.py`, `core/validation.py`'s
+  `LITERATURE_DELTA_T_AD` (with the Phase 35 digitization note inline).
 
 ### 1.2 First-order Landau model overestimates giant-MCE ΔTad
 The 6th-order Landau free-energy expansion used for Gd5Si2Ge2,
@@ -220,8 +228,9 @@ committed content before this phase's own changes could be packaged.
   docstring.
 - **Reference-book gaps.** Kitanovski et al. (2015) pp.104-109
   (closed-form cycle-topology relations) and Tishin & Spichkin (2003)
-  Ch.11 (passive regenerators) remain inaccessible to this project's
-  corpus -- several "qualitative ranking only" caveats in
+  Ch.11 (passive regenerators) remain inaccessible even with the full
+  `Papers/` corpus now present (see Section 5, items 5.1-5.2) -- several
+  "qualitative ranking only" caveats in
   `core/passive_regenerator_analysis.py` and cycle-type sensitivity work
   trace back to this.
 - **India/data-center-specific techno-economics.** `pue_annualized.py`
@@ -229,6 +238,104 @@ committed content before this phase's own changes could be packaged.
   actual Indian climate-zone data or commercial electricity tariffs.
 - **Regeneration of stale `results/*.txt` diagnostic files** listed in
   Section 2.1 above.
+- **Papers/ subfolders not yet mined**: `Reviews/`, `Data center
+  cooling/`, and `AMR Theory and Modeling/` were not systematically
+  cross-checked against the codebase's citations in Phase 35 (time-
+  bounded scope decision, not a finding of any kind) -- a reasonable next
+  pass for whoever picks this up next.
+
+---
+
+## 5. Phase 35: `Papers/` corpus verification pass
+
+(Numbering note: this project's own numbering had independently reached
+Phase 33/34 -- CORE_PLUS_TUSEK_MULTIPOINT calibration, NTU/utilization
+diagnostics, beverage-cooler validation -- by the time this pass was
+merged in, so it is labeled Phase 35 here rather than colliding with
+those; the underlying work below was done directly against the original
+`Papers/` corpus and does not depend on or conflict with Phases 33-34.)
+
+The 41-paper corpus this project's citations had always referenced (many
+comments say "PDF present in this repo" or similar) was, until this
+phase, missing from the delivered project -- present in the original
+developer's own working copy, but not included in earlier hand-offs of
+this codebase. This phase added the corpus (`Papers/`, 137 MB, 8
+subfolders) and used it to directly re-verify -- not just trust -- the
+citations it backs. Headline result: the overwhelming majority of
+citations checked out EXACTLY against primary sources (Dan'kov et al.
+1998's 2T and 7.5T text-quoted values, Pecharsky & Gschneidner 1997's
+Gd5Si2Ge2 peak entropy figure, Giguere et al. 1999's Gd cross-check
+values, Bjork et al. 2011's $40/$20 per kg figures, Jacobs et al. 2014's
+Astronautics 2502W/11.0K/COP=1.9/1.52kg figures) -- strong evidence the
+project's prior "paper-mining pass" work was done with real (if
+since-separated) primary-source access, not fabricated. Two genuine
+errors were found and fixed:
+
+- **`LITERATURE_DELTA_T_AD[5.0]` was wrong (14.6K, corrected to 12.3K)**.
+  A pixel-calibrated re-digitization of Dan'kov et al.'s own Fig. 10 (not
+  previously digitized in this project -- the old value was flagged as
+  "plausible but not confirmed") gives 12.2-12.5K at 5T, cross-validated
+  by reproducing the paper's own prose-stated ~15K figure at 7.5T to
+  within 0.5K using the identical method. This flips the model's reported
+  5T behavior from an apparent -7.5% underestimate to a +9.8%
+  overestimate -- which is actually a MORE physically consistent result
+  (mean-field theory should overestimate at every field near Tc, not flip
+  sign at exactly one field), and substantially narrows what was
+  previously described as a "genuine cross-paper discrepancy" against
+  Giguere et al.'s independent Gd measurement. See `core/validation.py`'s
+  updated `LITERATURE_DELTA_T_AD` comment for the full digitization
+  methodology. This also flipped a knock-on finding in
+  `core/inhomogeneous_broadening.py`: what was reported as "narrows the 1T
+  error but widens the 5T error -- a genuine trade-off" is, under the
+  corrected reference value, "narrows BOTH errors simultaneously" -- no
+  code change was needed for this, the module's own conditional trade-off
+  detection logic adapted automatically once the input data was corrected.
+- **`core/mce_material.py`'s docstring said "-9.5 J/kg/K" for
+  Gd5Si2Ge2's peak entropy change at 5T, corrected to "-18 J/kg/K"**.
+  Direct inspection of Pecharsky & Gschneidner (1997) Fig. 4 confirms the
+  peak is at ~18 J/(kg K), matching `core/giguere_validation.py`'s
+  already-correct citation of the same paper/quantity -- this was a
+  documentation-only inconsistency (the wrong value was never read by any
+  function), not a computational bug.
+
+Two genuinely new, additive citations were incorporated into
+`core/economics.py`: Tura & Rowe (2014)'s $42/kg NdFeB and $10-20/kg bulk
+Gd figures (triangulating Bjork et al. 2011's $40/$20 per kg), and Bjork,
+Bahl & Nielsen (2016)'s specific $100 magnet + $40 MCM / 50W worked
+example (a real literature anchor for `AMR_MAGNETIC`'s previously-
+undocumented $2200/kW placeholder -- confirms it is reasonable and, if
+anything, conservative, without resolving the separate HX/pump/motor/
+controls gap, which the cited paper's own cost model shares).
+
+### 5.1 Kitanovski et al. (2015) pp.104-109 remains inaccessible
+Checked directly this phase: `Papers/Reference Books/Kitanovski et al.,
+Magnetocaloric Energy Conversion (2015).pdf` is only a 30-page front-
+matter/preface excerpt (table of contents and introduction, ending partway
+into Chapter 1), not the full ~250+ page monograph -- it does not contain
+Chapter 4 (Active Magnetic Regeneration) at all, so Sect. 4.1.1-4.1.4 (pp.
+104-109), the source this project's `core/amr_cycle.py` cycle-type
+factors were always meant to derive from, is still not available. Status
+unchanged: qualitative Carnot >= Ericsson >= Brayton ranking only, not the
+book's own closed-form relations.
+
+### 5.2 Tishin & Spichkin (2003) remains an image-only, non-extractable PDF
+Confirmed directly this phase: `Papers/Reference Books/Tishin & Spichkin,
+The Magnetocaloric Effect and its Applications (2003).pdf` extracts zero
+characters of real text from its sampled pages (scanned images only, no
+OCR text layer) -- matching the exact finding already flagged in
+`core/baseline_cooling.py` (Ch. 11, passive regenerators) and
+`core/inhomogeneous_broadening.py` (Sect. 2.8, inhomogeneous
+ferromagnets). Status unchanged: both remain open; OCR-ing the specific
+needed chapters (not attempted this phase, out of scope for this pass)
+would be the concrete next step.
+
+Confirmed still-genuinely-open even with the full corpus available (not
+just previously unchecked): (Mn,Fe)2(P,Si)/Ga1-xCMn3+x/Mn-Cu-Co-Ge have no
+$/kg figure anywhere in the corpus (`Papers/Economics/The Resource Basis
+of Magnetic Refrigeration.pdf` discusses these materials only in terms of
+rare-earth supply criticality, not unit cost); Kitanovski et al. (2015)
+pp.104-109 and all of Tishin & Spichkin (2003) remain inaccessible (see
+Sections 5.1-5.2 above) even in this corpus.
 
 ---
 

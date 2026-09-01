@@ -1,0 +1,64 @@
+Eight-way material family comparison at the ASHRAE operating point (Phase 22 item 2 adds the nanocomposite candidate; Phase 24 adds the Ga1-xCMn3+x antiperovskite candidate; Phase 25 adds the Mn1-xCuxCoGe candidate)
+(T_cold=18C=291.15K, spans=[5.0, 10.0, 15.0, 20.0]K, mu0H=2.0T, 5kg/stage, 1-4 stage cascade)
+====================================================================================================
+Tunable families (GD_FAMILY, LAFESIH_FAMILY, MNFEPSI_FAMILY, GA1XCMN3X_FAMILY, MNCUCOGE_FAMILY) are re-tuned per span
+so their OWN peak lands at that span's T_mid = T_cold + span/2 (see module docstring
+for the +10-11K peak-vs-Tc offset this accounts for). Falls back to plain Gd where
+the required Tc sits outside the family's documented tunability window.
+
+candidate                      span_K  T_mid_K  Tc_used_K  tc_window           in_range  1stg_COP  1stg_Qc_W
+Gd (fixed)                          5    293.6      294.0  n/a (not tunable)       True     5.635     1168.0
+Gd5Si2Ge2 (fixed comp.)             5    293.6      276.0  n/a (not tunable)       True        --         --
+Gd5(SixGe1-x)4(-Ga) (tuned)         5    293.6      283.0  20.0-290.0K             True     3.547     2127.6
+La(Fe,Si)13Hy (tuned)               5    293.6      283.0  190.0-340.0K            True     9.722     5752.7
+(Mn,Fe)2(P,Si) (tuned)              5    293.6      281.2  295.3-331.2K           False     5.635     1168.0
+Nanocomposite (LAFESIH 3-phase blend) (tuned)      5    293.6      283.0  194.0-336.0K            True      6.93     2525.5
+Ga1-xCMn3+x (tuned)                 5    293.6      293.2  250.0-323.5K            True        --         --
+Mn1-xCuxCoGe (tuned)                5    293.6      288.0  291.0-316.0K           False     5.635     1168.0
+Gd (fixed)                         10    296.1      294.0  n/a (not tunable)       True     5.296     1443.4
+Gd5Si2Ge2 (fixed comp.)            10    296.1      276.0  n/a (not tunable)       True        --         --
+Gd5(SixGe1-x)4(-Ga) (tuned)        10    296.1      285.4  20.0-290.0K             True     2.299     1352.3
+La(Fe,Si)13Hy (tuned)              10    296.1      285.4  190.0-340.0K            True     7.164     4989.1
+(Mn,Fe)2(P,Si) (tuned)             10    296.1      283.7  295.3-331.2K           False     5.296     1443.4
+Nanocomposite (LAFESIH 3-phase blend) (tuned)     10    296.1      285.4  194.0-336.0K            True     4.795     1753.7
+Ga1-xCMn3+x (tuned)                10    296.1      295.6  250.0-323.5K            True        --         --
+Mn1-xCuxCoGe (tuned)               10    296.1      290.5  291.0-316.0K           False     5.296     1443.4
+Gd (fixed)                         15    298.6      294.0  n/a (not tunable)       True     1.725      280.5
+Gd5Si2Ge2 (fixed comp.)            15    298.6      276.0  n/a (not tunable)       True        --         --
+Gd5(SixGe1-x)4(-Ga) (tuned)        15    298.6      287.8  20.0-290.0K             True     1.101      581.3
+La(Fe,Si)13Hy (tuned)              15    298.6      287.8  190.0-340.0K            True     5.619     4241.0
+(Mn,Fe)2(P,Si) (tuned)             15    298.6      286.2  295.3-331.2K           False     1.725      280.5
+Nanocomposite (LAFESIH 3-phase blend) (tuned)     15    298.6      287.8  194.0-336.0K            True     3.092      984.4
+Ga1-xCMn3+x (tuned)                15    298.6      298.2  250.0-323.5K            True        --         --
+Mn1-xCuxCoGe (tuned)               15    298.6      293.1  291.0-316.0K            True     6.202     9174.7
+Gd (fixed)                         20    301.1      294.0  n/a (not tunable)       True        --         --
+Gd5Si2Ge2 (fixed comp.)            20    301.1      276.0  n/a (not tunable)       True        --         --
+Gd5(SixGe1-x)4(-Ga) (tuned)        20    301.1      290.8  20.0-290.0K            False        --         --
+La(Fe,Si)13Hy (tuned)              20    301.1      290.2  190.0-340.0K            True     4.565     3499.4
+(Mn,Fe)2(P,Si) (tuned)             20    301.1      288.7  295.3-331.2K           False        --         --
+Nanocomposite (LAFESIH 3-phase blend) (tuned)     20    301.1      290.2  194.0-336.0K            True     0.928      204.6
+Ga1-xCMn3+x (tuned)                20    301.1      300.6  250.0-323.5K            True        --         --
+Mn1-xCuxCoGe (tuned)               20    301.1      295.6  291.0-316.0K            True     5.119     8445.2
+
+RANKED (1-stage COP_electrical, at representative span=10K):
+  1. La(Fe,Si)13Hy (tuned)      COP=7.16  Qc=4989.1W
+  2. Gd (fixed)                 COP=5.30  Qc=1443.4W
+  3. Nanocomposite (LAFESIH 3-phase blend) (tuned) COP=4.79  Qc=1753.7W
+  4. Gd5(SixGe1-x)4(-Ga) (tuned) COP=2.30  Qc=1352.3W
+  --  Gd5Si2Ge2 (fixed comp.)    INFEASIBLE at this span
+  --  Ga1-xCMn3+x (tuned)        INFEASIBLE at this span
+
+  Not independently ranked (Tc window doesn't cover this point -> fell back
+  to plain Gd, so these are identical to the Gd row above, not a distinct result):
+      (Mn,Fe)2(P,Si) (tuned)     == Gd (fixed) at this span
+      Mn1-xCuxCoGe (tuned)       == Gd (fixed) at this span
+
+For reference, baselines at this operating point: VCC COP=12.23, Liquid COP=19.89
+
+CONCLUSION:
+Best-performing AMR candidate at the representative point: La(Fe,Si)13Hy (tuned) (1-stage COP_electrical=7.16, Qc=4989.1W).
+This does not by itself establish that any AMR candidate beats vapor-compression or
+liquid cooling on COP -- see the baselines above and comparison_table.csv/step 4 for
+that separate, already-established conclusion. What this table adds is a fair,
+apples-to-apples ranking AMONG the giant-MCE material options themselves, including
+whether each family's documented tunability window can even reach the ASHRAE point.
