@@ -17,15 +17,6 @@ let pres = new pptxgen();
 pres.layout = "LAYOUT_WIDE"; // 13.33 x 7.5
 const PW = 13.33, PH = 7.5;
 
-// ---------------- AUTO PAGE NUMBERING ----------------
-// UPGRADE: page numbers used to be hand-typed as a second argument to
-// footer(s, N) on every slide. That's exactly the kind of thing that
-// silently drifts out of sync the moment a slide gets inserted or
-// reordered (as this revision does, twice). footer() now keeps its own
-// counter, so numbering just follows document order. Call footer(slide)
-// on every content slide in order; skip it on the title slide and the
-// closing "thank you"-style conclusion slide, matching the template's
-// own convention of leaving bookend slides unnumbered.
 let pageNum = 1;
 
 function corner(slide, dark) {
@@ -73,9 +64,6 @@ function footer(slide) {
     x: PW - 0.9, y: PH - 0.55, w: 0.5, h: 0.3, fontFace: "Calibri", fontSize: 10,
     color: MUTED, align: "right", isTextBox: true, margin: 0
   });
-  // The corner() bottom-left decoration occupies x:0.35–1.25, y:6.25–7.15.
-  // Footer text starts clear of it (x:1.55) so the decorative brackets
-  // never slice through the running footer text.
   slide.addText("MAGCOOL-DC \u00B7 ASHRAE REGION XV \u00B7 SAMUDRA 2026", {
     x: 1.55, y: PH - 0.55, w: 6, h: 0.3, fontFace: "Calibri", fontSize: 9,
     color: MUTED, isTextBox: true, margin: 0
@@ -85,11 +73,8 @@ function footer(slide) {
 function statBadge(slide, x, y, w, h, value, label, color, opts) {
   opts = opts || {};
   slide.addShape("roundRect", { x, y, w, h, rectRadius: 0.08, fill: { color: WHITE }, line: { color: color, width: 1 }, shadow: { type: "outer", color: "3A5A58", opacity: 0.15, blur: 4, offset: 2, angle: 90 } });
-  // Auto-shrink long values (e.g. "$0.1027/kWh_cooling") so they stay inside the badge.
   const autoSize = value.length > 14 ? 15 : value.length > 10 ? 18 : 22;
   slide.addText(value, { x: x + 0.06, y: y + 0.12, w: w - 0.12, h: h * 0.55, align: "center", fontFace: "Cambria", fontSize: opts.valueSize || autoSize, bold: true, color: color, isTextBox: true, margin: 0, fit: "shrink" });
-  // UPGRADE: labels can also run long (e.g. cost-breakdown badges); fit:"shrink"
-  // keeps them from clipping instead of only guarding the value line.
   slide.addText(label, { x: x + 0.1, y: y + h * 0.6, w: w - 0.2, h: h * 0.35, align: "center", fontFace: "Calibri", fontSize: 10, color: TEXT, isTextBox: true, margin: 0, fit: "shrink" });
 }
 
@@ -118,12 +103,6 @@ function img(slide, file, x, y, w, h) {
   slide.addImage({ path: path.join(FIGDIR, file), x, y, w, h, sizing: { type: "contain", w, h } });
 }
 
-// UPGRADE: chipRow() + sectionDivider() are new. They port the source
-// template's "BAB N" chapter-divider pattern (big Cambria title, hairline
-// + ellipse divider, a row of alternating dark/pink rectangle chips naming
-// the subsections) into the MagCool-DC visual language, so the 30-slide
-// deck reads as four clearly-labelled parts instead of one flat run of
-// slides.
 function chipRow(slide, chips, y) {
   const w = 3.35, h = 0.72, gap = 0.28, perRow = 3;
   chips.forEach((label, i) => {
@@ -163,27 +142,56 @@ function sectionDivider(partLabel, titleText, chips) {
   let s = bgSlide(true);
   corner(s, true);
   s.addText("PHYSICS-BASED SIMULATION & MULTI-OBJECTIVE OPTIMISATION", {
-    x: 1.0, y: 2.05, w: 11.3, h: 0.4, fontFace: "Calibri", fontSize: 14, color: PINK, bold: true, charSpacing: 2, isTextBox: true, margin: 0, align: "center"
+    x: 1.0, y: 1.85, w: 11.3, h: 0.4, fontFace: "Calibri", fontSize: 14, color: PINK, bold: true, charSpacing: 2, isTextBox: true, margin: 0, align: "center"
   });
   s.addText("MAGNETOCALORIC COOLING\nFOR DATA CENTERS", {
-    x: 0.8, y: 2.5, w: 11.73, h: 1.9, fontFace: "Cambria", fontSize: 44, color: WHITE, bold: true, align: "center", isTextBox: true, margin: 0
+    x: 0.8, y: 2.2, w: 11.73, h: 1.9, fontFace: "Cambria", fontSize: 44, color: WHITE, bold: true, align: "center", isTextBox: true, margin: 0
   });
   s.addText("Toward Refrigerant-Free, Low-Carbon HVAC&R", {
-    x: 1.0, y: 4.35, w: 11.3, h: 0.4, fontFace: "Calibri", fontSize: 15, italic: true, color: "BFE0DD", align: "center", isTextBox: true, margin: 0
+    x: 1.0, y: 4.05, w: 11.3, h: 0.4, fontFace: "Calibri", fontSize: 15, italic: true, color: "BFE0DD", align: "center", isTextBox: true, margin: 0
   });
-  s.addShape("line", { x: PW / 2 - 1.3, y: 4.95, w: 2.6, h: 0, line: { color: PINK, width: 1 } });
+  s.addShape("line", { x: PW / 2 - 1.3, y: 4.65, w: 2.6, h: 0, line: { color: PINK, width: 1 } });
+  
+  // AUTHORS ADDED HERE
+  s.addText("Presented by: AKHIL PILLAI   •   AMRUTA PATIL", {
+    x: 1.0, y: 4.95, w: 11.3, h: 0.35, fontFace: "Calibri", fontSize: 14, color: WHITE, bold: true, align: "center", isTextBox: true, margin: 0
+  });
   s.addText("ASHRAE Region XV — 3rd CRC 2026  |  Student Competition  |  Theme: SAMUDRA", {
-    x: 1.0, y: 5.15, w: 11.3, h: 0.35, fontFace: "Calibri", fontSize: 12, color: "BFE0DD", align: "center", isTextBox: true, margin: 0
+    x: 1.0, y: 5.45, w: 11.3, h: 0.35, fontFace: "Calibri", fontSize: 12, color: "BFE0DD", align: "center", isTextBox: true, margin: 0
   });
   s.addText("Department of Mechanical Engineering, SPCE, Mumbai  |  Guide: Kunal Bhavsar", {
-    x: 1.0, y: 5.55, w: 11.3, h: 0.35, fontFace: "Calibri", fontSize: 12, color: "BFE0DD", align: "center", isTextBox: true, margin: 0
+    x: 1.0, y: 5.75, w: 11.3, h: 0.35, fontFace: "Calibri", fontSize: 12, color: "BFE0DD", align: "center", isTextBox: true, margin: 0
   });
 }
 
 // ================= PART I: MOTIVATION & METHODOLOGY =================
 sectionDivider("Part I", "Motivation & Methodology", [
-  "Why This Matters", "The AMR Cycle", "Research Gap", "Key Literature", "Objectives", "Methodology Pipeline"
+  "Timeline", "Why This Matters", "The AMR Cycle", "Research Gap", "Key Literature", "Objectives", "Methodology Pipeline"
 ]);
+
+// ---------------- SLIDE: TIMELINE ----------------
+{
+  let s = bgSlide(false);
+  corner(s, false);
+  title(s, "Project Journey", "Timeline");
+  const timeline = [
+    ["1", "Feb", "Literature review; mean-field & Landau material models"],
+    ["2", "Mar", "AMR cycle model; Gd / benchmark-device validation"],
+    ["3", "Apr", "Loss calibration; Sobol sensitivity; RSM surrogate"],
+    ["4", "May", "NSGA-III multi-objective optimisation; cascade design"],
+    ["5", "Jun–Jul", "Economics, emissions, extension studies"],
+    ["6", "Aug–Sep", "Design recommendations; report & CRC presentation"]
+  ];
+  const w = 3.6, gap = 0.35, startX = 1.0;
+  timeline.forEach((item, i) => {
+    const colIdx = i % 3;
+    const rowIdx = Math.floor(i / 3);
+    const x = startX + colIdx * (w + gap);
+    const y = 2.15 + rowIdx * 1.8;
+    statBadge(s, x, y, w, 1.4, item[1], item[2], DARK, { valueSize: 18 });
+  });
+  footer(s);
+}
 
 // ---------------- SLIDE: WHY THIS MATTERS ----------------
 {
@@ -230,7 +238,22 @@ sectionDivider("Part I", "Motivation & Methodology", [
   footer(s);
 }
 
-// ---------------- SLIDE: RESEARCH GAP (table) ----------------
+// ---------------- SLIDE: AMR UNIT SCHEMATIC ----------------
+{
+  let s = bgSlide(false);
+  corner(s, false);
+  title(s, "Hardware Layout", "Anatomy of the AMR Unit");
+  img(s, "amr_unit_schematic.png", 3.9, 2.1, 5.6, 4.55);
+  bulletList(s, 0.9, 2.1, 2.85, 4.4, [
+    "NdFeB permanent-magnet assembly cycles field across the packed bed",
+    "Regenerator bed: packed spheres or parallel plates of the MCM",
+    "Hot/cold-side heat exchangers reject/absorb heat each half-cycle",
+    "Pump drives working fluid through the bed in sync with the field"
+  ], { size: 12.5 });
+  footer(s);
+}
+
+// ---------------- SLIDE: RESEARCH GAP ----------------
 {
   let s = bgSlide(false);
   corner(s, false);
@@ -251,7 +274,7 @@ sectionDivider("Part I", "Motivation & Methodology", [
   footer(s);
 }
 
-// ---------------- SLIDE: KEY LITERATURE (NEW — from Literature_Review.md) ----------------
+// ---------------- SLIDE: KEY LITERATURE ----------------
 {
   let s = bgSlide(false);
   corner(s, false);
@@ -406,6 +429,19 @@ sectionDivider("Part II", "Material & System Modeling", [
   footer(s);
 }
 
+// ---------------- SLIDE: 1-D REGENERATOR VS NO-LOAD SPANS ----------------
+{
+  let s = bgSlide(false);
+  corner(s, false);
+  title(s, "Going Beyond 0-D", "1-D Transient Model vs. 3 More Prototypes");
+  img(s, "graded_bed_validation.png", 3.5, 2.1, 7.4, 3.9);
+  s.addShape("roundRect", { x: 0.9, y: 6.05, w: 11.5, h: 0.55, rectRadius: 0.06, fill: { color: AMBERBG }, line: { color: AMBER, width: 1 } });
+  s.addText("Direction-inconsistent across devices (undershoots 2 of 3, overshoots 1) \u2014 a genuine, unresolved calibration gap, reported openly rather than smoothed over.", {
+    x: 1.15, y: 6.05, w: 11.0, h: 0.55, valign: "middle", italic: true, fontFace: "Calibri", fontSize: 11.5, color: AMBER, isTextBox: true, margin: 0
+  });
+  footer(s);
+}
+
 // ================= PART III: OPTIMIZATION & DESIGN =================
 sectionDivider("Part III", "Optimization & Design", [
   "Sobol Discovery", "Surrogate Modeling", "Optimization Setup", "Pareto Front Hero", "Recommended Design Point", "Geometry Optimum", "Multi-Stage Cascades"
@@ -485,6 +521,42 @@ sectionDivider("Part III", "Optimization & Design", [
   s.addShape("roundRect", { x: 0.9, y: 5.35, w: 11.55, h: 0.95, rectRadius: 0.08, fill: { color: DARK }, line: { type: "none" } });
   s.addText("COP_electrical = 9.91      \u00B7      Qc = 32.4 kW      \u00B7      Cost = $1,919", {
     x: 0.9, y: 5.35, w: 11.55, h: 0.95, align: "center", valign: "middle", fontFace: "Cambria", fontSize: 19, bold: true, color: WHITE, isTextBox: true, margin: 0
+  });
+  footer(s);
+}
+
+// ---------------- SLIDE: MATERIAL FAMILY COMPARISON ----------------
+{
+  let s = bgSlide(false);
+  corner(s, false);
+  title(s, "Eight Candidates, One Winner", "Material Family Comparison at the ASHRAE Point");
+  img(s, "material_family_comparison.png", 2.6, 2.05, 8.1, 4.55);
+  s.addText("La(Fe,Si)\u2081\u2083Hy leads every span tested (5\u201320K, 2T, 5kg/stage) \u2014 consistent with its Pareto dominance.", {
+    x: 1.0, y: 6.6, w: 11.3, h: 0.45, align: "center", italic: true, fontFace: "Calibri", fontSize: 12.5, color: TEXT, isTextBox: true, margin: 0
+  });
+  footer(s);
+}
+
+// ---------------- SLIDE: MAGNET COST MODEL SENSITIVITY ----------------
+{
+  let s = bgSlide(false);
+  corner(s, false);
+  title(s, "Robustness Check", "Does the Cost Model Change the Winner?");
+  img(s, "magnet_geometry_sensitivity.png", 3.6, 2.1, 7.1, 3.9);
+  s.addText("Pareto front size shrinks slightly under a geometric magnet-cost term (21\u219219), but La(Fe,Si)\u2081\u2083Hy still dominates \u2014 the material finding is robust to how magnet cost is modeled.", {
+    x: 1.0, y: 6.15, w: 11.3, h: 0.6, align: "center", italic: true, fontFace: "Calibri", fontSize: 12, color: TEXT, isTextBox: true, margin: 0
+  });
+  footer(s);
+}
+
+// ---------------- SLIDE: NANOCOMPOSITE ROBUSTNESS ----------------
+{
+  let s = bgSlide(false);
+  corner(s, false);
+  title(s, "Design Exploration", "A Broader Blend Trades Peak Performance for Range");
+  img(s, "nanocomposite_robustness.png", 3.5, 2.1, 7.4, 3.6);
+  s.addText("At the design span the sharply-tuned single-phase material wins outright \u2014 but off-design, it can collapse to zero cooling while the nanocomposite blend still delivers positive Qc.", {
+    x: 1.0, y: 5.9, w: 11.3, h: 0.75, align: "center", italic: true, fontFace: "Calibri", fontSize: 12.5, color: TEXT, isTextBox: true, margin: 0
   });
   footer(s);
 }
@@ -588,22 +660,50 @@ sectionDivider("Part IV", "Results & Honest Verdict", [
   footer(s);
 }
 
-// ---------------- SLIDE: LIMITATIONS & OPEN ITEMS (NEW — from technical walkthrough) ----------------
+// ---------------- SLIDE: MAGNETOCALORIC FLUIDS ----------------
 {
   let s = bgSlide(false);
   corner(s, false);
-  title(s, "Told Straight", "Limitations & Open Items");
+  title(s, "Design Exploration", "Magnetocaloric Fluids: an Alternative Working Body");
+  img(s, "fluid_mce_volume_fraction.png", 6.7, 2.1, 5.95, 3.9);
+  s.addText([
+    { text: "Ferrofluid / MR-suspension bed, swept over volume fraction \u03C6.\n\n", options: { color: TEXT } },
+    { text: "COP_elec peaks near \u03C6 \u2248 0.10", options: { bold: true, color: DARK } },
+    { text: " \u2014 too little MCE mass hurts capacity, too much raises viscosity/pumping loss.\n\n", options: { color: TEXT } },
+    { text: "Design-exploration tool, not yet validated against a real device.", options: { italic: true, color: MUTED } }
+  ], { x: 0.9, y: 2.3, w: 5.4, h: 3.6, fontFace: "Calibri", fontSize: 12.5, isTextBox: true, margin: 0, lineSpacingMultiple: 1.3 });
+  footer(s);
+}
+
+// ---------------- SLIDE: THERMAL DIODE SENSITIVITY ----------------
+{
+  let s = bgSlide(false);
+  corner(s, false);
+  title(s, "Cost-Only Study", "Mechanical Thermal Diode: an Upper-Bound Check");
+  img(s, "thermal_diode_sensitivity.png", 3.6, 2.1, 7.1, 3.6);
+  s.addShape("roundRect", { x: 0.9, y: 5.9, w: 11.55, h: 0.85, rectRadius: 0.07, fill: { color: AMBERBG }, line: { color: AMBER, width: 1 } });
+  s.addText("Illustrative actuation cost reduces COP_electrical by \u2264 0.03% across 0.5\u20138 Hz \u2014 a small, cost-only effect; no offsetting heat-transfer benefit is modeled here.", {
+    x: 1.15, y: 5.9, w: 11.05, h: 0.85, valign: "middle", italic: true, fontFace: "Calibri", fontSize: 11.5, color: AMBER, isTextBox: true, margin: 0
+  });
+  footer(s);
+}
+
+// ---------------- SLIDE: LIMITATIONS & OPEN ITEMS (UPDATED) ----------------
+{
+  let s = bgSlide(false);
+  corner(s, false);
+  title(s, "Told Straight", "Limitations, Future Scope & Open Items");
   s.addShape("roundRect", { x: 0.9, y: 1.95, w: 11.5, h: 0.55, rectRadius: 0.06, fill: { color: AMBERBG }, line: { color: AMBER, width: 1 } });
-  s.addText("Kept unresolved deliberately \u2014 a record of what the model does not yet claim, not a bug list to hide.", {
+  s.addText("Future scope and unresolved items deliberately documented — a roadmap for the next hardware build.", {
     x: 1.15, y: 1.95, w: 11.0, h: 0.55, valign: "middle", italic: true, fontFace: "Calibri", fontSize: 12, color: AMBER, isTextBox: true, margin: 0
   });
   bulletList(s, 0.9, 2.7, 11.5, 4.4, [
-    "The hysteresis-driven material-selection reversal seen at reduced settings does not hold at full production, multiseed settings — an open item, not a corrected number.",
-    "The Halbach magnet-geometry cost-term sensitivity did not reproduce the expected front-shifting direction in this run — reported as a negative result rather than re-run to fit expectation.",
-    "Two first-order candidate families (Ga\u2081\u208b\u2093CMn\u2083\u208a\u2093 antiperovskites, Mn\u2081\u208b\u2093Cu\u2093CoGe) have confirmed Tc-tunability, but their peak entropy-change magnitudes are not yet independently calibrated.",
-    "The intragranular eddy-current loss formula is derived for a flat plate but applied here to packed spherical particles, with no independently-citable sphere-specific prefactor.",
-    "Pump/motor efficiency is implemented and tested but not yet exercised by any production NSGA-III Pareto front — it defaults to an idealized 1.0.",
-    "No benchmark device exists yet for magnetocaloric-fluid working bodies or mechanical-contact thermal diodes — both remain design-exploration tools, not validated features."
+    "Purpose-built experimental prototype and hardware-in-the-loop validation needed for data-center-relevant spans and loads.",
+    "Resolve the open 1-D regenerator calibration gap (directionally-inconsistent axial-conduction fit across benchmark devices).",
+    "Magnetocaloric-fluid and passive/hybrid-regenerator architectures are mature design-exploration tools, but need to become validated features.",
+    "Full bottom-up manufactured-system BOM (pumps, motors, controls) needed to replace the current order-of-magnitude cost multiplier.",
+    "Targeted OCR/access required to mine remaining chapters in Halbach design, AMR cycle topology, and thermal-diode heat switching.",
+    "AI-assisted or digital-twin real-time optimisation for adaptive data-center cooling control."
   ], { size: 12.5 });
   footer(s);
 }

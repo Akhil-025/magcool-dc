@@ -677,28 +677,52 @@ def plot_system_validation(precomputed=None):
     cop_model = [r['COP_model_electrical'] for r in ok]
     err = [r['COP_error_pct'] for r in ok]
 
-    fig, axes = plt.subplots(1, 2, figsize=(13, 5.5))
-    axes[0].scatter(cop_lit, cop_model, s=90, color=COLOR_MAIN, zorder=3, edgecolor='white')
-    lims = [0, max(max(cop_lit), max(cop_model)) * 1.15]
-    axes[0].plot(lims, lims, 'k--', linewidth=1, label='Perfect agreement')
-    for x_, y_, n_ in zip(cop_lit, cop_model, names):
-        axes[0].annotate(n_, (x_, y_), fontsize=7, xytext=(5, 5), textcoords='offset points')
-    axes[0].set_xlim(lims)
-    axes[0].set_ylim(lims)
-    axes[0].set_xlabel('Literature COP (electrical)')
-    axes[0].set_ylabel('Model COP (electrical)')
-    axes[0].set_title('System-Level Validation: Model vs. Literature\n'
-                       '(fluid mdot calibrated to reproduce reported Qc)')
-    axes[0].legend(fontsize=9)
+    fig, axes = plt.subplots(2, 2, figsize=(13, 11))
+    ax1, ax2, ax3, ax4 = axes[0, 0], axes[0, 1], axes[1, 0], axes[1, 1]
 
-    colors = [COLOR_POWER if abs(e) > 30 else COLOR_MAIN for e in err]
-    axes[1].barh(names, err, color=colors, alpha=0.85, edgecolor='white')
-    axes[1].axvline(0, color='k', linewidth=0.8)
-    axes[1].set_xlabel('COP error [%]')
-    axes[1].set_title('COP Prediction Error by Device')
-    for ax in axes:
+    good_idx = [i for i, e in enumerate(err) if abs(e) <= 30]
+    bad_idx = [i for i, e in enumerate(err) if abs(e) > 30]
+
+    def scatter_panel(ax, idx, color, title):
+        if not idx:
+            ax.set_visible(False)
+            return
+        x_ = [cop_lit[i] for i in idx]
+        y_ = [cop_model[i] for i in idx]
+        n_ = [names[i] for i in idx]
+        ax.scatter(x_, y_, s=90, color=color, zorder=3, edgecolor='white')
+        lims = [0, max(max(x_), max(y_)) * 1.15]
+        ax.plot(lims, lims, 'k--', linewidth=1, label='Perfect agreement')
+        for xx, yy, nn in zip(x_, y_, n_):
+            ax.annotate(nn, (xx, yy), fontsize=7, xytext=(5, 5), textcoords='offset points')
+        ax.set_xlim(lims)
+        ax.set_ylim(lims)
+        ax.set_xlabel('Literature COP (electrical)')
+        ax.set_ylabel('Model COP (electrical)')
+        ax.set_title(title)
+        ax.legend(fontsize=8)
+
+    def bar_panel(ax, idx, color, title):
+        if not idx:
+            ax.set_visible(False)
+            return
+        n_ = [names[i] for i in idx]
+        e_ = [err[i] for i in idx]
+        ax.barh(n_, e_, color=color, alpha=0.85, edgecolor='white')
+        ax.axvline(0, color='k', linewidth=0.8)
+        ax.set_xlabel('COP error [%]')
+        ax.set_title(title)
+
+    scatter_panel(ax1, good_idx, COLOR_MAIN, 'Well-Modeled Devices')
+    scatter_panel(ax2, bad_idx, COLOR_POWER, 'Outlier Devices')
+    bar_panel(ax3, good_idx, COLOR_MAIN, 'COP Error: Well-Modeled Devices')
+    bar_panel(ax4, bad_idx, COLOR_POWER, 'COP Error: Outlier Devices')
+
+    for ax in axes.flat:
         ax.tick_params(labelsize=8)
-    fig.tight_layout()
+    fig.suptitle('System-Level Validation: Model vs. Literature\n'
+                 '(fluid mdot calibrated to reproduce reported Qc)', fontsize=13)
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
     save(fig, 'fig14_system_validation_scatter')
 
 
@@ -1287,7 +1311,8 @@ def plot_material_family_comparison(precomputed=None):
     axes[1].set_ylabel('Electrical COP')
     axes[1].set_title('Electrical COP (1-stage)')
     for ax in axes:
-        ax.tick_params(axis='x', labelsize=8)
+        ax.tick_params(axis='x', labelsize=7)
+        ax.set_xticklabels(labels, rotation=30, ha='right', fontsize=7)
 
     span = material_family_comparison.REPRESENTATIVE_SPAN_K
     T_cold = material_family_comparison.T_COLD_K
