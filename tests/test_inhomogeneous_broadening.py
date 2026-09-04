@@ -1,5 +1,5 @@
 """
-Tests for core/inhomogeneous_broadening.py (Phase 22 item 1).
+Tests for core/inhomogeneous_broadening.py .
 """
 import numpy as np
 import pytest
@@ -9,6 +9,8 @@ from core.inhomogeneous_broadening import (
     BroadenedMagnetocaloricMaterial, _tc_ensemble, _peak_and_fwhm,
     run_broadening_sweep, run_dankov_error_sensitivity,
     run_inhomogeneous_broadening_analysis, mu0,
+    FieldBroadenedMagnetocaloricMaterial, calibrate_field_dependent_broadening,
+    run_field_dependent_broadening_calibration,
 )
 
 T_GRID = np.linspace(270.0, 320.0, 501)
@@ -109,16 +111,23 @@ def test_broadening_sweep_returns_expected_rows():
         assert r["peak_dTad_K"] > 0
 
 
-def test_dankov_error_sensitivity_sigma_zero_matches_validation_module():
-    """sigma_Tc=0 rows must reproduce core/validation.py's own run_validation()
-    numbers exactly, since _make_material(sigma=0) returns GADOLINIUM itself."""
-    from core.validation import run_validation
-    ref_rows = {row[0]: row for row in run_validation(verbose=False)}
+def test_dankov_error_sensitivity_sigma_zero_matches_gadolinium_linear_model():
+    """sigma_Tc=0 rows must reproduce GADOLINIUM.delta_T_adiabatic() (the
+    fast linear approximation) exactly, since _make_material(sigma=0)
+    returns GADOLINIUM itself and run_dankov_error_sensitivity()
+    deliberately uses that fast path (see its own docstring), not
+    core/validation.py's run_validation() -- which, since the Paper-Mining
+    Pass physics fix, uses the exact isentropic delta_T_adiabatic_exact()
+    instead and is no longer expected to match this sweep's numbers."""
+    from core.validation import LITERATURE_DELTA_T_AD
     rows = run_dankov_error_sensitivity(sigma_values=(0.0,), verbose=False)
     for r in rows:
-        B, dT_lit, dT_model_ref, err_ref = ref_rows[r["mu0H_T"]]
-        assert r["dT_model_K"] == pytest.approx(dT_model_ref, rel=1e-9)
-        assert r["err_pct"] == pytest.approx(err_ref, rel=1e-9)
+        H = r["mu0H_T"] / mu0
+        dT_lit = LITERATURE_DELTA_T_AD[r["mu0H_T"]]
+        expected = float(np.asarray(GADOLINIUM.delta_T_adiabatic(np.array([294.0]), H)).ravel()[0])
+        expected_err = 100 * (expected - dT_lit) / dT_lit
+        assert r["dT_model_K"] == pytest.approx(expected, rel=1e-9)
+        assert r["err_pct"] == pytest.approx(expected_err, rel=1e-9)
 
 
 def test_full_analysis_runs_and_writes_report(tmp_path):
@@ -141,3 +150,44 @@ def test_worst_field_error_never_increases_relative_to_sharp_model_bound():
                                                      verbose=False)
     best = result["best_sigma_Tc_K"]
     assert result["max_err_by_sigma"][best] <= result["sharp_max_err_pct"] + 1e-9
+
+def test_field_broadened_material_zero_k_matches_sharp_model():
+    """k_K_per_T=0.0 should reproduce the plain (unbroadened) GADOLINIUM
+    prediction exactly, at any field -- the field-dependent class must be
+    a strict generalization, not an independent parameterization."""
+    mat = FieldBroadenedMagnetocaloricMaterial(GADOLINIUM, 0.0)
+    for B in (1.0, 2.0, 5.0, 7.5):
+        H = B / mu0
+        sharp = float(GADOLINIUM.delta_T_adiabatic(np.array([294.0]), H)[0])
+        broadened = float(np.asarray(mat.delta_T_adiabatic(np.array([294.0]), H)).ravel()[0])
+        assert broadened == pytest.approx(sharp, rel=1e-9)
+
+
+def test_field_broadened_sigma_grows_linearly_with_field():
+    """sigma_Tc(H) = k*mu0*H by construction -- check the private helper
+    directly rather than inferring it indirectly from DeltaT_ad."""
+    mat = FieldBroadenedMagnetocaloricMaterial(GADOLINIUM, 2.0)
+    H1 = 1.0 / mu0
+    H5 = 5.0 / mu0
+    assert mat._sigma_Tc_K(H1) == pytest.approx(2.0, rel=1e-9)
+    assert mat._sigma_Tc_K(H5) == pytest.approx(10.0, rel=1e-9)
+
+
+def test_calibrate_field_dependent_broadening_returns_consistent_rows():
+    result = calibrate_field_dependent_broadening(verbose=False)
+    assert result["k_fit_K_per_T"] >= 0.0
+    assert len(result["rows"]) == 3
+    for row in result["rows"]:
+        # "before" (k=0) rows must match run_validation()'s own numbers
+        # (same 3 fields, same T=294K methodology).
+        assert row["dT_before_K"] > 0.0
+
+
+def test_full_field_dependent_broadening_analysis_runs_and_writes_report(tmp_path):
+    out_path = tmp_path / "field_dependent_broadening_calibration.txt"
+    result = run_field_dependent_broadening_calibration(out_path=str(out_path), verbose=False)
+    assert out_path.exists()
+    assert "k_fit_K_per_T" in result
+    assert "held_out_75T" in result
+    assert "held_out_giguere" in result and len(result["held_out_giguere"]) == 2
+    assert isinstance(result["conclusion"], str) and len(result["conclusion"]) > 0

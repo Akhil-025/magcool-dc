@@ -1,9 +1,9 @@
 """
-Unit tests for core/magnet_geometry.py (Phase 19).
+Unit tests for core/magnet_geometry.py .
 
 Covers: the closed-form Halbach-cylinder relation's basic algebraic
 properties (round-trip consistency, monotonicity, the genuine
-super-linear-in-field mass growth ROADMAP.md's Phase 19 plan asked for),
+super-linear-in-field mass growth ROADMAP.md's plan asked for),
 input validation, and that `bjork_qualitative_check()`/
 `run_magnet_geometry_analysis()` run end-to-end and report their own
 honest (non-forced) finding.
@@ -49,7 +49,7 @@ def test_outer_radius_monotonically_increases_with_field():
 
 
 def test_magnet_mass_is_super_linear_in_field():
-    """The genuine nonlinearity ROADMAP.md's Phase 19 plan asked for:
+    """The genuine nonlinearity ROADMAP.md's plan asked for:
     doubling the field should more than double the required magnet mass
     at a fixed air-gap geometry (mass grows like exp(2B/Br), not
     linearly)."""

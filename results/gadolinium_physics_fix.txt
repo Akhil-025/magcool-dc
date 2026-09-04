@@ -1,0 +1,21 @@
+GADOLINIUM CALIBRATION -- PHYSICS FIX (Paper-Mining Pass)
+======================================================================
+
+Stack: exact isentropic DeltaT_ad (de Oliveira & von Ranke Eq. 3)
+     + Sommerfeld electronic entropy/heat capacity (same paper,
+       Sec. 4.2, gamma=5.4 mJ/mol/K^2)
+     + fitted polycrystalline grain-Tc broadening (sigma_Tc=6.74K,
+       least-squares fit to the same 3 Dan'kov et al. points)
+
+--- vs. Dan'kov, Tishin, Pecharsky & Gschneidner (1998) ---
+mu0H=1.0 T | literature dTad= 3.20 K | model dTad= 3.33 K | error=+4.2%
+mu0H=2.0 T | literature dTad= 5.80 K | model dTad= 5.73 K | error=-1.1%
+mu0H=5.0 T | literature dTad=12.30 K | model dTad=11.30 K | error=-8.1%
+
+--- held-out cross-check: Giguere et al. (1999) independent Gd data ---
+mu0H=5.0 T | Giguere et al. Gd range=10.5-11.5 K (this paper's high-purity Gd (10.5K) vs. AMES laboratory's independent measurement (11.5K), agreeing within 1K) | model dTad=11.30 K | error vs. midpoint=+2.8% | within range
+mu0H=7.0 T | Giguere et al. Gd range=12.0-13.0 K (industrial-purity Gd (12K) and high-purity Gd (13K) respectively, both reported to agree well with Brown (1976)'s independently reported 14K at 7T) | model dTad=14.36 K | error vs. midpoint=+14.9% | OUTSIDE range
+
+Errors before this pass (plain mean-field, linear DeltaT_ad,
+no electronic term, no broadening): +48.9% / +29.2% / +9.8%
+Errors after: +4.2% / -1.1% / -8.1%

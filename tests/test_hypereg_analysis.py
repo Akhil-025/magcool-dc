@@ -1,12 +1,12 @@
 """
-Unit tests for core/hypereg_analysis.py (Phase 15 item 3).
+Unit tests for core/hypereg_analysis.py .
 
 The previous version of this file was an accidental byte-for-byte copy of
 core/hypereg_analysis.py itself (no test_* functions), so it silently
 contributed zero coverage ("no tests ran"). These tests actually exercise
 sweep_n_parallel()/sweep_frequency_at_fixed_n()/run_hypereg_analysis()
 against the qualitative claims made in hypereg_findings.md and the
-ROADMAP.md Phase 15 write-up: n=1 reproduces conventional series-flow
+ROADMAP.md write-up: n=1 reproduces conventional series-flow
 behavior, COP_electrical is non-decreasing in n_parallel (diminishing,
 saturating benefit), and the frequency sweep's pumping-power saving is
 computed consistently with the module's own W_parasitic definition.
@@ -57,7 +57,7 @@ def test_sweep_n_parallel_returns_expected_shape():
 
 def test_sweep_n_parallel_benefit_is_modest_and_saturating():
     """Regression guard against the magnitude documented in ROADMAP.md's
-    Phase 15 write-up (n=4 gives a small, single-digit-percent COP gain
+     write-up (n=4 gives a small, single-digit-percent COP gain
     over n=1, saturating by n=16) -- catches a wiring bug that made the
     pumping-power channel dominant (or a no-op) rather than "one of
     three loss channels, not the dominant one" as the findings note
@@ -96,7 +96,7 @@ def test_run_hypereg_analysis_writes_report_and_mentions_both_sweeps(tmp_path):
     assert "Klinar" in text
 
 # ---------------------------------------------------------------------------
-# sweep_n_parallel_at_higher_mdot() -- closes the open ROADMAP.md Phase 16
+# sweep_n_parallel_at_higher_mdot() -- closes the open ROADMAP.md
 # candidate asking whether Hypereg's benefit becomes non-negligible at a
 # higher-mdot operating point than the module's own 0.08kg/s default.
 # ---------------------------------------------------------------------------

@@ -1,0 +1,32 @@
+==========================================================================================
+PHASE 15: Hypereg parallel-hydraulic pumping-power reduction, motivated by
+Klinar et al. (2024), Adv. Energy Mater. 14, 2401739, Figs. 18-21.
+See results/hypereg_findings.md for the full literature findings note.
+==========================================================================================
+
+Operating point: T_cold=291.0K, span=10.0K, mu0H=1.5T, mass=5.0kg, mdot=0.08kg/s, d_p=0.5mm
+
+--- Step 1: sweep n_parallel_subregenerators at f=1.0Hz (n=1 == conventional series flow) ---
+ n_parallel=  1   Qc=  734.66W COP_electrical= 5.0346   W_parasitic=  99.22W
+ n_parallel=  2   Qc=  734.66W COP_electrical= 5.0430   W_parasitic=  98.98W
+ n_parallel=  4   Qc=  734.66W COP_electrical= 5.0472   W_parasitic=  98.85W
+ n_parallel=  8   Qc=  734.66W COP_electrical= 5.0493   W_parasitic=  98.79W
+ n_parallel= 16   Qc=  734.66W COP_electrical= 5.0504   W_parasitic=  98.76W
+
+--- Step 2: pumping-power saving vs. frequency at a fixed n=4 (the paper's own illustrative example) ---
+ f= 0.50Hz COP_conventional= 7.7524   COP_hypereg(n=4)= 7.7838   W_parasitic saving=  0.8%
+ f= 1.00Hz COP_conventional= 5.0346   COP_hypereg(n=4)= 5.0472   W_parasitic saving=  0.4%
+ f= 2.00Hz COP_conventional= 2.0895   COP_hypereg(n=4)= 2.0916   W_parasitic saving=  0.1%
+ f= 4.00Hz COP_conventional= 0.6223   COP_hypereg(n=4)= 0.6225   W_parasitic saving=  0.0%
+ f= 8.00Hz COP_conventional= 0.1634   COP_hypereg(n=4)= 0.1634   W_parasitic saving=  0.0%
+
+--- Step 3: does the benefit become non-negligible at a higher mdot (0.3kg/s vs. the 0.08kg/s baseline above)? (ROADMAP.md open candidate) ---
+ n_parallel=  1   Qc= 2408.49W COP_electrical= 7.2062   W_parasitic= 174.01W
+ n_parallel=  2   Qc= 2408.49W COP_electrical= 7.3217   W_parasitic= 168.74W
+ n_parallel=  4   Qc= 2408.49W COP_electrical= 7.3809   W_parasitic= 166.10W
+ n_parallel=  8   Qc= 2408.49W COP_electrical= 7.4108   W_parasitic= 164.78W
+ n_parallel= 16   Qc= 2408.49W COP_electrical= 7.4259   W_parasitic= 164.12W
+
+--- Conclusion ---
+At this repo's own representative operating point, splitting the regenerator into n=16 parallel sub-beds raises COP_electrical from 5.035 (conventional, n=1) to 5.050 -- a real but modest benefit in THIS model, because pumping power (W_pump) is only one of three loss channels (k_eddy*f^2*H^2 + k_pump*mdot^2 + base_frac*Qc) and is not the dominant one at this lab-scale operating point. The benefit saturates quickly with n (diminishing returns are visible in Step 1) since the other two loss channels are untouched by parallelization. This confirms the qualitative mechanism the paper describes (reduced pumping power from parallel vs. series hydraulic flow) is real and representable in this repo's own model, WITHOUT claiming a validated optimum n or a device-level performance prediction for an as-yet-unbuilt concept -- see results/hypereg_findings.md's honesty flags.
+Step 3 finding: at mdot=0.3kg/s, the SAME n=16 split raises COP_electrical from 7.206 (n=1) to 7.426 -- a 3.05% relative gain, vs. 0.31% at the 0.08kg/s baseline. This IS meaningfully larger, consistent with pumping power's mdot-driven scaling (thermal.pumping_power_packed_bed()'s Darcy-flow dP~mdot term) making the pumping-loss channel a bigger share of W_parasitic at higher flow -- worth extending this sweep further if a specific higher-mdot design point is ever targeted.

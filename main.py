@@ -6,71 +6,84 @@ in the repository in one pass, in dependency order, so a single
 ``python main.py`` reproduces every file under results/ from scratch:
 
     1.  Material-level validation      (core/validation.py)
-    1b. Inhomogeneous/polycrystalline Tc-broadening sensitivity (core/
-        inhomogeneous_broadening.py, Phase 22 item 1) -- runs right after
+    1b. Inhomogeneous/polycrystalline Tc-broadening sensitivity
+        (core/inhomogeneous_broadening.py) -- runs right after
         step 1 since it directly extends that same Dan'kov et al. (1998)
         comparison
+    1c. Field-DEPENDENT Tc-broadening calibration (core/
+        inhomogeneous_broadening.py) -- fits k*mu0*H (grows with field,
+        unlike 1b's constant sigma_Tc) to the same 3 Dan'kov points,
+        motivated by prose (now readable in Papers/) about field-broadened
+        heat capacity; reports the result honestly either way -- see that
+        function's own docstring for what was actually found
+    1d. System-level impact of the Gd physics fix (core/validation_system.py)
+        -- quantifies, on real benchmark devices, both the ~6-19x per-call
+        performance cost AND a real feasibility-zeroing risk (some
+        devices go from working to a hard Qc=0) of using
+        GADOLINIUM_CALIBRATED as the system-wide default instead of
+        plain GADOLINIUM -- see that function's own docstring for the
+        full reasoning behind keeping plain GADOLINIUM as the default
     2.  System-level validation        (core/validation_system.py)
-    2b. Cycle-type validation sensitivity (core/validation_system.py, Phase 17)
+    2b. Cycle-type validation sensitivity (core/validation_system.py)
     3.  Loss-model calibration report  (core/loss_model.py)
     3b. Regenerator thermal demo       (core/thermal.py)
-    3c. Geometry-dependent pumping power (core/geometry_analysis.py, ROADMAP.md Phase 7 item)
-    3d. Hypereg parallel-hydraulic pumping-power analysis (core/hypereg_analysis.py, Phase 15 item 3)
+    3c. Geometry-dependent pumping power (core/geometry_analysis.py, see ROADMAP.md)
+    3d. Hypereg parallel-hydraulic pumping-power analysis (core/hypereg_analysis.py)
     3e. Geometry-explicit intragranular eddy-current loss + pump/motor
-        efficiency demo (core/thermal.py, core/amr_cycle.py, Phase 27/28)
+        efficiency demo (core/thermal.py, core/amr_cycle.py)
     4.  Baseline comparison sweep      (this file, was the old main.py)
     5.  Economics / TCO                (core/economics.py)
-    5b. Full-system cost estimate by material family (core/economics.py, Phase 15 item 5)
+    5b. Full-system cost estimate by material family (core/economics.py)
     6.  Emissions comparison           (core/emissions.py)
     7.  Cascade staging comparison     (core/cascade.py)
-    7b. Curie-graded cascade           (core/cascade.py, ROADMAP.md Phase 7 item)
-    7c. Astronautics graded-bed check  (core/cascade.py, ROADMAP.md Phase 9 addendum)
+    7b. Curie-graded cascade           (core/cascade.py, see ROADMAP.md)
+    7c. Astronautics graded-bed check  (core/cascade.py, see ROADMAP.md)
     7d. Extending the graded-bed structural fix to the remaining STRUCTURAL
-        devices (core/cascade.py, Paper-Mining Pass review item 1 follow-up)
+        devices (core/cascade.py, paper-mining review follow-up)
     7e. Does the Giguere DeltaT_ad correction narrow the Astronautics graded-bed
-        COP error? (core/cascade.py, Paper-Mining Pass review item 2)
+        COP error? (core/cascade.py, paper-mining review item)
     8.  Giant-MCE materials analysis   (core/giant_mce_analysis.py)
-    8d. Material family comparison     (core/material_family_comparison.py, Track A2 item)
+    8d. Material family comparison     (core/material_family_comparison.py)
     8b. First-order Landau model demo  (core/first_order_mce.py)
     8c. Giguere et al. (1999) direct-measurement cross-check + Pecharsky &
         Gschneidner (1997) peak-ratio check + latent-heat Cp spike
-        (core/giguere_validation.py, Phase 26)
+        (core/giguere_validation.py)
     9.  Sobol sensitivity analysis     (core/sensitivity.py)
     10. RSM surrogate fit              (core/rsm.py)
-    11. NSGA-III design optimization   (core/optimize.py, Phase 15: material +
+    11. NSGA-III design optimization   (core/optimize.py: material +
         geometry co-optimization, per-material-family fronts merged post-hoc)
-    11b. Hysteresis sensitivity (ON/OFF Pareto-front A/B check, Phase 16)
+    11b. Hysteresis sensitivity (ON/OFF Pareto-front A/B check)
         (core/hysteresis_sensitivity.py)
     11c. Thermal-diode sensitivity study, mechanical-contact active thermal
-        diode (core/thermal_diode.py, core/thermal_diode_analysis.py, Phase 18)
+        diode (core/thermal_diode.py, core/thermal_diode_analysis.py)
     11d. Magnet-geometry (Halbach-cylinder) field-vs-mass cost model
-        (core/magnet_geometry.py, Phase 19)
+        (core/magnet_geometry.py)
     11e. Magnet-geometry Pareto sensitivity, production-settings multi-seed
-        stability check (core/magnet_geometry.py, Paper-Mining Pass review item 4)
+        stability check (core/magnet_geometry.py, paper-mining review item)
     11f. Layered/graded-bed NSGA-III co-optimization (core/optimize.py,
-        core/cascade.py, Phase 29) -- reduced-effort pipeline pass
+        core/cascade.py) -- reduced-effort pipeline pass
         (n_layers=1-3, pop_size=20, n_gen=10); the full 1-6 layer,
         production-settings version is directly callable but not run
         here, purely for pipeline-runtime reasons
     11g. Material x n_layers cross-product NSGA-III co-optimization
-        (core/optimize.py, Phase 31) -- OFF BY DEFAULT, pass
+        (core/optimize.py) -- OFF BY DEFAULT, pass
         --layered-material-cross-product to run it (5 material families x
         step 11f.'s own reduced settings; multiplies 11f.'s runtime ~5x)
-    12. Figure generation (34 figures) (plots.py -> results/figures/*.png, *.pdf)
+    12. Figure generation (35 figures) (plots.py -> results/figures/*.png, *.pdf)
     13. Design-recommendations synthesis (core/design_recommendations.py) --
         consolidates steps 3c/7b/8d/9b/11's already-computed results into
         one ranked, actionable "how do I raise AMR electrical COP" report
         (results/design_recommendations.txt)
     14. Magnetocaloric fluids (ferrofluid/MR suspension) as an alternative
-        working-body class (core/fluid_mce_cycle.py, core/fluid_mce_analysis.py,
-        Phase 20) -- design-exploration/comparison tool, not a validated
+        working-body class (core/fluid_mce_cycle.py, core/fluid_mce_analysis.py)
+        -- design-exploration/comparison tool, not a validated
         feature (see that module's own honesty flags)
     15. Passive/hybrid magnetic regenerator: does loading a conventional
         (vapor-compression) gas cycle's internal regenerator with a
         magnetocaloric material's own Curie-point heat-capacity anomaly
         raise its COP? (core/baseline_cooling.py's augmented_regenerator_cop()
-        + passive_regenerator_augmentation(), core/passive_regenerator_analysis.py,
-        Phase 21) -- design-exploration/comparison tool with an illustrative,
+        + passive_regenerator_augmentation(), core/passive_regenerator_analysis.py)
+        -- design-exploration/comparison tool with an illustrative,
         literature-range-anchored effectiveness-to-COP ceiling, not a
         validated feature (see that module's own honesty flags)
 
@@ -127,43 +140,43 @@ a future change shifts where the time goes. Nothing here is required to
 reproduce results/ except the packages in requirements.txt (SALib, pymoo,
 and matplotlib included).
 
-Phase 15 (see ROADMAP.md) added: geometry (particle diameter) and material
-family as genuine NSGA-III design variables/candidates in step 11; a
-Hypereg-style parallel-hydraulic pumping-power analysis in new step 3d; a
-full-system BOM cost model (materials + soft-magnetic yoke, plus an
-order-of-magnitude full-system estimate and a CRF-based levelized cost of
+A later round of development (see ROADMAP.md) added: geometry (particle
+diameter) and material family as genuine NSGA-III design variables/candidates
+in step 11; a Hypereg-style parallel-hydraulic pumping-power analysis in new
+step 3d; a full-system BOM cost model (materials + soft-magnetic yoke, plus
+an order-of-magnitude full-system estimate and a CRF-based levelized cost of
 cooling) in step 5, plus a per-material-family cost comparison in new step
 5b; and confirmed (rather than duplicated) that the "does loss behavior
 differ for rotary vs. reciprocating / multi-bed AMR topologies" question
 was already answered by existing core/loss_model.py infrastructure
 (RotaryDriveLossModel, analyze_parasitic_fraction_scaling) -- see
-core/loss_model.py's module docstring "Phase 15 note" and ROADMAP.md for
-the full writeup. NOTE: the original Phase 15 plan's item 1 (dedicated
-tests for core/design_recommendations.py) was skipped in one earlier pass
-because that module appeared to be missing from an out-of-date project
-snapshot -- it is present here (step 13 above already exists and
-integrates it), so that concern does not apply to this version of the
-file; if tests for it are still wanted, they can be added directly against
-this module's actual summarize_*_lever()/build_report() signatures.
+core/loss_model.py's module docstring and ROADMAP.md for
+the full writeup. NOTE: dedicated tests for core/design_recommendations.py
+were skipped in one earlier pass because that module appeared to be missing
+from an out-of-date project snapshot -- it is present here (step 13 above
+already exists and integrates it), so that concern does not apply to this
+version of the file; if tests for it are still wanted, they can be added
+directly against this module's actual summarize_*_lever()/build_report()
+signatures.
 
-Phase 16 (see ROADMAP.md) added a quantified thermal-hysteresis loss term
-(core/first_order_mce.py's new hysteresis_loss_J_per_kg field,
+The next addition (see ROADMAP.md) was a quantified thermal-hysteresis loss
+term (core/first_order_mce.py's new hysteresis_loss_J_per_kg field,
 core/amr_cycle.py's AMRSystem._hysteresis_power_W()) for first-order MCE
-materials, which Phase 15's NSGA-III material selection had no visibility
+materials, which the earlier NSGA-III material selection had no visibility
 into at all. New step 11b (core/hysteresis_sensitivity.py) reruns
 optimize.run_optimization() twice at identical pop_size/n_gen/seed --
-once with each first-order candidate's hysteresis loss at its Phase-16
+once with each first-order candidate's hysteresis loss at its
 literature-placeholder value, once forced to 0.0 (exactly reproducing
-pre-Phase-16 behavior) -- and reports how the merged Pareto front's
+the prior behavior) -- and reports how the merged Pareto front's
 material composition shifts as a result (results/hysteresis_sensitivity.txt).
 This is deliberately run at a smaller pop_size/n_gen than step 11's own
 production settings to keep pipeline runtime reasonable; see that
 module's docstring honesty flag #1 before treating its output as a
 settled, publication-quality answer rather than a directional check.
 
-Phase 17 (see ROADMAP.md) added an AMR cycle-topology switch to
+After that (see ROADMAP.md), an AMR cycle-topology switch was added to
 core/amr_cycle.py's AMRSystem (`cycle_type`: "brayton" [default,
-pre-Phase-17 behavior], "ericsson", "carnot" -- see that module's
+matching the original behavior], "ericsson", "carnot" -- see that module's
 CYCLE_TYPE_FACTORS for the honesty flag on these being illustrative,
 qualitatively-ordered multipliers, not a digitization of Kitanovski et
 al.'s own closed-form Sect. 4.1.1-4.1.4 relations, which this project's
@@ -172,29 +185,29 @@ copy of that book does not include). New step 2b
 system-level COP validation with each rotary-drive benchmark device's
 cycle_type inferred as "ericsson" instead of the flat "brayton" default,
 and reports whether the per-device COP prediction error shrinks. A full
-NSGA-III categorical cycle_type search (mirroring how Phase 15 handled
-material family) was deliberately NOT added in this pass -- see
-ROADMAP.md's Phase 17 entry for why.
+NSGA-III categorical cycle_type search (mirroring how material family was
+handled earlier) was deliberately NOT added in this pass -- see
+ROADMAP.md's cycle-type entry for why.
 
-A follow-up pass (see ROADMAP.md's Phase 17 entry, "closed after the
+A follow-up pass (see ROADMAP.md's cycle-type entry, "closed after the
 fact") threaded cycle_type through core/cascade.py's `run_graded_cascade()`/
-`validate_astronautics_graded_bed()` (Phase 17's own "did NOT do" item),
-and step 7c now also reports the same brayton-vs-ericsson comparison for
-the Astronautics_rotary_2014 graded-bed reproduction that step 2b already
+`validate_astronautics_graded_bed()` (an item deliberately deferred at the
+time), and step 7c now also reports the same brayton-vs-ericsson comparison
+for the Astronautics_rotary_2014 graded-bed reproduction that step 2b already
 gave DTU_Eriksen_rotary_Gd_2015 -- a genuine, single-device null result
 (ericsson does not narrow this device's much larger -81.1% error), stated
 plainly rather than omitted because it disagrees with the other rotary
 device's result.
 
-Phase 18 (see ROADMAP.md) added a narrowly-scoped mechanical-contact
-active thermal diode model (core/thermal_diode.py's MechanicalContactDiode,
-core/amr_cycle.py's AMRSystem `thermal_diode` parameter, default None =
-pre-Phase-18 behavior unchanged). New step 11c
+Next (see ROADMAP.md), a narrowly-scoped mechanical-contact
+active thermal diode model was added (core/thermal_diode.py's
+MechanicalContactDiode, core/amr_cycle.py's AMRSystem `thermal_diode`
+parameter, default None = unchanged behavior). New step 11c
 (core/thermal_diode_analysis.py) is a cost-only sensitivity study, NOT a
 validated feature: it (1) directly checks and reports that this repo's
 model has no internal mechanical-switching frequency ceiling for a
-diode-assisted design to relax (the Phase 18 plan's own premise for that
-part of the item), and (2) sweeps the (illustrative, unbenchmarked --
+diode-assisted design to relax (the original premise for that part of the
+item), and (2) sweeps the (illustrative, unbenchmarked --
 see that module's honesty flag) diode actuation switching-power cost
 against frequency at the representative operating point. No offsetting
 heat-transfer benefit from the diode's rectification_ratio is modeled
@@ -202,31 +215,31 @@ heat-transfer benefit from the diode's rectification_ratio is modeled
 this project's copy of Kitanovski et al. does not include Ch. 6), and no
 AMR benchmark device in this repo's corpus uses thermal diodes, so this
 step is explicitly a design-exploration tool rather than a validated
-result -- see ROADMAP.md's Phase 18 entry for the full scoping
+result -- see ROADMAP.md's thermal-diode entry for the full scoping
 discussion and what was deliberately not built.
 
-Phase 19 (see ROADMAP.md) added core/magnet_geometry.py: a standard,
-closed-form idealized-Halbach-cylinder relation for magnet mass vs.
-field, usable (as an opt-in, not a default -- see that module's own
-docstring for why) as a replacement for economics.py's pre-Phase-19 flat
+Following that (see ROADMAP.md), core/magnet_geometry.py was added: a
+standard, closed-form idealized-Halbach-cylinder relation for magnet mass
+vs. field, usable (as an opt-in, not a default -- see that module's own
+docstring for why) as a replacement for economics.py's earlier flat
 per-Tesla magnet-mass ratio with a genuinely nonlinear (super-linear-in-
 field) one. New step 11d runs `run_magnet_geometry_analysis()` (a cheap,
 deterministic cost-per-Kelvin sweep, no NSGA-III) and a reduced-
 resolution `run_geometric_cost_pareto_sensitivity()` A/B Pareto-front
 comparison (flat vs. geometric magnet-mass cost term), the same
-controlled-A/B pattern step 11b already established for Phase 16. This
+controlled-A/B pattern step 11b already established. This
 pass also found and flagged (see magnet_geometry.py's HONESTY FLAG #2)
-that the Phase 19 plan's own citation for the qualitative "~2 T is a
+that the original plan's citation for the qualitative "~2 T is a
 cost/performance sweet spot" claim pointed at the wrong Bjørk et al.
 paper; the simple proxy this step checks that claim against does NOT
 independently reproduce it -- reported honestly rather than massaged to
 agree.
 
-Phase 20 (see ROADMAP.md) added core/fluid_mce_cycle.py: FerrofluidMCESystem,
-a NEW SIBLING to AMRSystem (not a parameter on it, per the plan's own
-scoping) modeling magnetocaloric fluids (ferrofluid/magnetorheological
-suspension) as an alternative working-body class -- a continuous
-flow-through loop with no packed regenerator bed, using standard
+The addition after that (see ROADMAP.md) was core/fluid_mce_cycle.py:
+FerrofluidMCESystem, a NEW SIBLING to AMRSystem (not a parameter on it, per
+the plan's own scoping) modeling magnetocaloric fluids (ferrofluid/
+magnetorheological suspension) as an alternative working-body class -- a
+continuous flow-through loop with no packed regenerator bed, using standard
 Krieger-Dougherty suspension rheology and Darcy-Weisbach pipe pumping
 power instead of core/thermal.py's packed-bed correlations, and a
 mixture-heat-capacity dilution model for the suspension's own effective
@@ -242,7 +255,7 @@ this pass's literature search (see that module's HONESTY FLAG #2, which
 also documents a distinct, adjacent ferrofluid-AS-THERMAL-SWITCH
 technology this module deliberately does not conflate with its own
 topic) -- this step is a design-exploration/comparison tool, not a
-validated result, the same disposition Phase 18 gave
+validated result, the same disposition given to
 core/thermal_diode_analysis.py. Its headline finding is a genuine,
 unforced one: fluid dilution combined with this architecture's lack of
 regeneration collapses the usable span to a fraction of a Kelvin up to a
@@ -254,12 +267,12 @@ AMR's at that shared tiny span, though both trail the liquid-cooling and
 vapor-compression baselines there) that this step's own writeup is
 careful not to overstate.
 
-Phase 21 (see ROADMAP.md) added core/baseline_cooling.py's
-`passive_regenerator_augmentation()` / `augmented_regenerator_cop()`: a
-PASSIVE (not actively magnetized/demagnetized) magnetic regenerator
-loaded into a conventional gas cycle's own internal regenerator, whose
-Curie-point heat-capacity anomaly (core/mce_material.py's own
-`total_heat_capacity()`, already computed for every other analysis in
+Finally (see ROADMAP.md), core/baseline_cooling.py's
+`passive_regenerator_augmentation()` / `augmented_regenerator_cop()` was
+added: a PASSIVE (not actively magnetized/demagnetized) magnetic
+regenerator loaded into a conventional gas cycle's own internal
+regenerator, whose Curie-point heat-capacity anomaly (core/mce_material.py's
+own `total_heat_capacity()`, already computed for every other analysis in
 this repo) can raise regenerator effectiveness (reusing
 core/thermal.py's existing `regenerator_effectiveness()`, given a new
 backward-compatible `cp_solid` override) relative to the same material's
@@ -282,8 +295,8 @@ is an illustrative, literature-range-anchored ceiling (generic
 internal-heat-exchanger COP-improvement figures from the refrigeration
 literature), not a fitted or digitized coefficient -- Tishin & Spichkin
 (2003)'s own passive-regenerator chapter (Ch. 11) could not be digitized
-for this pass, same book-access limitation already documented for
-Phase 20.
+for this pass, the same book-access limitation already documented for
+the fluid-cycle addition above.
 """
 
 import logging
@@ -480,8 +493,8 @@ def run_baseline_sweep(no_load_span_override=None, out_path=None):
         regenerator_effectiveness=0.85,
     )
 
-    # Phase 23: a single STATIC literature reference point (not a function
-    # of span -- see core/baseline_cooling.py's own Phase 23 honesty flag
+    # A single STATIC literature reference point (not a function
+    # of span -- see core/baseline_cooling.py's own honesty flag
     # for why), computed once and repeated on every row so it plots as a
     # flat comparison line/column alongside the span-dependent AMR/VCC/
     # liquid/Carnot figures, exactly the way Carnot is already a per-row
@@ -618,7 +631,7 @@ def run_economics(representative_row):
         "floor for a specific design instead."
     )
 
-    # Phase 15 addition: full-system BOM cost model (economics.bom_cost/
+    # Full-system BOM cost model (economics.bom_cost/
     # full_system_cost_estimate/levelized_cost_of_cooling). Uses the SAME
     # design point (2T, 5kg Gd) as step 4's baseline sweep, so this is a
     # priced version of the exact design already characterized above, not
@@ -631,7 +644,7 @@ def run_economics(representative_row):
         mu0H_T, mass_kg, Qc_avg_W=representative_row["AMR_Qc_W"], COP_electrical=amr_cop,
         family_name="Gd")
     logger.info("")
-    logger.info(f"Phase 15: full-system BOM cost model, same design point (H={mu0H_T}T, "
+    logger.info(f"Full-system BOM cost model, same design point (H={mu0H_T}T, "
                 f"mass={mass_kg}kg Gd) as above:")
     logger.info(f"  Materials BOM: magnet ${bom['magnet_cost_$']:.0f} "
                 f"({bom['magnet_mass_kg']:.2f}kg) + MCM ${bom['mcm_cost_$']:.0f} + "
@@ -639,7 +652,7 @@ def run_economics(representative_row):
                 f"= ${bom['materials_bom_total_$']:.0f} total")
     logger.info(f"  Full-system cost ESTIMATE (materials BOM x "
                 f"{full_system['non_materials_multiplier']:.0f}x, order-of-magnitude only -- "
-                f"see economics.py's Phase 15 section docstring for the Russek & Zimm (2006) "
+                f"see economics.py's BOM-cost section docstring for the Russek & Zimm (2006) "
                 f"vapor-compression-AC benchmark this multiplier comes from): "
                 f"${full_system['full_system_cost_estimate_$']:,.0f}")
     logger.info(f"  Levelized cost of cooling (CRF-based, Silva et al. 2017 methodology, "
@@ -649,27 +662,27 @@ def run_economics(representative_row):
                 f"${lcoc['electricity_$_per_kwh_cooling']:.4f} electricity, materials-only "
                 f"capital basis -- see levelized_cost_of_cooling()'s docstring)")
 
-    # Phase 31/32 addition: report the non-materials-cost SENSITIVITY BAND
-    # (Phase 31, borrowed-VCC-multiplier method) alongside the genuine
-    # bottom-up, market-catalog-priced non-materials BOM (Phase 32) at
+    # Reports the non-materials-cost SENSITIVITY BAND
+    # (borrowed-VCC-multiplier method) alongside the genuine
+    # bottom-up, market-catalog-priced non-materials BOM at
     # this SAME design point, plus the cross-check between the two
-    # methods -- see economics.py's Phase 31/32 section docstrings for
+    # methods -- see economics.py's cost-sensitivity section docstrings for
     # full sourcing. This was previously left as standalone, uninvoked
     # functions; wiring them into the pipeline here means every pipeline
     # run now reports both full-system cost methods and their
-    # disagreement, not just the single Phase 15 point estimate above.
+    # disagreement, not just the single point estimate above.
     cross_check = economics.cross_check_full_system_cost_methods(
         mu0H_T, mass_kg, Qc_avg_W=representative_row["AMR_Qc_W"],
         COP_electrical=amr_cop, family_name="Gd")
     bm = cross_check["borrowed_multiplier_method"]
     bu = cross_check["bottom_up_component_method"]
     logger.info("")
-    logger.info(f"Phase 31/32: full-system cost, two independent methods at the SAME "
+    logger.info(f"Full-system cost, two independent methods at the SAME "
                 f"design point (materials BOM=${cross_check['materials_bom_total_$']:,.0f}):")
-    logger.info(f"  Method 1 (Phase 31, borrowed VCC-manufactured-cost multiplier, "
+    logger.info(f"  Method 1 (borrowed VCC-manufactured-cost multiplier, "
                 f"Russek & Zimm 2006): low=${bm['low_$']:,.0f}  mid=${bm['mid_$']:,.0f}  "
                 f"high=${bm['high_$']:,.0f}")
-    logger.info(f"  Method 2 (Phase 32, bottom-up market-catalog component pricing -- "
+    logger.info(f"  Method 2 (bottom-up market-catalog component pricing -- "
                 f"HX/pump/motor/drive/controls, NOT an AMR vendor quote, see "
                 f"bottom_up_non_materials_bom()'s docstring): "
                 f"low=${bu['low_$']:,.0f}  mid=${bu['mid_$']:,.0f}  high=${bu['high_$']:,.0f}")
@@ -681,9 +694,9 @@ def run_economics(representative_row):
 
 
 def run_full_system_cost_by_material():
-    """Step 5b (Phase 15 addition): compares the full-system cost estimate
+    """Step 5b: compares the full-system cost estimate
     (economics.full_system_cost_estimate) across the SAME material
-    candidates optimize.py's Phase 15 co-optimization considers
+    candidates optimize.py's co-optimization considers
     (core.optimize._material_candidates()), at a fixed representative
     design point (2T, 5kg) -- a quick "does material choice matter for
     cost, independent of the NSGA-III search's own field/frequency/flow/
@@ -694,7 +707,7 @@ def run_full_system_cost_by_material():
         logger.info(f"  {label:<40} materials BOM=${r['materials_bom_total_$']:>8,.0f}   "
                     f"full-system estimate=${r['full_system_cost_estimate_$']:>10,.0f}")
     logger.info("")
-    logger.info("Phase 22 item 3 note (qualitative only, no candidate priced above uses "
+    logger.info("Amorphous-material note (qualitative only, no candidate priced above uses "
                 "amorphous MCM data -- see core/economics.py's own section docstring):")
     logger.info(f"  {economics.amorphous_material_cost_performance_note()}")
 
@@ -759,7 +772,7 @@ def run_cascade_comparison():
 
 
 def run_graded_cascade_comparison(rows_gd):
-    """Step 7b: Curie-graded cascade (ROADMAP.md Phase 7 open item). Each
+    """Step 7b: Curie-graded cascade (see ROADMAP.md). Each
     stage uses a composition-tuned Gd5(SixGe1-x)4(-Ga) material matched to
     its own local operating temperature, checked against the documented
     ~20-290K composition-tunability range and scaled by the Giguere et al.
@@ -790,13 +803,13 @@ def run_graded_cascade_comparison(rows_gd):
 
 
 def run_astronautics_graded_validation():
-    """Step 7c (ROADMAP.md Phase 9 addendum): does a 6-layer Curie-graded
+    """Step 7c (ROADMAP.md): does a 6-layer Curie-graded
     La(Fe,Si)13Hy bed reproduce the REAL Astronautics_rotary_2014 device?
     Step 2 above (validation_system.py) could not calibrate this device
     with a single-Tc=287K material; this uses cascade.py's generalized
     Curie-grading machinery (LAFESIH_FAMILY) to test the actual 6-layer
     hypothesis instead. See core/cascade.py's own __main__ block and
-    ROADMAP.md Phase 9 for the full writeup. Returns the result dict
+    ROADMAP.md for the full writeup. Returns the result dict
     (previously discarded) so step 12's fig25 can reuse it instead of
     re-running this ~33s validation a second time."""
     astro = cascade.validate_astronautics_graded_bed()
@@ -809,7 +822,7 @@ def run_astronautics_graded_validation():
         logger.info(f"Predicted COP={astro['COP_cascade']}  vs.  reported COP={astro['COP_lit']} "
                     f"({astro['COP_error_pct']:+.1f}% error) -- vs. the flat 'no calibration found' "
                     f"the single-layer material in step 2 gave this same device.")
-        # ROADMAP.md Phase 17 follow-up: closes that phase's own "did NOT
+        # ROADMAP.md follow-up: closes out that item's own "did NOT
         # do" item (cycle_type was never threaded through cascade.py).
         # Astronautics_rotary_2014 is the one device with the largest COP
         # error on record, and is itself the naming-convention "rotary"
@@ -820,7 +833,7 @@ def run_astronautics_graded_validation():
         # rather than recomputing it.
         ericsson = cascade.validate_astronautics_graded_bed(cycle_type="ericsson")
         if ericsson.get("feasible"):
-            logger.info(f"Phase 17 follow-up: same graded bed under cycle_type='ericsson' "
+            logger.info(f"Follow-up: same graded bed under cycle_type='ericsson' "
                         f"(rotary-device naming-convention proxy, see validation_system."
                         f"infer_cycle_type_for_device()): COP={ericsson['COP_cascade']} "
                         f"({ericsson['COP_error_pct']:+.1f}% error) vs. brayton's "
@@ -999,12 +1012,12 @@ def run_first_order_mce_demo():
 
 
 def run_eddy_and_pump_efficiency_demo():
-    """Phase 27/28 demo. Neither core.thermal.intragranular_eddy_power()
-    (Phase 27) nor AMRSystem.pump_motor_efficiency (Phase 28) has its own
+    """Geometry-explicit eddy loss and pump/motor efficiency demo. Neither
+    core.thermal.intragranular_eddy_power() nor AMRSystem.pump_motor_efficiency has its own
     dedicated validation/analysis module (both are opt-in refinements to
     existing machinery, not new candidate materials or standalone
     analyses) -- this reproduces the same honest findings ROADMAP.md's
-    own Phase 27/28 entries document, so they appear in a fresh
+    own ROADMAP.md entries document, so they appear in a fresh
     `python main.py` run rather than only existing in this repo's own
     test suite and prior interactive session."""
     from core.thermal import intragranular_eddy_power
@@ -1012,7 +1025,7 @@ def run_eddy_and_pump_efficiency_demo():
     from core.amr_cycle import AMRSystem
     from core.mce_material import GADOLINIUM
 
-    logger.info("Phase 27: geometry-explicit intragranular eddy-current loss vs. the "
+    logger.info("Geometry-explicit intragranular eddy-current loss vs. the "
                 "CORE-calibrated support-structure k_eddy term, at 2T/2Hz")
     lm = StateDependentLossModel()
     k_eddy_term_W = lm.k_eddy * 2.0 ** 2 * 2.0 ** 2
@@ -1025,9 +1038,9 @@ def run_eddy_and_pump_efficiency_demo():
                     f"(ratio to support-structure term: {ratio:.6f})")
     logger.info("  -> negligible at realistic packed-bed particle sizes (0.07-0.17mm) -- "
                 "the mechanism is real and wired in, but does not meaningfully change any "
-                "existing result at sub-mm scale (see ROADMAP.md Phase 27).")
+                "existing result at sub-mm scale (see ROADMAP.md).")
 
-    logger.info("Phase 28: pump/motor efficiency opt-in -- idealized (default, "
+    logger.info("Pump/motor efficiency opt-in -- idealized (default, "
                 "efficiency=1.0) vs. literature-grounded (efficiency=0.6) at a "
                 "representative geometry-explicit AMRSystem")
     sys_ideal = AMRSystem(material=GADOLINIUM, mu0H_max=2.0, mass_regenerator=2.0,
@@ -1044,16 +1057,16 @@ def run_eddy_and_pump_efficiency_demo():
     logger.info(f"  literature (eff=0.6):  COP_electrical={r_real.COP_electrical:.4f}")
     logger.info("  -> default AMRSystem/optimize.py behavior is UNCHANGED (eff=1.0); "
                 "the literature value is available as an explicit opt-in, not silently "
-                "applied to any production Pareto front (see ROADMAP.md Phase 28).")
+                "applied to any production Pareto front (see ROADMAP.md).")
 
 
 def run_plot_generation(precomputed=None):
-    """Step 12: renders all 34 figures in plots.py (results/figures/*.png
+    """Step 12: renders all 35 figures in plots.py (results/figures/*.png
     and *.pdf) covering material validation, AMR characteristic curves,
     thermal/geometry modelling, loss-model calibration, system/curve
     validation, cascade and Curie-graded staging, Sobol sensitivity, RSM
     surrogate fitting, NSGA-III optimization, economics, emissions, and
-    (figs 27-34) the Phase 16-22 sensitivity studies: Tc-broadening,
+    (figs 27-34) the earlier sensitivity studies: Tc-broadening,
     nanocomposite off-design robustness, thermal-diode actuation cost,
     magnetocaloric-fluid volume fraction, passive-regenerator alignment,
     rotary-device cycle-type validation, hysteresis-loss and
@@ -1097,8 +1110,8 @@ def run_design_recommendations_synthesis(sobol_state_dependent_Si, pareto_rows, 
     Also folds in three findings that previously lived only in their own
     result files and never made it into this consolidated report: cycle-
     type validation (step 2b), thermal-diode cost sensitivity (step 11c),
-    and passive/hybrid-regenerator augmentation (step 21/Phase 21) plus
-    the static elastocaloric literature reference (Phase 23). cycle_type_
+    and passive/hybrid-regenerator augmentation (step 15) plus
+    the static elastocaloric literature reference. cycle_type_
     result and thermal_diode_rows are passed in (steps 2b/11c both run
     before this one). The passive-regenerator and elastocaloric numbers
     are cheap (sub-second, no file I/O) to recompute directly here rather
@@ -1155,7 +1168,7 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
     simulation cost once per unique (material, field, mass, frequency,
     ...) combination across repeated invocations of this script.
 
-    layered_material_cross_product=True (Phase 31, default False) runs
+    layered_material_cross_product=True (default False) runs
     step "11g." -- the material x n_layers cross-product NSGA-III
     co-optimization core/optimize.py's own run_layered_optimization()
     docstring explicitly left as a follow-up. Off by default because it
@@ -1176,12 +1189,19 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
                   validation.run_curie_shift_check(),
                   validation.run_curie_shift_check_v2())),
         ("1b. Inhomogeneous/polycrystalline Tc-broadening sensitivity "
-         "(core/inhomogeneous_broadening.py, Phase 22 item 1)",
+         "(core/inhomogeneous_broadening.py)",
          lambda: inhomogeneous_broadening.run_inhomogeneous_broadening_analysis()),
+        ("1c. Field-dependent Tc-broadening calibration (core/inhomogeneous_"
+         "broadening.py, Paper-Mining Pass: new papers)",
+         lambda: inhomogeneous_broadening.run_field_dependent_broadening_calibration()),
+        ("1d. System-level impact of the Gd physics fix (core/validation_system.py, "
+         "Paper-Mining Pass wiring check): quantifies the cost of NOT using "
+         "GADOLINIUM_CALIBRATED as the system-wide default",
+         lambda: validation_system.run_calibrated_gd_system_level_comparison()),
         ("2. System-level validation vs. published AMR prototypes",
          None),  # handled specially below, result (system_validation_results) captured
         ("2b. Cycle-type (Ericsson-like vs. Brayton-like) validation sensitivity "
-         "(core/validation_system.py, Phase 17)",
+         "(core/validation_system.py)",
          lambda: validation_system.run_cycle_type_validation()),
         ("2c. Calibration-failure root-cause diagnostic: search-space artifact vs. "
          "structural limitation (core/validation_system.py, Paper-Mining Pass review item 1)",
@@ -1229,10 +1249,10 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
          run_thermal_demo),
         ("3c. Geometry-dependent pumping power: packed-bed + parallel-plate (core/geometry_analysis.py)",
          lambda: geometry_analysis.run_geometry_analysis()),
-        ("3d. Hypereg parallel-hydraulic pumping-power analysis (core/hypereg_analysis.py, Phase 15 item 3)",
+        ("3d. Hypereg parallel-hydraulic pumping-power analysis (core/hypereg_analysis.py)",
          lambda: hypereg_analysis.run_hypereg_analysis()),
         ("3e. Geometry-explicit intragranular eddy-current loss + pump/motor "
-         "efficiency demo (core/thermal.py, core/amr_cycle.py, Phase 27/28)",
+         "efficiency demo (core/thermal.py, core/amr_cycle.py)",
          run_eddy_and_pump_efficiency_demo),
         ("4. Baseline comparison sweep: AMR vs VCC vs liquid cooling vs Carnot",
          None),  # handled specially below, result captured
@@ -1248,15 +1268,15 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
          None),  # handled specially below, off by default
         ("5. Economics / TCO at the representative operating point",
          None),  # needs step 4's result
-        ("5b. Full-system cost estimate by material family (core/economics.py, Phase 15 item 5) + amorphous-material cost/performance note (Phase 22 item 3)",
+        ("5b. Full-system cost estimate by material family (core/economics.py) + amorphous-material cost/performance note",
          run_full_system_cost_by_material),
         ("6. Emissions comparison at the representative operating point",
          None),  # needs step 4's result
         ("7. Cascade staging comparison (1-4 stage AMR, Gd and Gd5Si2Ge2)",
          None),  # handled specially below, result (rows_gd) captured for step 7b
-        ("7b. Curie-graded cascade (composition-tuned per stage, ROADMAP.md Phase 7 item)",
+        ("7b. Curie-graded cascade (composition-tuned per stage, see ROADMAP.md)",
          None),  # needs step 7's result
-        ("7c. Does a 6-layer Curie-graded La(Fe,Si)13Hy bed reproduce Astronautics_rotary_2014? (ROADMAP.md Phase 9 addendum)",
+        ("7c. Does a 6-layer Curie-graded La(Fe,Si)13Hy bed reproduce Astronautics_rotary_2014? (ROADMAP.md)",
          run_astronautics_graded_validation),
         ("7d. Extending the graded-bed structural fix to the remaining STRUCTURAL "
          "devices (DTU_MagQueen_2018, Risoe_DTU_Gd_2011, Cooltech_2013_rotary) "
@@ -1271,44 +1291,44 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
          lambda: cascade.run_astronautics_giguere_correction_sensitivity()),
         ("8. Giant-MCE materials analysis (Gd vs Gd5Si2Ge2)",
          lambda: giant_mce_analysis.run_analysis()),
-        ("8d. Eight-way material family comparison (Gd, Gd5Si2Ge2-fixed, GD/LAFESIH/MNFEPSI/GA1XCMN3X/MNCUCOGE-tuned, LAFESIH-nanocomposite; Track A2 item + Phase 22 item 2 + Phase 24/25)",
+        ("8d. Eight-way material family comparison (Gd, Gd5Si2Ge2-fixed, GD/LAFESIH/MNFEPSI/GA1XCMN3X/MNCUCOGE-tuned, LAFESIH-nanocomposite; Track A2 item)",
          lambda: material_family_comparison.run_analysis()),
-        ("8e. Nanocomposite off-design robustness check (core/nanocomposite_material.py, Phase 22 item 2 follow-up)",
+        ("8e. Nanocomposite off-design robustness check (core/nanocomposite_material.py, follow-up)",
          lambda: nanocomposite_material.run_robustness_check()),
         ("8b. First-order Landau model calibration check (core/first_order_mce.py, reached transitively otherwise)",
          run_first_order_mce_demo),
         ("8c. Giguere et al. (1999) direct-measurement cross-check + Pecharsky & "
          "Gschneidner (1997) peak-ratio check + latent-heat Cp spike (core/giguere_validation.py, "
-         "Phase 26)",
+         ")",
          lambda: (giguere_validation.run_validation(),
                   giguere_validation.run_pecharsky_ratio_check(),
                   giguere_validation.run_latent_heat_validation())),
         ("9. Sobol global sensitivity analysis (constant-loss model)",
-         lambda: sensitivity.run_sobol(out_path="results/sobol_results_phase2_constant.txt",
+         lambda: sensitivity.run_sobol(out_path="results/sobol_results_constant_losses.txt",
                                         use_state_dependent_losses=False)),
         ("9b. Sobol global sensitivity analysis (state-dependent loss model)",
          lambda: sensitivity.run_sobol(out_path="results/sobol_results.txt",
                                         use_state_dependent_losses=True)),
         ("10. Response-surface (RSM) surrogate fit",
          lambda: rsm.fit_rsm()),
-        ("11. NSGA-III multi-objective design optimization (material + geometry co-optimization, Phase 15 item 2)",
+        ("11. NSGA-III multi-objective design optimization (material + geometry co-optimization)",
          None),  # handled specially below, result (pareto_rows) captured for step 13
-        ("11b. Hysteresis sensitivity: does Phase 16's thermal-hysteresis loss change the "
-         "Phase 15 material-selection result? (core/hysteresis_sensitivity.py, Phase 16)",
+        ("11b. Hysteresis sensitivity: does the thermal-hysteresis loss change the "
+         "earlier material-selection result? (core/hysteresis_sensitivity.py)",
          None),  # handled specially below, result (hysteresis_result) captured for the executive summary
         ("11c. Thermal-diode cost-only sensitivity (upper bound on switching-power "
          "overhead, NOT a net-benefit finding): mechanical-contact active thermal diode "
-         "(core/thermal_diode.py, core/thermal_diode_analysis.py, Phase 18)",
+         "(core/thermal_diode.py, core/thermal_diode_analysis.py)",
          lambda: thermal_diode_analysis.run_thermal_diode_analysis()),
         ("11d. Magnet-geometry (Halbach-cylinder) field-vs-mass cost model "
-         "(core/magnet_geometry.py, Phase 19)",
+         "(core/magnet_geometry.py)",
          None),  # handled specially below, result (magnet_geometry_result) captured
                  # for the executive summary
         ("11e. Magnet-geometry Pareto sensitivity: production-settings, multi-seed "
          "stability check (core/magnet_geometry.py, Paper-Mining Pass review item 4)",
          lambda: magnet_geometry.run_magnet_geometry_multiseed_stability_check()),
         ("11f. Layered/graded-bed NSGA-III co-optimization (core/optimize.py, "
-         "core/cascade.py, Phase 29) -- reduced pop_size/n_gen/n_layers_range vs. "
+         "core/cascade.py) -- reduced pop_size/n_gen/n_layers_range vs. "
          "the function's own full-quality defaults, purely to keep this pipeline "
          "stage's own runtime bounded (see run_layered_optimization()'s own "
          "docstring for the full 1-6 layer, pop_size=40/n_gen=25 version, callable "
@@ -1328,11 +1348,11 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
          None),  # handled specially below, result (layered_pareto_rows) captured
                  # for the executive summary
         ("11g. Material x n_layers cross-product NSGA-III co-optimization "
-         "(core/optimize.py, Phase 31) -- OFF BY DEFAULT (pass "
+         "(core/optimize.py) -- OFF BY DEFAULT (pass "
          "--layered-material-cross-product to run it); the cross-product "
-         "run_layered_optimization()'s own Phase 29 docstring explicitly left as a "
+         "run_layered_optimization()'s own docstring explicitly left as a "
          "\"documented, concretely-scoped follow-up, not attempted here to keep this "
-         "phase's own runtime and scope bounded\". Runs step 11f.'s own function once "
+         "step's own runtime and scope bounded\". Runs step 11f.'s own function once "
          "per material family (5 families x the same reduced n_layers_range/pop_size/"
          "n_gen as 11f.) then applies one further global Pareto filter across every "
          "family's rows -- multiplies 11f.'s already-reduced runtime by "
@@ -1341,7 +1361,7 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
          None),  # handled specially below, result (layered_cross_product_rows)
                  # captured for the executive summary; skipped entirely (removed from
                  # `stages` before the loop below) unless the flag above is passed
-        ("12. Figure generation: 34 figures covering validation, AMR curves, "
+        ("12. Figure generation: 35 figures covering validation, AMR curves, "
          "cascade/graded staging, sensitivity, RSM, NSGA-III, economics, emissions, "
          "Tc-broadening, nanocomposite robustness, thermal-diode, fluid-MCE, passive "
          "regenerator, cycle-type, hysteresis and magnet-geometry Pareto sensitivity (plots.py)",
@@ -1350,16 +1370,16 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
          None),  # handled specially below, consumes steps 3c/7b/8d/9b/11's results
         ("14. Magnetocaloric fluids (ferrofluid/MR suspension) as an alternative "
          "working-body class (core/fluid_mce_cycle.py, core/fluid_mce_analysis.py, "
-         "Phase 20)",
+         ")",
          None),  # handled specially below, result (fluid_mce_result) captured
                  # for the executive summary
         ("15. Passive/hybrid magnetic regenerator augmentation of a conventional "
          "gas cycle (core/baseline_cooling.py, core/passive_regenerator_analysis.py, "
-         "Phase 21)",
+         ")",
          None),  # handled specially below, result (passive_regen_result) captured
                  # for the executive summary
         ("15b. Beverage-cooler real-world deployment checks (core/"
-         "beverage_cooler_validation.py, Phase 34): unlike this repo's primary "
+         "beverage_cooler_validation.py): unlike this repo's primary "
          "data-center application (where AMR has no deployed magnetic-cooling "
          "competitor to check against), commercial beverage refrigeration is "
          "the one segment where magnetocaloric cooling is already commercially "
@@ -1370,7 +1390,7 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
          "are included rather than just one.",
          None),  # handled specially below, result captured
         ("15c. Heat-pump real-world architecture check (core/heat_pump_validation.py, "
-         "Phase 34): a THIRD distinct real-world segment (heat pumps, not "
+         "a THIRD distinct real-world segment (heat pumps, not "
          "refrigeration) -- Ames National Laboratory's peer-reviewed Gd "
          "packed-bed AMR device, the SAME core architecture this repo's own "
          "model already assumes. Checks physical realism (is this repo's own "
@@ -1379,7 +1399,7 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
          "comparable to Ames Lab's own whole-device SPD.",
          None),  # handled specially below, result captured
         ("15d. Regime crossover analysis (core/regime_crossover_analysis.py, "
-         "Phase 34): systematically searches, across span and baseline-"
+         "systematically searches, across span and baseline-"
          "technology quality using this repo's own already-tested functions, "
          "for ANY region where this repo's own model shows AMR beating "
          "vapor-compression -- on COP, and (separately) on total emissions "
@@ -1389,7 +1409,7 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
          "reports about itself. See that module's own top-level docstring "
          "for why this null result is itself the useful, reportable finding.",
          None),  # handled specially below, result captured
-        ("16. Paper-strengthening additions (Phase 30-31): commercial/state-of-the-art "
+        ("16. Paper-strengthening additions: commercial/state-of-the-art "
          "landscape comparison (core/commercial_landscape.py), PUE framing + "
          "annualized/part-load climate-weighted comparison (core/pue_annualized.py), "
          "Monte Carlo calibration-uncertainty propagation onto COP/Qc "
@@ -1410,7 +1430,7 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
                     "-- see main()'s own docstring; every other stage's output is unaffected)")
 
     if not layered_material_cross_product:
-        # Phase 31: opt-in, OFF by default -- see step "11g."'s own stages
+        # Opt-in, OFF by default -- see step "11g."'s own stages
         # entry above for why (multiplies step 11f.'s already-reduced
         # runtime by ~len(family_candidates)=5). Mirrors --quick's own
         # removal-from-`stages` mechanism just above, in the opposite
@@ -1595,7 +1615,7 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
                     print()
                     regime_crossover_analysis.run_emissions_crossover_check()
                 elif name.startswith("16."):
-                    _run_phase30_additions(representative_row)
+                    _run_paper_strengthening_additions(representative_row)
                 else:
                     fn()
         except Exception:
@@ -1620,24 +1640,24 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
         logger.info("  comparison_table.csv, cascade_comparison.csv, "
                      "cascade_comparison_giant_mce.csv, giant_mce_analysis.txt, "
                      "material_family_comparison.csv, material_family_comparison.txt, "
-                     "sobol_results.txt, sobol_results_phase2_constant.txt, "
+                     "sobol_results.txt, sobol_results_constant_losses.txt, "
                      "rsm_coefficients.txt, pareto_front.csv, "
-                     "pareto_front_by_material/*.csv (Phase 15), "
-                     "hypereg_analysis.txt (Phase 15), "
-                     "hysteresis_sensitivity.txt (Phase 16), "
-                     "cycle_type_validation.txt (Phase 17), "
+                     "pareto_front_by_material/*.csv, "
+                     "hypereg_analysis.txt, "
+                     "hysteresis_sensitivity.txt, "
+                     "cycle_type_validation.txt, "
                      "calibration_failure_diagnostics.txt (Paper-Mining Pass review item 1), "
-                     "thermal_diode_analysis.txt (Phase 18), "
+                     "thermal_diode_analysis.txt, "
                      "magnet_geometry_analysis.txt, "
                      "magnet_geometry_pareto_sensitivity.txt, "
                      "pareto_front_magnet_flat.csv, pareto_front_magnet_geometric.csv "
-                     "(Phase 19), "
+                     ", "
                      "magnet_geometry_multiseed_stability.txt "
                      "(Paper-Mining Pass review item 4), "
-                     "fluid_mce_analysis.txt (Phase 20), "
-                     "passive_regenerator_analysis.txt (Phase 21), "
+                     "fluid_mce_analysis.txt, "
+                     "passive_regenerator_analysis.txt, "
                      "geometry_optimization_analysis.txt, graded_cascade_comparison.csv, "
-                     "design_recommendations.txt, figures/*.png+*.pdf (34 figures)")
+                     "design_recommendations.txt, figures/*.png+*.pdf (35 figures)")
     logger.info(f"Full run log: {LOG_FILE}")
 
     _print_executive_summary(representative_row, cascade_rows_gd, graded_rows,
@@ -1706,7 +1726,7 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
                     f"{representative_row['VaporCompression_COP']}, Liquid_COP="
                     f"{representative_row['LiquidCooling_COP']}, Carnot_COP="
                     f"{representative_row['Carnot_COP']}  (results/comparison_table.csv)")
-        logger.info(f"  - Elastocaloric (Phase 23, static literature reference, NOT "
+        logger.info(f"  - Elastocaloric (static literature reference, NOT "
                     f"span-simulated -- see core/baseline_cooling.py's own honesty flag): "
                     f"COP_ref={representative_row['Elastocaloric_COP_ref']}")
     else:
@@ -1715,7 +1735,7 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
     logger.info("Economics & emissions (TCO and GWP at the representative operating point)")
     logger.info("  - results/*: economics.py CAPEX/OPEX comparison, emissions.py refrigerant + "
                 "operational CO2e comparison")
-    logger.info("  - Phase 15: full-system BOM cost model (materials + soft-magnetic yoke), "
+    logger.info("  - Full-system BOM cost model (materials + soft-magnetic yoke), "
                 "order-of-magnitude full-system cost estimate, and CRF-based levelized cost of "
                 "cooling, all at the same design point -- see step 5's log output above; step 5b "
                 "compares the same estimate across material families")
@@ -1759,7 +1779,7 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
 
     logger.info("Global sensitivity (Sobol) & response-surface (RSM) surrogate")
     logger.info("  - results/sobol_results.txt (state-dependent losses), "
-                "results/sobol_results_phase2_constant.txt (constant losses), "
+                "results/sobol_results_constant_losses.txt (constant losses), "
                 "results/rsm_coefficients.txt (Qc surrogate, R^2 reported at fit time)")
 
     logger.info("Regenerator geometry optimization (packed-bed / parallel-plate)")
@@ -1770,7 +1790,7 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
     else:
         logger.info("  - unavailable (stage failed or was skipped)")
 
-    logger.info("Hypereg parallel-hydraulic pumping-power analysis (Phase 15 item 3)")
+    logger.info("Hypereg parallel-hydraulic pumping-power analysis")
     if _ok("3d."):
         logger.info("  - Klinar et al. (2024)-motivated pumping-power-only sweep; see "
                     "results/hypereg_analysis.txt and results/hypereg_findings.md for the full "
@@ -1779,7 +1799,7 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
         logger.info("  - unavailable (stage failed or was skipped)")
 
     logger.info("NSGA-III multi-objective design optimization (COP vs. Qc vs. cost; "
-                "Phase 15: material + geometry co-optimized)")
+                "material + geometry co-optimized)")
     if pareto_rows and _ok("11."):
         best_cop = max(pareto_rows, key=lambda r: r["COP_electrical"])
         logger.info(f"  - {len(pareto_rows)} Pareto-optimal designs; best electrical COP="
@@ -1790,7 +1810,7 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
         logger.info("  - unavailable (stage failed or was skipped)")
 
     logger.info("Layered/graded-bed NSGA-III co-optimization (n_layers=1-3, reduced "
-                "pop_size/n_gen for pipeline runtime; Phase 29)")
+                "pop_size/n_gen for pipeline runtime)")
     if layered_pareto_rows and _ok("11f."):
         best_cascade_cop = max(layered_pareto_rows, key=lambda r: r["COP_cascade"])
         n_layers_counts = {}
@@ -1807,7 +1827,7 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
     else:
         logger.info("  - unavailable (stage failed or was skipped)")
 
-    logger.info("Material x n_layers cross-product NSGA-III co-optimization (Phase 31, "
+    logger.info("Material x n_layers cross-product NSGA-III co-optimization ("
                 "step 11g., off by default -- pass --layered-material-cross-product to run it)")
     if layered_cross_product_rows and _ok("11g."):
         best_combo_cop = max(layered_cross_product_rows, key=lambda r: r["COP_cascade"])
@@ -1826,8 +1846,8 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
         logger.info("  - not run this session (opt-in stage -- pass "
                     "--layered-material-cross-product to include it)")
 
-    logger.info("Hysteresis sensitivity: does Phase 16's thermal-hysteresis loss change the "
-                "Phase 15 material-selection result? (step 11b, Phase 16)")
+    logger.info("Hysteresis sensitivity: does the thermal-hysteresis loss change the "
+                "earlier material-selection result? (step 11b)")
     if hysteresis_result and _ok("11b."):
         counts_on = hysteresis_result["counts_on"]
         counts_off = hysteresis_result["counts_off"]
@@ -1838,7 +1858,7 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
         frac_on = lafesih_on / len(rows_on) if rows_on else 0.0
         frac_off = lafesih_off / len(rows_off) if rows_off else 0.0
         logger.info(f"  - La(Fe,Si)13Hy share of merged front: {frac_off:.0%} (hysteresis OFF, "
-                    f"pre-Phase-16) -> {frac_on:.0%} (hysteresis ON, Phase 16) -- see "
+                    f"before) -> {frac_on:.0%} (hysteresis ON) -- see "
                     "results/hysteresis_sensitivity.txt and that module's docstring honesty "
                     "flags 1-2 before treating this as a settled, publication-quality answer "
                     "rather than a directional sensitivity check")
@@ -1847,7 +1867,7 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
 
     logger.info("Thermal-diode cost-only sensitivity (upper bound on switching-power "
                 "overhead, not a net-benefit finding): mechanical-contact active thermal "
-                "diode (step 11c, Phase 18)")
+                "diode (step 11c)")
     if _ok("11c."):
         logger.info("  - Cost-only, unbenchmarked design-exploration study (see "
                     "results/thermal_diode_analysis.txt and core/thermal_diode.py's docstring "
@@ -1860,7 +1880,7 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
         logger.info("  - unavailable (stage failed or was skipped)")
 
     logger.info("Magnet-geometry (Halbach-cylinder) field-vs-mass cost model "
-                "(step 11d, Phase 19)")
+                "(step 11d)")
     if magnet_geometry_result and _ok("11d."):
         rows_flat = magnet_geometry_result["rows_flat"]
         rows_geom = magnet_geometry_result["rows_geometric"]
@@ -1869,7 +1889,7 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
         mean_geom = (sum(r["mu0H_max_T"] for r in rows_geom) / len(rows_geom)
                      if rows_geom else float("nan"))
         logger.info(f"  - Merged Pareto front mean mu0H_max_T: {mean_flat:.2f} T (flat "
-                    f"per-Tesla magnet-mass ratio) -> {mean_geom:.2f} T (Phase 19 "
+                    f"per-Tesla magnet-mass ratio) -> {mean_geom:.2f} T ("
                     "geometric Halbach-cylinder magnet-mass relation) -- see "
                     "results/magnet_geometry_pareto_sensitivity.txt and "
                     "core/magnet_geometry.py's docstring honesty flags (incl. a citation "
@@ -1900,7 +1920,7 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
     logger.info(f"  - {n_figs} figure(s) generated (results/figures/*.png, *.pdf)")
 
     logger.info("Magnetocaloric fluids (ferrofluid/MR suspension) as an alternative "
-                "working-body class (step 14, Phase 20)")
+                "working-body class (step 14)")
     if fluid_mce_result and _ok("14."):
         sweep = fluid_mce_result["sweep"]
         comp = fluid_mce_result["comparison"]
@@ -1923,7 +1943,7 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
 
     logger.info("Passive/hybrid magnetic regenerator: augmenting a conventional gas "
                 "cycle's own regenerator with a magnetocaloric material's Curie-point "
-                "heat-capacity anomaly (step 15, Phase 21)")
+                "heat-capacity anomaly (step 15)")
     if passive_regen_result and _ok("15."):
         best = passive_regen_result["candidate_results"][0]
         base_cop = passive_regen_result["base"].COP
@@ -1938,14 +1958,14 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
                     "construction (see core/baseline_cooling.py's own docstring). The "
                     "effectiveness-to-COP mapping is an illustrative, literature-range-"
                     "anchored ceiling, not a fitted or digitized coefficient -- see that "
-                    "module's Phase 21 honesty flag before treating this as a validated "
+                    "that module's honesty flag before treating this as a validated "
                     "device-level COP prediction")
     else:
         logger.info("  - unavailable (stage failed or was skipped)")
 
 
-def _run_phase30_additions(representative_row=None):
-    """Phase 30-31: run all paper-strengthening additions. Each writes
+def _run_paper_strengthening_additions(representative_row=None):
+    """Runs all paper-strengthening additions. Each writes
     its own results/ file and is independently exception-safe internally
     only insofar as its own module guards feasibility (e.g. AMR span cap);
     a failure in one does not block the others here.
@@ -1957,27 +1977,27 @@ def _run_phase30_additions(representative_row=None):
     than the modules' own illustrative example COPs (4.63/3.2/4.0) --
     those illustrative numbers were silently disconnected from the rest
     of the pipeline's output until this fix (flagged after the initial
-    Phase 30 merge: they made water_usage.py's own AMR-vs-liquid-cooling
+    This merge made water_usage.py's own AMR-vs-liquid-cooling
     comparison read as a 0% reduction purely from reusing the same
     placeholder pair, not from a real result)."""
     try:
         commercial_landscape.write_commercial_landscape_report()
     except Exception:
-        logger.error("Phase 30: commercial_landscape.py failed")
+        logger.error("commercial_landscape.py failed")
         logger.error(traceback.format_exc())
     if representative_row:
         capacity_kW = representative_row["AMR_Qc_W"] / 1000.0
         amr_cop = representative_row["AMR_COP_electrical"]
         vcc_cop = representative_row["VaporCompression_COP"]
         liquid_cop = representative_row["LiquidCooling_COP"]
-        logger.info(f"Phase 30-31 additions basis: capacity={capacity_kW:.2f} kW, "
+        logger.info(f"Paper-strengthening additions basis: capacity={capacity_kW:.2f} kW, "
                     f"AMR_COP={amr_cop}, VCC_COP={vcc_cop}, Liquid_COP={liquid_cop} "
                     f"(all from step 4, span={REPRESENTATIVE_SPAN_K}K) -- same basis "
                     "run_economics()/run_emissions() already use")
     else:
         # Step 4 failed or was skipped -- fall back to each module's own
         # illustrative defaults rather than crashing this stage.
-        logger.warning("Phase 30-31: representative_row unavailable (step 4 failed/"
+        logger.warning("Paper-strengthening additions: representative_row unavailable (step 4 failed/"
                         "skipped) -- pue_annualized/water_usage will use their own "
                         "illustrative placeholder COPs instead of a real operating point")
         capacity_kW = amr_cop = vcc_cop = liquid_cop = None
@@ -1988,12 +2008,12 @@ def _run_phase30_additions(representative_row=None):
         else:
             pue_annualized.write_pue_annualized_report()
     except Exception:
-        logger.error("Phase 30: pue_annualized.py failed")
+        logger.error("pue_annualized.py failed")
         logger.error(traceback.format_exc())
     try:
         uncertainty_propagation.write_uncertainty_report()
     except Exception:
-        logger.error("Phase 30: uncertainty_propagation.py failed")
+        logger.error("uncertainty_propagation.py failed")
         logger.error(traceback.format_exc())
     try:
         # Reduced pop_size/n_gen/seeds vs. the module's own full-quality
@@ -2005,7 +2025,7 @@ def _run_phase30_additions(representative_row=None):
         pareto_multiseed_stability.write_pareto_multiseed_stability_report(
             seeds=(1, 2, 3), pop_size=20, n_gen=12)
     except Exception:
-        logger.error("Phase 30: pareto_multiseed_stability.py failed")
+        logger.error("pareto_multiseed_stability.py failed")
         logger.error(traceback.format_exc())
     try:
         if representative_row:
@@ -2019,7 +2039,7 @@ def _run_phase30_additions(representative_row=None):
         else:
             water_usage.write_water_usage_report()
     except Exception:
-        logger.error("Phase 30: water_usage.py failed")
+        logger.error("water_usage.py failed")
         logger.error(traceback.format_exc())
 
 

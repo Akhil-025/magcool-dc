@@ -1,5 +1,5 @@
 """
-Tests for the Phase 27 addition: core.thermal.intragranular_eddy_power(),
+Tests for the addition: core.thermal.intragranular_eddy_power(),
 core.loss_model.StateDependentLossModel's intragranular_eddy_power_W
 parameter, and core.amr_cycle.AMRSystem._geometry_eddy_power_W() wiring.
 """
@@ -41,7 +41,7 @@ def test_intragranular_eddy_power_negligible_at_realistic_particle_sizes():
     optimum range, 0.07-0.17mm), the intragranular eddy term should be
     negligible (milliwatt scale) relative to a typical CORE-calibrated
     support-structure k_eddy term (hundreds of watts) -- a real finding,
-    not a bug: see this module's own Phase 27 ROADMAP entry."""
+    not a bug: see this module's own ROADMAP entry."""
     lm = StateDependentLossModel()
     k_eddy_term_W = lm.k_eddy * 2.0 ** 2 * 2.0 ** 2
     for d_mm in (0.07, 0.17):
@@ -52,7 +52,7 @@ def test_intragranular_eddy_power_negligible_at_realistic_particle_sizes():
 
 
 def test_state_dependent_loss_model_default_unaffected_by_new_parameter():
-    """Every pre-Phase-27 call site omits intragranular_eddy_power_W --
+    """Every previous call site omits intragranular_eddy_power_W --
     parasitic_power() must be bit-for-bit unchanged in that case."""
     lm = StateDependentLossModel()
     old_style = lm.parasitic_power(2.0, 2.0, 0.1, 500.0)

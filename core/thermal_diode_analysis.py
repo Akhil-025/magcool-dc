@@ -1,10 +1,10 @@
 """
 thermal_diode_analysis.py
 ==========================
-Phase 18 (ROADMAP.md) validation deliverable for `core/thermal_diode.py`.
+ (ROADMAP.md) validation deliverable for `core/thermal_diode.py`.
 
 Scope, deliberately narrow (read `core/thermal_diode.py`'s module
-docstring honesty flag before trusting any number here). The Phase 18
+docstring honesty flag before trusting any number here). The
 plan asked two concrete questions before any deeper investment in this
 mechanism:
 
@@ -15,14 +15,14 @@ mechanism:
 
 This module answers both directly, rather than building the fuller
 NSGA-III-integrated, rectification-ratio-driven heat-transfer model the
-original Phase 18 plan sketched as a stretch goal -- consistent with
+original plan sketched as a stretch goal -- consistent with
 that plan's own recommendation to "scope down to 'what frequency
 ceiling would need to be broken for this to matter' as a sensitivity
 study before building the full diode model."
 
 Finding on question 1 (checked directly, not assumed): NO internal
 frequency ceiling exists anywhere in core/amr_cycle.py's AMRSystem.
-Frequency feeds W_eddy ~ f^2 (core/loss_model.py) and, since Phase 16,
+Frequency feeds W_eddy ~ f^2 (core/loss_model.py) and, since ,
 W_hys ~ f (hysteresis) -- both raise parasitic loss monotonically with
 f, but neither model, nor cooling_capacity()/magnetic_work(), ever hard-
 caps f. The only frequency bound anywhere in this repo is
@@ -50,7 +50,7 @@ at a representative operating point, by paying the (illustrative)
 actuation switching-power cost `core.thermal_diode.
 DEFAULT_MECHANICAL_CONTACT_DIODE` implies, as frequency is swept -- i.e.
 it quantifies the DOWNSIDE this module's own accounting choice
-(Phase 18's AMRSystem.thermal_diode wiring) adds, honestly, without
+(the earlier AMRSystem.thermal_diode wiring) adds, honestly, without
 claiming any offsetting heat-transfer benefit that this repo's model
 does not (and, per the honesty flag above, currently cannot) represent.
 """
@@ -129,7 +129,7 @@ def sweep_frequency_with_and_without_diode(
                           / base.COP_electrical) if base.COP_electrical > 0 else 0.0
         rows.append((f, base.COP_electrical, diode_assisted.COP_electrical, delta_cop_pct))
         if verbose:
-            print(f"  f={f:5.2f}Hz   COP_no_diode={base.COP_electrical:7.4f}   "
+            print(f" f={f:5.2f}Hz COP_no_diode={base.COP_electrical:7.4f}   "
                   f"COP_diode_assisted={diode_assisted.COP_electrical:7.4f}   "
                   f"delta={delta_cop_pct:6.2f}%")
     return rows
@@ -148,7 +148,7 @@ def demo_cycle_time_reduction(verbose=True):
     reduction = cycle_time_reduction_factor(conventional_switch_time_s,
                                              diode_switch_time_s)
     if verbose:
-        print(f"  Illustrative example only (NOT a literature value -- see "
+        print(f" Illustrative example only (NOT a literature value -- see "
               f"docstring): conventional valve switch time="
               f"{conventional_switch_time_s}s, diode switch time="
               f"{diode_switch_time_s}s -> {reduction*100:.0f}% dead-time "
@@ -203,7 +203,7 @@ def run_thermal_diode_analysis(out_path="results/thermal_diode_analysis.txt"):
               f"unexplained round number, not a physical constraint. No benchmark "
               f"device in this repo's corpus uses thermal diodes, so none of this "
               f"is validated against real hardware -- treat this module as a "
-              f"design-exploration tool, exactly the disposition the Phase 18 "
+              f"design-exploration tool, exactly the disposition the "
               f"plan itself recommended for this item, not a validated feature.")
 
     text = buf.getvalue()

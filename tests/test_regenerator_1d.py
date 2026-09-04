@@ -1,4 +1,4 @@
-"""Phase 31 addition: core/regenerator_1d.py had no dedicated test file
+""" addition: core/regenerator_1d.py had no dedicated test file
 even though it is imported by main.py's pipeline (see README's Tier-1
 test-coverage gap). simulate_amr_1d() itself is a genuine multi-cycle
 transient simulation (tens of seconds per call at production settings --
@@ -22,7 +22,7 @@ from core.regenerator_1d import (
 )
 
 
-# --- _packed_bed_effective_axial_conductivity (Phase 31's new correlation) ---
+# --- _packed_bed_effective_axial_conductivity (the earlier new correlation) ---
 
 def test_packed_bed_conductivity_approaches_pure_fluid_as_porosity_to_one():
     k = _packed_bed_effective_axial_conductivity(0.999999, k_fluid=0.61, k_solid=10.5)
@@ -121,7 +121,7 @@ def test_simulate_amr_1d_zero_field_gives_near_zero_span():
 
 
 def test_simulate_amr_1d_k_solid_override_changes_result():
-    # Phase 31: k_solid is a new parameter (mirrors the existing cp_solid
+    # k_solid is a new parameter (mirrors the existing cp_solid
     # override pattern) -- check the override actually reaches the axial
     # conductivity calculation, not just that it's accepted and ignored.
     r_default = simulate_amr_1d(GADOLINIUM, mu0H_max=1.5, mass_total=1.0, frequency=1.0,
@@ -143,7 +143,7 @@ def test_simulate_amr_1d_higher_field_gives_higher_or_equal_span():
 # --- cache key / model versioning ---
 
 def test_cache_key_changes_when_model_version_changes(monkeypatch):
-    # Phase 31: guards against the exact silent-stale-cache risk this
+    # guards against the exact silent-stale-cache risk this
     # change introduced -- if _MODEL_VERSION is ever bumped again without
     # being folded into the cache key, this test will fail loudly instead
     # of old-physics results being silently served from disk forever.
@@ -164,3 +164,68 @@ def test_cache_key_differs_for_different_field():
     key_a = _cache_key(GADOLINIUM, 1.0, 1.0, 1.0, n_nodes=20, mdot_search=(0.002,), extra_kwargs={})
     key_b = _cache_key(GADOLINIUM, 2.0, 1.0, 1.0, n_nodes=20, mdot_search=(0.002,), extra_kwargs={})
     assert key_a != key_b
+
+
+# --- geometry="parallel_plate" support ---
+
+def test_geometry_invalid_raises():
+    with pytest.raises(ValueError):
+        simulate_amr_1d(GADOLINIUM, mu0H_max=1.5, mass_total=1.0, frequency=1.0,
+                         mdot=0.002, n_nodes=4, max_cycles=8, tol=1.0,
+                         geometry="not_a_real_geometry")
+
+
+def test_geometry_default_unchanged_is_packed_bed():
+    # geometry defaults to "packed_bed" -- confirms omitting the new
+    # parameter entirely reproduces the exact same result as passing it
+    # explicitly (i.e. every previous caller is bit-for-bit unaffected).
+    kwargs = dict(mu0H_max=1.5, mass_total=1.0, frequency=1.0, mdot=0.002,
+                   n_nodes=4, max_cycles=8, tol=1.0)
+    r_implicit = simulate_amr_1d(GADOLINIUM, **kwargs)
+    r_explicit = simulate_amr_1d(GADOLINIUM, geometry="packed_bed", **kwargs)
+    assert r_implicit["span_K"] == r_explicit["span_K"]
+    assert r_implicit["NTU_total"] == r_explicit["NTU_total"]
+
+
+def test_geometry_parallel_plate_runs_and_uses_parallel_plate_correlation():
+    # Confirms geometry="parallel_plate" actually dispatches to
+    # regenerator_effectiveness_parallel_plate() (different NTU/porosity
+    # convention than the packed-bed default) rather than silently
+    # ignoring the argument -- same mass/mdot/field, only geometry differs,
+    # so an unchanged NTU_total would indicate the branch isn't doing
+    # anything different.
+    common = dict(mu0H_max=1.5, mass_total=1.0, frequency=1.0, mdot=0.002,
+                   n_nodes=4, max_cycles=8, tol=1.0,
+                   bed_cross_section_area=0.0004)
+    r_packed = simulate_amr_1d(GADOLINIUM, geometry="packed_bed", **common)
+    r_plate = simulate_amr_1d(GADOLINIUM, geometry="parallel_plate",
+                               plate_thickness=0.00025, plate_spacing=0.0001,
+                               **common)
+    assert r_plate["NTU_total"] != r_packed["NTU_total"]
+    assert np.isfinite(r_plate["span_K"])
+    assert r_plate["span_K"] >= 0.0
+
+
+def test_geometry_parallel_plate_derived_porosity_close_to_source_value():
+    # The internal porosity = plate_spacing/(plate_spacing+plate_thickness)
+    # unit-cell idealization gives 0.1/(0.1+0.25) = 0.2857, NOT an exact
+    # match to the Tusek AMR(A) device's own DIRECTLY REPORTED porosity of
+    # 0.2564 (Table 1) -- an honest ~11% relative discrepancy, most likely
+    # from real edge/end effects (e.g. plate holders, end caps) a simple
+    # infinite-unit-cell idealization can't capture. Documented here rather
+    # than silently assumed to match: this test checks the two are in the
+    # same ballpark (confirming the geometry parameters were entered
+    # correctly, not transposed or off by a large factor), not that they
+    # are identical.
+    porosity_idealized = 0.0001 / (0.0001 + 0.00025)
+    porosity_reported = 0.2564
+    assert porosity_idealized == pytest.approx(0.2857, abs=0.001)
+    assert abs(porosity_idealized - porosity_reported) / porosity_reported < 0.15
+
+
+def test_parallel_plate_axial_conductivity_is_simple_parallel_mix():
+    from core.regenerator_1d import _parallel_plate_effective_axial_conductivity
+    k_fluid, k_solid, porosity = 0.6, 10.5, 0.2564
+    expected = porosity * k_fluid + (1 - porosity) * k_solid
+    got = _parallel_plate_effective_axial_conductivity(porosity, k_fluid, k_solid)
+    assert got == pytest.approx(expected)

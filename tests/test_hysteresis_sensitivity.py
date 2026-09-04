@@ -46,7 +46,7 @@ def test_run_hysteresis_sensitivity_restores_original_values(tmp_path):
     after = _hysteresis_snapshot()
     assert before == after
     for v in before.values():
-        assert v > 0.0, "fixture assumes the Phase 16 placeholders are nonzero by default"
+        assert v > 0.0, "fixture assumes the placeholders are nonzero by default"
 
 
 def test_run_hysteresis_sensitivity_restores_values_even_on_exception(monkeypatch, tmp_path):
@@ -107,7 +107,7 @@ def test_material_counts_helper():
 
 # ---------------------------------------------------------------------------
 # run_hysteresis_multiseed_stability_check() -- closes the "Open item" flagged
-# in this module's own honesty flag #1 and in ROADMAP.md's Phase 16 entry.
+# in this module's own honesty flag #1 and in ROADMAP.md.
 # ---------------------------------------------------------------------------
 
 def test_multiseed_stability_check_restores_original_values(tmp_path):

@@ -1,7 +1,7 @@
 """
 geometry_analysis.py
 =====================
-Phase 7 addition: closes a real, previously-unaddressed model gap exposed
+ addition: closes a real, previously-unaddressed model gap exposed
 by a newly-supplied paper -- Tusek, Kitanovski, Poredos, "Geometrical
 optimization of packed-bed and parallel-plate active magnetic
 regenerators", Int. J. Refrig. 36 (2013) 1456-1464
@@ -13,7 +13,7 @@ Therm. Eng. 53, 57-66; that one is unrelated to this module).
 
 The gap this closes
 --------------------
-`core/thermal.py`'s pre-Phase-7 NTU model exposed `particle_diameter` as
+`core/thermal.py`'s previous NTU model exposed `particle_diameter` as
 a free parameter but nothing in the codebase ever swept it or coupled it
 to a cost: `regenerator_effectiveness(particle_diameter=...)`'s `eps`
 rises MONOTONICALLY as particle_diameter shrinks (checked directly --
@@ -23,7 +23,7 @@ mdot**2`) has no particle-diameter dependence at all. The geometry paper
 reports a genuine trade-off optimum (Table 3: optimum sphere diameter
 0.07 mm w.r.t. cooling load, 0.17 mm w.r.t. COP; optimum parallel-plate
 spacing 0.035-0.075 mm) driven by viscous pressure drop rising as
-geometry shrinks -- something the pre-Phase-7 model structure could not,
+geometry shrinks -- something the previous model structure could not,
 even in principle, reproduce.
 
 What this module does
@@ -117,7 +117,7 @@ def check_free_mdot_cop_is_degenerate(verbose=True):
     """Documents WHY this module fixes mdot at a representative value
     rather than re-optimizing mdot per geometry the way the paper does.
     `amr_cycle.py`'s magnetic-work model computes
-        W_mag = Qc*(Th/Tc - 1) / eta_2nd_law,   eta_2nd_law = 0.35+0.20*eps
+        W_mag = Qc*(Th/Tc - 1) / eta_2nd_law, eta_2nd_law = 0.35+0.20*eps
     i.e. W_mag is proportional to Qc at any fixed eps, so the *ideal*
     COP = Qc/W_mag is INDEPENDENT of mdot except through eps. Since eps
     rises toward its 0.97 ceiling as mdot -> 0 (NTU -> infinity), COP
@@ -151,10 +151,10 @@ def check_free_mdot_cop_is_degenerate(verbose=True):
     if verbose:
         print("Diagnostic: ideal COP (no pumping) vs. mdot at fixed d_p=0.5mm:")
         for mdot, cop in zip(mdots, cops):
-            print(f"    mdot={mdot:7.4f}kg/s  COP_ideal={cop:.3f}")
-        print(f"  Monotonically non-decreasing as mdot falls (i.e. best at mdot->0)? "
+            print(f" mdot={mdot:7.4f}kg/s COP_ideal={cop:.3f}")
+        print(f" Monotonically non-decreasing as mdot falls (i.e. best at mdot->0)? "
               f"{monotonic}")
-        print("  CONCLUSION: single-objective COP maximization is degenerate in this "
+        print(" CONCLUSION: single-objective COP maximization is degenerate in this "
               "repo's 2nd-law work model (drives mdot, and Qc with it, toward zero). "
               "This module therefore sweeps geometry at a FIXED representative mdot "
               f"({MDOT_REPRESENTATIVE_KG_S} kg/s) rather than re-optimizing mdot per "
@@ -175,18 +175,18 @@ def sweep_packed_bed_diameter(diameters_mm=None, verbose=True):
         qc, cop = _augmented_cop_packed_bed(d)
         rows.append((d_mm, qc, cop))
         if verbose:
-            print(f"  d_p={d_mm:6.3f}mm   Qc={qc:8.2f}W   COP_aug={cop:7.4f}")
+            print(f" d_p={d_mm:6.3f}mm Qc={qc:8.2f}W COP_aug={cop:7.4f}")
     best_qc_row = max(rows, key=lambda r: r[1])
     best_cop_row = max(rows, key=lambda r: r[2])
     if verbose:
-        print(f"\n  At fixed mdot={MDOT_REPRESENTATIVE_KG_S}kg/s:")
-        print(f"    diameter maximizing Qc (of those swept):  {best_qc_row[0]} mm "
+        print(f"\n At fixed mdot={MDOT_REPRESENTATIVE_KG_S}kg/s:")
+        print(f" diameter maximizing Qc (of those swept):  {best_qc_row[0]} mm "
               "(within the swept range Qc keeps rising toward smaller diameters, "
               "since eps has not yet saturated at this mdot)")
-        print(f"    diameter maximizing COP_aug:              {best_cop_row[0]} mm "
+        print(f" diameter maximizing COP_aug:              {best_cop_row[0]} mm "
               "(a genuine INTERIOR optimum: smaller diameters raise eps only "
               "marginally further while pumping power keeps growing)")
-        print(f"  Paper's Table 3 (own operating point, own per-geometry mdot): "
+        print(f" Paper's Table 3 (own operating point, own per-geometry mdot): "
               f"0.07 mm (Qc) / 0.17 mm (COP).")
     return rows, best_qc_row, best_cop_row
 
@@ -202,20 +202,20 @@ def sweep_parallel_plate_spacing(spacings_mm=None, thickness_mm=0.25, verbose=Tr
         qc, cop = _augmented_cop_parallel_plate(s, thickness)
         rows.append((s_mm, qc, cop))
         if verbose:
-            print(f"  spacing={s_mm:6.3f}mm   Qc={qc:8.2f}W   COP_aug={cop:7.4f}")
+            print(f" spacing={s_mm:6.3f}mm Qc={qc:8.2f}W COP_aug={cop:7.4f}")
     best_qc_row = max(rows, key=lambda r: r[1])
     best_cop_row = max(rows, key=lambda r: r[2])
     if verbose:
-        print(f"\n  At fixed mdot={MDOT_REPRESENTATIVE_KG_S}kg/s, plate thickness "
+        print(f"\n At fixed mdot={MDOT_REPRESENTATIVE_KG_S}kg/s, plate thickness "
               f"{thickness_mm}mm:")
-        print(f"    spacing maximizing Qc (of those swept):  {best_qc_row[0]} mm")
-        print(f"    spacing maximizing COP_aug:               {best_cop_row[0]} mm")
-        print(f"  Paper's Table 3 (own operating point): 0.035 mm (Qc) / 0.075 mm "
+        print(f" spacing maximizing Qc (of those swept):  {best_qc_row[0]} mm")
+        print(f" spacing maximizing COP_aug:               {best_cop_row[0]} mm")
+        print(f" Paper's Table 3 (own operating point): 0.035 mm (Qc) / 0.075 mm "
               "(COP), regardless of plate thickness.")
     return rows, best_qc_row, best_cop_row
 
 
-def demonstrate_pre_phase7_model_had_no_optimum(verbose=True):
+def demonstrate_earlier_model_had_no_optimum(verbose=True):
     """Reproduces the diagnostic that motivated this module: sweeping
     particle_diameter through the PRE-PHASE-7 effectiveness function
     alone (no pumping-power coupling) shows eps rising monotonically,
@@ -226,10 +226,10 @@ def demonstrate_pre_phase7_model_had_no_optimum(verbose=True):
                 for d in diam_mm]
     monotonic_decreasing = all(eps_vals[i] <= eps_vals[i + 1] for i in range(len(eps_vals) - 1))
     if verbose:
-        print("Diagnostic: pre-Phase-7 eps(particle_diameter) at fixed mdot=0.08kg/s:")
+        print("Diagnostic: previous eps(particle_diameter) at fixed mdot=0.08kg/s:")
         for d, e in zip(diam_mm, eps_vals):
-            print(f"    d_p={d:7.3f}mm  eps={e:.4f}")
-        print(f"  Monotonically non-decreasing as d_p shrinks? {monotonic_decreasing} "
+            print(f" d_p={d:7.3f}mm eps={e:.4f}")
+        print(f" Monotonically non-decreasing as d_p shrinks? {monotonic_decreasing} "
               "(no optimum possible without a geometry-coupled pumping-power term)")
     return diam_mm, eps_vals, monotonic_decreasing
 
@@ -243,9 +243,9 @@ def run_geometry_analysis(out_path="results/geometry_optimization_analysis.txt")
         print("Poredos (2013), 'Geometrical optimization of packed-bed and parallel-plate")
         print("active magnetic regenerators', Int. J. Refrig. 36, 1456-1464")
         print("=" * 90)
-        print("\n--- Step 1: confirm the pre-Phase-7 gap (no geometry optimum was even "
+        print("\n--- Step 1: confirm the previous gap (no geometry optimum was even "
               "possible) ---")
-        demonstrate_pre_phase7_model_had_no_optimum()
+        demonstrate_earlier_model_had_no_optimum()
 
         print("\n--- Step 2: check whether mdot can simply be re-optimized per geometry, "
               "as the paper does ---")
@@ -264,7 +264,7 @@ def run_geometry_analysis(out_path="results/geometry_optimization_analysis.txt")
         print("pumping-power term (Tusek et al. 2013 Eqs. 5-7) DOES reproduce a genuine")
         print("interior COP optimum vs. packed-bed sphere diameter and parallel-plate")
         print("spacing in this repo's own model (Step 3-4) -- confirming the paper's")
-        print("qualitative finding, which the pre-Phase-7 model structure could not show")
+        print("qualitative finding, which the previous model structure could not show")
         print("even in principle (Step 1). Doing this required fixing mdot at a")
         print("representative value rather than re-optimizing it per geometry as the paper")
         print("does, because Step 2 found that free COP-only optimization is itself")

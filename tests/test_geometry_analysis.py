@@ -1,5 +1,5 @@
 from core.geometry_analysis import (
-    demonstrate_pre_phase7_model_had_no_optimum,
+    demonstrate_earlier_model_had_no_optimum,
     check_free_mdot_cop_is_degenerate,
     sweep_packed_bed_diameter,
     sweep_parallel_plate_spacing,
@@ -8,7 +8,7 @@ from core.geometry_analysis import (
 
 def test_pre_phase7_gap_is_confirmed_monotonic():
     """The whole module exists to close this gap -- verify it's real."""
-    _, eps_vals, monotonic = demonstrate_pre_phase7_model_had_no_optimum(verbose=False)
+    _, eps_vals, monotonic = demonstrate_earlier_model_had_no_optimum(verbose=False)
     assert monotonic
 
 

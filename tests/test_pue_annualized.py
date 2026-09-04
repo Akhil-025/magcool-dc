@@ -1,4 +1,4 @@
-"""Phase 31 addition: core/pue_annualized.py had no dedicated test file
+""" addition: core/pue_annualized.py had no dedicated test file
 even though it is wired into main.py's pipeline (see README's Tier-1
 test-coverage gap)."""
 

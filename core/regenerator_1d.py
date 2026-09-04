@@ -52,7 +52,7 @@ The regenerator is discretized into `n_nodes` equal-mass solid nodes
 along its length. Each full AMR cycle (period 1/frequency) applies, to
 every node:
 
-  1. Magnetize   (0 -> mu0H_max): each node's solid temperature jumps by
+  1. Magnetize (0 -> mu0H_max): each node's solid temperature jumps by
      its own LOCAL material.delta_T_adiabatic(T_i, mu0H_max), applied
      instantaneously (field-ramp time << thermal relaxation time -- a
      standard AMR-modeling assumption; already used the same way, at a
@@ -74,7 +74,7 @@ temperature during that passage (standard heat-exchanger theory -- Kays &
 London, Compact Heat Exchangers, already cited by core/thermal.py for the
 same regenerator-theory context):
 
-    eps_node = 1 - exp(-NTU_node),      NTU_node = NTU_total / n_nodes
+    eps_node = 1 - exp(-NTU_node), NTU_node = NTU_total / n_nodes
 
 NTU_total comes from core/thermal.py's own regenerator_effectiveness() --
 the SAME correlation core/amr_cycle.py's 0-D model already uses for its
@@ -191,6 +191,91 @@ Known limitations (stated, not hidden)
   regime. This is flagged, not hidden or tuned away by adjusting the
   conductivity multiplier until the benchmark matches -- that would just
   be curve-fitting one number to one data point.
+- PHASE 39 FINDING #1 (real, verified root-cause component): the
+  Tusek_singlebed_Gd_2010_spanceiling benchmark device is NOT a packed
+  bed of spheres -- its own source paper (Tusek, Kitanovski, Zupan,
+  Prebil, Poredos, Appl. Therm. Eng. 53 (2013) 57-66, Table 1) reports it
+  as AMR(A), a PARALLEL-PLATE regenerator: 0.1mm plate spacing, 0.25mm
+  plate thickness, porosity 0.2564, outer dimensions 10mm(height) x
+  80mm(length) x 39mm(width), total Gd mass 0.1763kg (matches this repo's
+  CSV row exactly) -- yet every call in this module before this phase
+  used regenerator_effectiveness() (the PACKED-BED correlation) with this
+  function's own packed-bed particle_diameter/porosity/
+  bed_cross_section_area DEFAULTS, not this device's real geometry TYPE
+  or dimensions. core/thermal.py already had a dedicated, real,
+  literature-sourced regenerator_effectiveness_parallel_plate() (Nickolay
+  & Martin (2002)/Tusek et al. 2013 Eq. 4) that was simply never wired
+  into this module. Added geometry="parallel_plate" support (see
+  simulate_amr_1d()'s own docstring) and re-ran this specific benchmark
+  with the device's REAL, source-verified geometry (bed_cross_section_area
+  = 0.010m x 0.039m = 3.9e-4 m^2, derived from Table 1's own outer
+  dimensions -- cross-checked for self-consistency: V_bed/this area gives
+  a bed length of ~77mm, matching the reported 80mm length to within
+  ~4%): peak span improves from ~1.4K (-92 to -97% error, packed-bed
+  defaults) to ~16.5K (-16% error) at this module's usual n_nodes=20
+  default. This is a genuine, large improvement, using a real correlation
+  and real, source-verified device geometry -- NOT a parameter tweaked
+  until the number looked better. CAVEAT, found while writing this
+  module's own tests: regenerator_effectiveness_parallel_plate()'s
+  internal porosity = plate_spacing/(plate_spacing+plate_thickness) unit-
+  cell idealization gives 0.2857 for this device, not an exact match to
+  the paper's own DIRECTLY REPORTED 0.2564 (Table 1) -- an honest ~11%
+  relative discrepancy, most likely from real edge/end effects (e.g. plate
+  holders, end caps) a simple infinite-unit-cell idealization can't
+  capture. The ~16.5K result above uses the code's own derived 0.2857,
+  not a manually-overridden 0.2564 -- flagged here so this small remaining
+  imprecision isn't mistaken for an exact geometry match.
+- PHASE 39 FINDING #2 (more fundamental, NOT fixed, found while checking
+  Finding #1's robustness): this model is NOT grid-converged in n_nodes,
+  in EITHER geometry mode, and this is NOT something introduced
+  -- it reproduces with geometry="packed_bed" too. Direct check, same
+  device, same mdot, only n_nodes varied:
+      packed_bed:      n_nodes=10 -> 2.19K, n_nodes=20 -> 3.23K, n_nodes=40 -> 3.78K
+      parallel_plate:  n_nodes=10 -> 8.99K, n_nodes=20 -> 16.15K, n_nodes=40 -> 2.31K
+  Neither sequence is converging monotonically to a stable limit (the
+  parallel_plate sequence isn't even monotonic). Checked further (ruled
+  out "just needs more cycles"): re-running n_nodes=40 with 12000 cycles
+  instead of 1500 gives span=1.04K, not 2.31K -- i.e. letting it run
+  longer moves it FURTHER from, not closer to, the n_nodes=20 answer, and
+  the last-10-cycle history is flat at that lower value (a genuine
+  steady state at this resolution, not an unconverged transient still en
+  route to something else). This rules out "the fine grid just needs a
+  longer cycle budget" as an explanation -- the fine-grid answer really is
+  a different, smaller steady-state span, not a slowly-converging version
+  of the coarse-grid one. A further diagnostic
+  (axial conduction artificially disabled) shows the FLUID-node
+  discretization alone diverges without bound as n_nodes increases
+  (9.6K -> 28.3K -> 40.4K) -- the same "unbounded growth" failure mode
+  this module's own earlier fix already diagnosed and fixed for mdot -> 0
+  (see the axial-conduction section above), now showing up as the SAME
+  underlying problem in a different independent variable (spatial
+  resolution instead of flow rate): decay_substep=exp(-NTU_node) with
+  NTU_node=NTU_total/n_nodes becomes a progressively less complete
+  per-node exchange as n_nodes grows, which lets sharper node-to-node
+  gradients build up rather than converging to a well-resolved continuum
+  limit, and axial conduction (whose own node-to-node conductance G =
+  k_eff*A/dx grows linearly with n_nodes while each node's own thermal
+  mass shrinks the same way) does not currently counteract this
+  consistently across resolutions -- it under-damps at coarse grids and
+  appears to over-damp at n_nodes=40 for this device (span collapses to
+  2.3K), rather than approaching a stable value from either side.
+  **CONSEQUENCE: NEITHER the previous packed-bed numbers NOR this
+  phase's parallel-plate improvement should be treated as a validated,
+  resolution-independent prediction** -- both are reporting whatever this
+  specific n_nodes=20 discretization happens to give, not a converged
+  answer. This is flagged rather than silently kept as a "fix", per this
+  module's own established standard (see Finding #1 above and the
+   axial-conductivity finding) of not treating "the number moved
+  in the direction I wanted" as validation. Properly resolving this needs
+  either a formally-derived, order-of-accuracy-checked spatial
+  discretization (e.g. a proper per-segment epsilon-NTU formula that is
+  provably grid-independent as n_nodes -> infinity, replacing the current
+  ad hoc "one full-strength exchange pass per node" scheme) or an
+  equivalent fix to how axial conduction is coupled to node count -- a
+  substantial numerical-methods task, not a same-pass patch. Until this is
+  resolved, this module's outputs (old or new) remain "illustrates the
+  effect is real and bounded", not "a specific number you should trust",
+  exactly as this docstring's next paragraph already says.
 - This is a genuinely new, freshly-debugged numerical model (five
   distinct bugs found and fixed across its development -- an
   explicit-Euler stability blowup, an incorrect NTU/dt rescaling that
@@ -210,20 +295,28 @@ Known limitations (stated, not hidden)
 """
 
 import numpy as np
-from core.thermal import regenerator_effectiveness, water_properties, CP_SOLID_GD, K_SOLID_GD
+from core.thermal import (regenerator_effectiveness, regenerator_effectiveness_parallel_plate,
+                           water_properties, CP_SOLID_GD, K_SOLID_GD)
 
-# Phase 31 fix: bumped whenever a change to simulate_amr_1d()'s physics
+#  fix: bumped whenever a change to simulate_amr_1d()'s physics
 # would silently invalidate previously-cached no_load_span() results
 # without changing any of their INPUT parameters (e.g. the axial-
 # conductivity correlation change below). _cache_key() folds this into
 # every cache key, so on-disk results/.regenerator_1d_cache.json entries
 # computed under the OLD physics are automatically treated as cache
 # misses instead of being silently (and incorrectly) reused.
-_MODEL_VERSION = 2
+_MODEL_VERSION = 3
 # v1: original axial-conduction fix (ad hoc capped multiplier of stagnant
 #     fluid conductivity: k_eff_axial = min(3.0, 1.0+(1-porosity))*k_fluid).
 # v2: replaced with the Maxwell-Eucken packed-bed composite-conductivity
 #     model -- see _packed_bed_effective_axial_conductivity() below.
+# v3 : added geometry="parallel_plate" support (real device
+#     geometry for parallel-plate AMRs instead of forcing packed-bed
+#     correlations onto them) -- see simulate_amr_1d()'s own docstring.
+#     Existing geometry="packed_bed" callers are bit-for-bit unaffected;
+#     the version bump exists only so any parallel_plate result computed
+#     before this fix (there shouldn't be any, since the parameter didn't
+#     exist) can never be silently reused.
 
 
 def _packed_bed_effective_axial_conductivity(porosity, k_fluid, k_solid):
@@ -285,6 +378,38 @@ def _packed_bed_effective_axial_conductivity(porosity, k_fluid, k_solid):
     return k_fluid * numerator / denominator
 
 
+def _parallel_plate_effective_axial_conductivity(porosity, k_fluid, k_solid):
+    """Effective axial (i.e. along-the-flow-direction) thermal conductivity
+    of a PARALLEL-PLATE regenerator -- deliberately a DIFFERENT formula
+    from _packed_bed_effective_axial_conductivity() above, not the same one
+    reused with a different porosity.
+
+    WHY DIFFERENT: that function's docstring explains Maxwell-Eucken (a
+    dispersed-spheres-in-a-continuous-matrix model) was chosen over a naive
+    porosity-weighted parallel mix specifically because a packed bed of
+    spheres is solid-solid POINT contact, not a continuous conduction path
+    -- a naive parallel mix was tested and rejected there because it
+    overcorrects (collapses the whole bed to a uniform temperature within
+    one cycle). A parallel-plate regenerator's solid phase is exactly the
+    opposite geometry: each plate IS a continuous, unbroken solid strip
+    running the full length of the bed, with the fluid channels between
+    plates also running the full length -- solid and fluid conduction
+    paths are physically in PARALLEL along the flow (axial) direction, not
+    mediated by point contacts. The simple volume-weighted parallel-
+    conduction mixing rule
+        k_eff = porosity * k_fluid + (1 - porosity) * k_solid
+    is therefore the physically appropriate model for THIS geometry (the
+    standard result for conduction through layers oriented parallel to the
+    heat-flow direction, e.g. Incropera & DeWitt, Fundamentals of Heat and
+    Mass Transfer, composite-wall parallel arrangement) -- not a
+    simplification adopted for convenience, and not the same "naive mix"
+    rejected for packed beds, because the underlying solid geometry is
+    genuinely different (continuous plate vs. point-contact spheres)."""
+    if not (0.0 < porosity < 1.0) or k_fluid <= 0 or k_solid <= 0:
+        return max(k_fluid, 1e-9)
+    return porosity * k_fluid + (1 - porosity) * k_solid
+
+
 def _apply_axial_conduction(T, dt_total, dx, bed_area, k_eff_axial, m_node, cp_solid_eff):
     """Explicit 1-D conduction of `T` (n_nodes solid nodes, insulated/no-flux
     ends) over a total time `dt_total`, subdivided into as many equal
@@ -333,22 +458,38 @@ def simulate_amr_1d(material, mu0H_max, mass_total, frequency, mdot,
                      n_nodes=20, blow_fraction=0.5, max_cycles=800, tol=1e-4,
                      particle_diameter=0.0005, porosity=0.365,
                      bed_cross_section_area=0.002, T_K_for_ntu=300.0,
-                     cp_solid=None, k_solid=None, T_init=None, n_substeps=None):
+                     cp_solid=None, k_solid=None, T_init=None, n_substeps=None,
+                     geometry="packed_bed", plate_thickness=0.00025,
+                     plate_spacing=0.0001):
     """Runs the blow-by-blow simulation described in this module's own
     docstring to periodic steady state.
 
-    NO-LOAD mode (T_cold_reservoir=None or T_hot_reservoir=None, the
-    default): returns the periodic-steady-state span between the hot-end
-    and cold-end nodes, with no external heat exchange imposed at either
-    end (insulated-end no-load-span experiment, matching how
-    Astronautics_rotary_2014_zerospan / Tusek_singlebed_Gd_2010_spanceiling
-    / Risoe_DTU_Gd_2011_maxcap / DTU_Eriksen_MAGGIE_2016_noloadspan etc.
-    were measured).
-
-    WITH-LOAD mode (both reservoir temperatures given): imposes fixed
-    external cold/hot heat-exchanger temperatures and returns the
-    periodic-steady-state cooling power Qc_W (heat absorbed from the cold
-    reservoir per unit time, cycle-averaged).
+    geometry ( addition): "packed_bed" (default -- exactly
+    reproduces every existing call's behavior, since every other new
+    parameter this adds defaults to values only used when geometry=
+    "parallel_plate") or "parallel_plate". WHY THIS EXISTS: several of
+    this module's own benchmark devices (see validate_against_benchmarks())
+    are NOT packed beds of spheres in real life -- e.g. Tusek_singlebed_
+    Gd_2010_spanceiling's own CSV source note reports it as a parallel-
+    plate AMR (0.1mm plate spacing, 0.25mm plate thickness, porosity
+    0.2564, Tusek, Kitanovski, Zupan, Prebil, Poredos, Appl. Therm. Eng. 53
+    (2013) 57-66, Table 1) -- but every call in this module (before this
+    change) used core.thermal.regenerator_effectiveness(), the PACKED-BED
+    correlation, with this function's own default particle_diameter/
+    porosity/bed_cross_section_area regardless of the real device's actual
+    geometry TYPE, not just its dimensions. core/thermal.py already has a
+    dedicated regenerator_effectiveness_parallel_plate() (a real,
+    literature-sourced correlation -- Nickolay & Martin (2002)/Tusek et
+    al. 2013 Eq. 4 -- not a guess) that was simply never wired into this
+    module. geometry="parallel_plate" selects it, along with the
+    physically-appropriate parallel-plate axial-conductivity mixing rule
+    (_parallel_plate_effective_axial_conductivity() -- deliberately NOT
+    the packed-bed Maxwell-Eucken formula; see that function's own
+    docstring for why the two geometries need different formulas) and
+    computing porosity/bed volume from plate_thickness/plate_spacing
+    (matching regenerator_effectiveness_parallel_plate()'s own convention)
+    instead of from the packed_bed particle_diameter/porosity arguments,
+    which are ignored in this mode.
 
     n_substeps (default None -> auto): each blow is time-marched in
     n_substeps equal increments rather than applied as one lump update.
@@ -373,33 +514,57 @@ def simulate_amr_1d(material, mu0H_max, mass_total, frequency, mdot,
     cp_solid_eff = CP_SOLID_GD if cp_solid is None else cp_solid
     k_solid_eff = K_SOLID_GD if k_solid is None else k_solid
 
-    # Axial (node-to-node) conduction, applied once per cycle over the full
-    # cycle period 1/frequency -- see _apply_axial_conduction()'s docstring
-    # for why this is needed (it supplies the loss mechanism that caps span
-    # growth as mdot -> 0, which the fluid-only coupling below cannot do
-    # since its own effectiveness increases, not decreases, in that limit).
-    #
-    # Conductivity (Phase 31: replaced the ad hoc capped multiplier below
-    # with the Maxwell-Eucken packed-bed composite-conductivity model --
-    # see _packed_bed_effective_axial_conductivity()'s own docstring for
-    # the formula, why this specific model was chosen over the more
-    # commonly cited but harder-to-independently-verify Zehner-Schlunder
-    # correlation, and the honest framing of what this change does and
-    # does not establish). This is NOT a naive porosity-weighted parallel
-    # mix of bulk-solid and fluid conductivity -- a packed bed of spheres
-    # is solid-solid point-contact, not a continuous rod, so bulk metal
-    # conductivity (k_solid_eff, ~10.5 W/m/K for Gd) is NOT directly the
-    # right transport coefficient for the axial solid path (confirmed by
-    # direct test during the ORIGINAL fix in this area: a naive parallel
-    # mix collapsed the Tusek benchmark's span from a physically-
-    # reasonable few K down to ~0.1-0.2K and stopped the simulation from
-    # converging at all in 1500 cycles -- diffusion time across one node
-    # spacing came out ~25x SHORTER than one cycle period, i.e. the naive
-    # mix homogenizes the whole bed every cycle).
-    V_bed = mass_total / (7900.0 * (1 - porosity))  # RHO_GD; avoids a new import cycle
-    L_bed = V_bed / bed_cross_section_area
-    dx = L_bed / n_nodes if n_nodes > 0 else L_bed
-    k_eff_axial = _packed_bed_effective_axial_conductivity(porosity, fluid["k"], k_solid_eff)
+    if geometry not in ("packed_bed", "parallel_plate"):
+        raise ValueError(f"geometry must be 'packed_bed' or 'parallel_plate', got {geometry!r}")
+
+    if geometry == "parallel_plate":
+        # Matches regenerator_effectiveness_parallel_plate()'s own geometry
+        # convention exactly (see that function's docstring): porosity and
+        # bed volume are DERIVED from plate_thickness/plate_spacing, not
+        # taken from the packed_bed `porosity` argument (ignored here).
+        porosity_eff = plate_spacing / (plate_spacing + plate_thickness)
+        V_bed = mass_total / (7900.0 * (1 - porosity_eff))  # RHO_GD
+        L_bed = V_bed / bed_cross_section_area
+        dx = L_bed / n_nodes if n_nodes > 0 else L_bed
+        k_eff_axial = _parallel_plate_effective_axial_conductivity(
+            porosity_eff, fluid["k"], k_solid_eff)
+        ntu_result = regenerator_effectiveness_parallel_plate(
+            mass_total, frequency, mdot, plate_thickness=plate_thickness,
+            plate_spacing=plate_spacing, bed_cross_section_area=bed_cross_section_area,
+            T_K=T_K_for_ntu)
+    else:
+        # Axial (node-to-node) conduction, applied once per cycle over the full
+        # cycle period 1/frequency -- see _apply_axial_conduction()'s docstring
+        # for why this is needed (it supplies the loss mechanism that caps span
+        # growth as mdot -> 0, which the fluid-only coupling below cannot do
+        # since its own effectiveness increases, not decreases, in that limit).
+        #
+        # Conductivity (replaced the ad hoc capped multiplier below
+        # with the Maxwell-Eucken packed-bed composite-conductivity model --
+        # see _packed_bed_effective_axial_conductivity()'s own docstring for
+        # the formula, why this specific model was chosen over the more
+        # commonly cited but harder-to-independently-verify Zehner-Schlunder
+        # correlation, and the honest framing of what this change does and
+        # does not establish). This is NOT a naive porosity-weighted parallel
+        # mix of bulk-solid and fluid conductivity -- a packed bed of spheres
+        # is solid-solid point-contact, not a continuous rod, so bulk metal
+        # conductivity (k_solid_eff, ~10.5 W/m/K for Gd) is NOT directly the
+        # right transport coefficient for the axial solid path (confirmed by
+        # direct test during the ORIGINAL fix in this area: a naive parallel
+        # mix collapsed the Tusek benchmark's span from a physically-
+        # reasonable few K down to ~0.1-0.2K and stopped the simulation from
+        # converging at all in 1500 cycles -- diffusion time across one node
+        # spacing came out ~25x SHORTER than one cycle period, i.e. the naive
+        # mix homogenizes the whole bed every cycle).
+        V_bed = mass_total / (7900.0 * (1 - porosity))  # RHO_GD; avoids a new import cycle
+        L_bed = V_bed / bed_cross_section_area
+        dx = L_bed / n_nodes if n_nodes > 0 else L_bed
+        k_eff_axial = _packed_bed_effective_axial_conductivity(porosity, fluid["k"], k_solid_eff)
+        ntu_result = regenerator_effectiveness(
+            mass_total, frequency, mdot, particle_diameter=particle_diameter,
+            porosity=porosity, bed_cross_section_area=bed_cross_section_area,
+            T_K=T_K_for_ntu, cp_solid=cp_solid)
+
     cycle_period = 1.0 / frequency if frequency > 0 else 0.0
     # material.delta_T_adiabatic() expects the field strength H in A/m, not
     # mu0H in Tesla -- same conversion core/amr_cycle.py's own
@@ -409,10 +574,6 @@ def simulate_amr_1d(material, mu0H_max, mass_total, frequency, mdot,
     # weak field, not an error -- see this module's "known limitations".)
     H_Am = mu0H_max / (4 * np.pi * 1e-7)
 
-    ntu_result = regenerator_effectiveness(
-        mass_total, frequency, mdot, particle_diameter=particle_diameter,
-        porosity=porosity, bed_cross_section_area=bed_cross_section_area,
-        T_K=T_K_for_ntu, cp_solid=cp_solid)
     NTU_total = ntu_result["NTU"]
     NTU_node = NTU_total / n_nodes if n_nodes > 0 else 0.0
 
@@ -558,7 +719,7 @@ def simulate_amr_1d(material, mu0H_max, mass_total, frequency, mdot,
               "NTU_total": round(float(NTU_total), 3),
               "NTU_node": round(float(NTU_node), 4),
               "U_bulk": round(float(ntu_result["U"]), 4),
-              # Phase 33 addition: ntu_result["U"] (Nielsen, Tusek, Engelbrecht,
+              #  addition: ntu_result["U"] (Nielsen, Tusek, Engelbrecht,
               # Schopfer, Kitanovski, Bahl, Smith, Pryds & Poredos, "Review on
               # numerical modeling of active magnetic regenerators for room
               # temperature applications," Int. J. Refrig. 34 (2011) 603-616 --
@@ -751,7 +912,23 @@ def validate_against_benchmarks(verbose=True,
         freq = float(row["frequency_Hz"]) if row["frequency_Hz"] else 1.0
         span_lit = float(row["span_K"])
 
-        r1d = no_load_span(material, mu0H, mass, freq, T_K_for_ntu=t_cold + span_lit / 2.0)
+        # Device-specific geometry (Paper-Mining Pass, Item 1.7 in
+        # LIMITATIONS.md): Tusek_singlebed_Gd_2010_spanceiling is a real
+        # parallel-plate AMR, not a packed bed of spheres (Tusek et al.,
+        # Appl. Therm. Eng. 53 (2013) 57-66, Table 1: 0.1mm spacing,
+        # 0.25mm plate thickness, porosity 0.2564, outer dims
+        # 10x80x39mm) -- the other two no-load-span rows here keep the
+        # packed_bed default (their actual, unquestioned geometry type),
+        # since this repo has no equivalent verified parallel-plate data
+        # for them.
+        geom_kwargs = {}
+        if row["device"] == "Tusek_singlebed_Gd_2010_spanceiling":
+            geom_kwargs = {"geometry": "parallel_plate",
+                           "plate_thickness": 0.00025, "plate_spacing": 0.0001,
+                           "bed_cross_section_area": 3.9e-4}
+
+        r1d = no_load_span(material, mu0H, mass, freq,
+                            T_K_for_ntu=t_cold + span_lit / 2.0, **geom_kwargs)
 
         probe = AMRSystem(material=material, mu0H_max=mu0H, mass_regenerator=mass,
                            frequency=freq, fluid_mdot=1.0, loss_model=StateDependentLossModel())
@@ -768,7 +945,7 @@ def validate_against_benchmarks(verbose=True,
                          "err_0d_pct": round(err_0d_pct, 1) if err_0d_pct is not None else None,
                          "converged": r1d["converged"], "n_cycles": r1d["n_cycles"],
                          "NTU_total": r1d["NTU_total"]})
-        lines.append(f"  {row['device']:<38} span_lit={span_lit:6.1f}K  "
+        lines.append(f"  {row['device']:<38} span_lit={span_lit:6.1f}K "
                       f"1D_model={span_1d:7.2f}K (err={err_1d_pct:+6.1f}%)  "
                       f"0D_cap={cap_0d:7.2f}K (err={err_0d_pct:+6.1f}%)  "
                       f"NTU_total={r1d['NTU_total']:6.2f}  "
@@ -837,9 +1014,9 @@ def validate_against_benchmarks(verbose=True,
 def run_convergence_and_utilization_diagnostic(
         out_path="results/regenerator_1d_convergence_diagnostic.txt",
         n_nodes_sweep=(10, 20, 40, 80), verbose=True):
-    """Phase 33 diagnostic, run BEFORE any further physics changes to this
-    module (per this repo's own established discipline -- see e.g. Phase
-    31's own "isolate axial conductivity as a suspect before touching
+    """ diagnostic, run BEFORE any further physics changes to this
+    module (per this repo's own established discipline -- see e.g. the
+    "isolate axial conductivity as a suspect before touching
     anything else" precedent): isolates WHICH of two candidate failure
     points is actually responsible for the direction-inconsistent error
     validate_against_benchmarks() reports (Tusek -96.9%, Lozano +111.1%,
@@ -888,7 +1065,7 @@ def run_convergence_and_utilization_diagnostic(
 
     lines = ["=" * 100,
              "1-D TRANSIENT REGENERATOR MODEL -- n_nodes CONVERGENCE + BULK UTILIZATION",
-             "DIAGNOSTIC (Phase 33, see this function's own docstring for what each check",
+             "DIAGNOSTIC (, see this function's own docstring for what each check",
              "isolates and why, before any further physics change to this module)",
              "=" * 100, ""]
 
@@ -914,7 +1091,7 @@ def run_convergence_and_utilization_diagnostic(
         lines.append(f"--- {row['device']} (span_lit={span_lit:.1f}K, calibrated "
                      f"mdot={mdot_best:.5f}kg/s) ---")
 
-        lines.append(f"  Utilization Phi (Nielsen et al. 2011 Eq. 16) at this mdot: "
+        lines.append(f" Utilization Phi (Nielsen et al. 2011 Eq. 16) at this mdot: "
                      f"U_bulk={r20['U_bulk']:.4f}   NTU_total={r20['NTU_total']:.2f}")
         utilization_results.append({"device": row["device"], "mdot_kg_s": mdot_best,
                                      "U_bulk": r20["U_bulk"], "NTU_total": r20["NTU_total"],
@@ -993,7 +1170,7 @@ def run_convergence_and_utilization_diagnostic(
     u_vals = [u["U_bulk"] for u in utilization_results]
     u_min, u_max = min(u_vals), max(u_vals)
     lines.append("UTILIZATION SPREAD VERDICT:")
-    lines.append(f"  Range across the {len(u_vals)} benchmarks' own calibrated operating "
+    lines.append(f" Range across the {len(u_vals)} benchmarks' own calibrated operating "
                  f"points: U_bulk = {u_min:.4f} to {u_max:.4f} "
                  f"({u_max / u_min if u_min > 0 else float('inf'):.1f}x spread)")
     for u in utilization_results:
@@ -1014,7 +1191,7 @@ def run_convergence_and_utilization_diagnostic(
         lines.append("direction-inconsistent error -- it identifies utilization-regime mismatch ")
         lines.append("as the most evidence-backed remaining candidate (of the four this module's ")
         lines.append("own docstring lists) for follow-up physics work, in preference to further ")
-        lines.append("tuning the axial-conductivity constant (already tried twice, see Phase 31).")
+        lines.append("tuning the axial-conductivity constant (already tried twice, see ).")
     else:
         lines.append("Utilization spread across these three benchmarks is NOT large -- this ")
         lines.append("specific candidate explanation is not well-supported by this data; the ")

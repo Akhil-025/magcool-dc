@@ -202,14 +202,14 @@ def test_delta_S_isothermal_accepts_array_input():
     assert np.all(np.isfinite(dS))
 
 
-# --- Phase 16: hysteresis_loss_J_per_kg -------------------------------
+# --- hysteresis_loss_J_per_kg -------------------------------
 
 def test_hysteresis_loss_default_is_zero_for_bare_dataclass():
     """A FirstOrderMCEMaterial instance created without specifying
     hysteresis_loss_J_per_kg must default to 0.0 (dataclass default) --
     this is what keeps every FirstOrderMCEMaterial instance predating
-    Phase 16 (e.g. any built directly in a test or notebook without the
-    new field) behaviorally identical to before Phase 16."""
+     (e.g. any built directly in a test or notebook without the
+    new field) behaviorally identical to before ."""
     from core.first_order_mce import FirstOrderMCEMaterial
     mat = FirstOrderMCEMaterial(name="bare", Tc=280.0, A=10.0, B=-4.0, C=8.0,
                                  J=3.5, g=2.0, M_molar=0.157, theta_D=200.0,
@@ -219,7 +219,7 @@ def test_hysteresis_loss_default_is_zero_for_bare_dataclass():
 
 def test_three_first_order_families_have_nonzero_hysteresis_loss():
     """The three calibrated first-order constants should each carry a
-    positive (nonzero) Phase 16 hysteresis-loss placeholder -- see each
+    positive (nonzero)  hysteresis-loss placeholder -- see each
     constant's own block comment in core/first_order_mce.py for the
     literature source and honesty flags on the exact value."""
     assert GD5SI2GE2_FIRST_ORDER.hysteresis_loss_J_per_kg > 0.0
@@ -231,7 +231,7 @@ def test_composition_tuned_material_inherits_hysteresis_loss():
     """composition_tuned_material() (Gd5(SixGe1-x)4 family) must carry
     hysteresis_loss_J_per_kg through unchanged from the base
     GD5SI2GE2_FIRST_ORDER constant -- this was a real bug fixed during
-    Phase 16 implementation (the field was silently dropping to its 0.0
+     implementation (the field was silently dropping to its 0.0
     dataclass default for every tuned instance before the fix, which
     would have made every material core.optimize.py/core.cascade.py
     actually use hysteresis-free regardless of the base constant's own
@@ -259,7 +259,7 @@ def test_hysteresis_loss_is_mutable_field_not_frozen():
     hysteresis_loss_J_per_kg in place and restore it afterward -- this
     requires FirstOrderMCEMaterial to NOT be a frozen dataclass. Guards
     against a future refactor silently freezing the class and breaking
-    that diagnostic.""" 
+    that diagnostic."""
     original = LAFESIH_FIRST_ORDER.hysteresis_loss_J_per_kg
     try:
         LAFESIH_FIRST_ORDER.hysteresis_loss_J_per_kg = 999.0

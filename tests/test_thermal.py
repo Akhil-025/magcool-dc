@@ -15,7 +15,7 @@ def test_packed_bed_effectiveness_between_zero_and_clip():
 
 
 def test_cp_solid_none_reproduces_default_behavior():
-    """Phase 21 addition: cp_solid=None must reproduce the exact pre-Phase-21
+    """ addition: cp_solid=None must reproduce the exact previous
     result (module-level CP_SOLID_GD), for every existing caller."""
     from core.thermal import CP_SOLID_GD
     r_default = regenerator_effectiveness(2.0, 1.0, 0.08)
@@ -52,7 +52,7 @@ def test_packed_bed_pressure_drop_nonnegative():
 
 
 def test_particle_diameter_alone_has_no_optimum_in_ntu_effectiveness():
-    """Documents the pre-Phase-7 gap this module's pumping-power addition
+    """Documents the previous gap this module's pumping-power addition
     closes: regenerator_effectiveness()'s eps rises monotonically as
     particle_diameter shrinks (no trade-off is representable without a
     coupled pumping-power cost)."""

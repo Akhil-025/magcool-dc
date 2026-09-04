@@ -79,21 +79,21 @@ def liquid_cooling_cop(Tc, Th, economizer_hours_fraction=0.6,
 
 
 # ---------------------------------------------------------------------------
-# Phase 21 -- passive/hybrid magnetic regenerator augmentation of a
+#  -- passive/hybrid magnetic regenerator augmentation of a
 # conventional (vapor-compression) gas cycle.
 # ---------------------------------------------------------------------------
 #
-# HONESTY FLAG (book access -- same tier as Phases 17-20's own flags). The
-# ROADMAP.md Phase 21 plan's stated data sources were Tishin & Spichkin
+# HONESTY FLAG (book access -- same tier as this module's other flags). The
+# ROADMAP.md plan's stated data sources were Tishin & Spichkin
 # (2003) Sect. 11.1 (passive magnetic regenerators used inside conventional
 # gas-cycle refrigerators), Sect. 11.2.3 (magnetically-augmented gas
 # regenerators) and Sect. 11.2.4 (hybrid magnetic working bodies). As
-# already documented in this project's Phase 20 ROADMAP.md entry, this
+# already documented in this project's ROADMAP.md entry, this
 # project's copy of Tishin & Spichkin (2003) is a scanned, image-only PDF
 # with NO extractable text layer (confirmed again for this pass) -- none of
 # those sections' own equations, reported effectiveness-vs-alignment curves,
 # or COP figures could be digitized. What is implemented below is instead,
-# exactly as the Phase 21 plan itself anticipated ("this doesn't need new
+# exactly as the plan itself anticipated ("this doesn't need new
 # physics or new benchmark data -- it recombines your existing
 # mce_material.py entropy/heat-capacity curves with your existing
 # baseline_cooling.py gas-cycle correlations in a new way"): a reuse of data
@@ -126,8 +126,8 @@ def liquid_cooling_cop(Tc, Th, economizer_hours_fraction=0.6,
 # gain if eps rose from the non-magnetic baseline all the way to eps=1),
 # scaled linearly by this module's own delta_eps -- explicitly NOT a fitted
 # coefficient and NOT specific to a magnetically-augmented regenerator
-# (same evidentiary tier as Phase 16's hysteresis_loss_J_per_kg and Phase
-# 18's actuation_energy_J_per_cycle placeholders: a round, cited-range
+# (same evidentiary tier as the earlier hysteresis_loss_J_per_kg and
+# actuation_energy_J_per_cycle placeholders: a round, cited-range
 # illustration, not a calibrated fit).
 
 from core.thermal import regenerator_effectiveness, CP_SOLID_GD  # noqa: E402
@@ -214,7 +214,7 @@ def passive_regenerator_augmentation(passive_regenerator_material, T_cold, T_hot
     comparison was mostly measuring each material's bulk lattice
     properties, not magnetic alignment. Using each material's own
     lattice-only heat capacity as its own baseline isolates the magnetic-
-    anomaly contribution specifically, matching the Phase 21 plan's own
+    anomaly contribution specifically, matching the plan's own
     framing ("the augmentation factor is a function of how well the
     material's heat capacity peak aligns with the gas cycle's cold-end
     temperature") rather than rewarding heavy, multi-atom formula units.
@@ -245,7 +245,7 @@ def augmented_regenerator_cop(base_cop, passive_regenerator_material, T_range,
                                H_field=0.0, cp_solid_baseline=None,
                                max_cop_gain_at_full_effectiveness=MAX_COP_GAIN_AT_FULL_EFFECTIVENESS,
                                n_T_points=25):
-    """Phase 21 deliverable, named and shaped exactly as the plan
+    """ deliverable, named and shaped exactly as the plan
     specified: `augmented_regenerator_cop(base_cop, passive_regenerator_material,
     T_range)`. `base_cop` is normally `vapor_compression_cop(Tc, Th).COP`
     (this module's own existing function -- see main.py step 15 for a
@@ -278,12 +278,12 @@ def augmented_regenerator_cop(base_cop, passive_regenerator_material, T_range,
 
 
 # ---------------------------------------------------------------------------
-# Phase 23 -- elastocaloric energy conversion as a static comparison
+#  -- elastocaloric energy conversion as a static comparison
 # reference point (NOT a simulated system -- see docstring below for why).
 # ---------------------------------------------------------------------------
 #
-# HONESTY FLAG (book access -- same tier as Phases 17-22's own flags).
-# phase_plan.md's own Phase 23 data source is Kitanovski et al. (2015)
+# HONESTY FLAG (book access -- same tier as this module's other flags).
+# phase_plan.md's own data source is Kitanovski et al. (2015)
 # Ch. 10 Sect. 10.3 ("Elastocaloric Energy Conversion", per that book's own
 # table of contents pp. 438-446). Checked directly for this pass: this
 # project's copy of Kitanovski et al. (2015) is a 30-page excerpt (cover,
@@ -293,8 +293,8 @@ def augmented_regenerator_cop(base_cop, passive_regenerator_material, T_range,
 # Tishin & Spichkin (2003) does not cover elastocalorics at all (the book
 # predates the field's modern development; no elastocaloric chapter appears
 # in its own table of contents) and is separately an image-only scan with
-# no text layer besides (already re-confirmed in Phases 20-22's own
-# honesty flags). So, exactly as phase_plan.md's own Phase 23 entry
+# no text layer besides (already re-confirmed in this module's other
+# honesty flags). So, exactly as phase_plan.md's own entry
 # anticipated ("using published elastocaloric COP/exergy-efficiency
 # figures as a static reference point"), the values below come from
 # external, independently-published, peer-reviewed literature located by
@@ -321,7 +321,7 @@ def augmented_regenerator_cop(base_cop, passive_regenerator_material, T_range,
 #     is weaker evidence for this repo's own span range specifically than
 #     the Qian et al. figure is. Kept as the LOW end of the reported
 #     range for that reason, not averaged in as an equal-weight data
-#     point. Phase 30 citation-audit correction: this was previously
+#     point. citation-audit correction: this was previously
 #     misattributed here as "Wu et al." -- the paper's actual authors are
 #     Xueshi Li, Peng Hua & Qingping Sun (Hong Kong Univ. of Science and
 #     Technology); no author named Wu appears on it. The journal, volume,
@@ -349,12 +349,12 @@ ELASTOCALORIC_COP_LOW = 3.7    # Li, Hua & Sun (2023) Nat. Commun. 14, 7982 -- M
 ELASTOCALORIC_COP_HIGH = 5.8   # Qian et al. (2023) Science 380, 722-727 -- SIMULATED, up to 22.5K span
 ELASTOCALORIC_COP_SOURCE_NOTE = (
     "External literature (NOT this repo's two source books -- see "
-    "core/baseline_cooling.py's Phase 23 honesty flag): Qian et al. (2023) "
+    "core/baseline_cooling.py's honesty flag): Qian et al. (2023) "
     "Science 380, 722-727, DOI 10.1126/science.adg7043 (simulated "
     "steady-state system COP=5.8, up to a 22.5K span) and Li, Hua & Sun "
     "(2023) Nat. Commun. 14, 7982, DOI 10.1038/s41467-023-43611-6 "
     "(measured system COP=3.7, at a much narrower ~1K span; corrected "
-    "Phase 30 -- previously misattributed here as 'Wu et al.'). A single "
+    " -- previously misattributed here as 'Wu et al.'). A single "
     "static reference point, not a span-dependent simulation."
 )
 
@@ -369,7 +369,7 @@ class ElastocaloricReferenceResult:
 
 
 def elastocaloric_reference_cop():
-    """Phase 23 deliverable, named and shaped as the plan's own
+    """ deliverable, named and shaped as the plan's own
     `elastocaloric_reference_cop()` lookup (not a simulation -- see the
     module-level honesty flag above). Returns a STATIC literature
     reference point for use as a fourth comparison entry alongside

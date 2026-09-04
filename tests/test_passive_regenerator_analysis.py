@@ -1,5 +1,5 @@
 """
-Unit tests for core/passive_regenerator_analysis.py (Phase 21).
+Unit tests for core/passive_regenerator_analysis.py .
 """
 import os
 import tempfile

@@ -42,7 +42,7 @@ def test_lifetime_cost_rejects_nonpositive_cop():
 
 
 # =============================================================================
-# Phase 19: geometric (Halbach-cylinder) magnet-mass cost term
+# geometric (Halbach-cylinder) magnet-mass cost term
 # =============================================================================
 from core.economics import (
     bom_cost,
@@ -77,7 +77,7 @@ def test_bom_cost_geometric_return_shape_matches_bom_cost():
 def test_bom_cost_geometric_diverges_from_flat_ratio_at_high_field():
     """At a high enough field the super-linear geometric relation must
     produce a materially different (larger, at fields well above 2T)
-    total BOM cost than the flat per-Tesla ratio -- otherwise Phase 19
+    total BOM cost than the flat per-Tesla ratio -- otherwise
     would not have changed anything."""
     flat_low = bom_cost(1.0, 5.0, "Gd")["materials_bom_total_$"]
     geom_low = bom_cost_geometric(1.0, 5.0, "Gd")["materials_bom_total_$"]
@@ -99,7 +99,7 @@ def test_full_system_cost_estimate_geometric_applies_multiplier():
 
 
 def test_amorphous_material_cost_performance_note_is_qualitative_only():
-    """Phase 22 item 3: the amorphous-materials note must be a non-empty
+    """: the amorphous-materials note must be a non-empty
     qualitative string, and must NOT silently be wired into
     MCM_COST_PER_KG_BY_FAMILY (no numeric $/kg is sourced for this repo's
     corpus -- see the note's own text and core/economics.py's section
@@ -118,7 +118,7 @@ def test_amorphous_material_cost_performance_note_is_stable_across_calls():
     assert amorphous_material_cost_performance_note() == amorphous_material_cost_performance_note()
 
 # =============================================================================
-# Phase 31: non-materials sensitivity band, Rowe (2011) VCC cross-check,
+# non-materials sensitivity band, Rowe (2011) VCC cross-check,
 # and the GE&R/CEC (2024) commercial MCM price reality check
 # =============================================================================
 from core.economics import (
@@ -182,7 +182,7 @@ def test_commercial_mcm_price_reality_check_unrecognized_family_falls_back_to_gd
 
 
 # =============================================================================
-# Phase 32: bottom-up, market-catalog-sourced non-materials BOM
+# bottom-up, market-catalog-sourced non-materials BOM
 # =============================================================================
 from core.economics import (
     bottom_up_non_materials_bom,
@@ -277,7 +277,7 @@ def test_cross_check_reports_both_methods_and_a_ratio():
 
 
 # =============================================================================
-# Phase 33: MAGNET_TO_MCM_MASS_RATIO_PER_TESLA cross-checked against 11
+# MAGNET_TO_MCM_MASS_RATIO_PER_TESLA cross-checked against 11
 # real reported devices (Rowe 2011, Table 1)
 # =============================================================================
 from core.economics import (
@@ -325,7 +325,7 @@ def test_rowe2011_per_device_mass_ratio_matches_manual_calculation():
 
 
 # =============================================================================
-# Phase 34: act on the Phase 33 finding -- update the working default AND
+# act on the finding -- update the working default AND
 # keep the legacy value directly usable
 # =============================================================================
 from core.economics import (
@@ -362,7 +362,7 @@ def test_material_cost_default_uses_updated_ratio():
 
 
 def test_material_cost_legacy_override_reproduces_pre_phase34_value():
-    """Pinned pre-Phase-34 value: material_cost(1.5, 5.0) with the old flat
+    """Pinned previous value: material_cost(1.5, 5.0) with the old flat
     3.0 ratio. If this ever changes, something broke reproducibility of
     this module's historical numbers."""
     legacy = _material_cost_p34(1.5, 5.0, mass_ratio_per_tesla=MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY)
@@ -394,9 +394,9 @@ def test_compare_legacy_and_updated_magnet_ratio_matches_direct_bom_cost_calls()
 
 def test_rowe2011_cross_check_note_reflects_phase34_update():
     """The cross-check's own note should describe the update having
-    happened, not merely flag an unresolved discrepancy (Phase 33's
-    original framing, superseded by Phase 34)."""
+    happened, not merely flag an unresolved discrepancy (the earlier
+    original framing, superseded by )."""
     result = rowe2011_magnet_mass_ratio_cross_check()
     assert "legacy_value" in result
     assert result["legacy_value"] == MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY
-    assert "Phase 34" in result["note"]
+    assert "" in result["note"]

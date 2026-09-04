@@ -1,0 +1,28 @@
+====================================================================================================
+REGENERATIVE-AMPLIFICATION GAP DIAGNOSTIC
+(how far real AMR spans exceed cooling_capacity()'s own 2*dTad_noload structural cap)
+====================================================================================================
+19 unique span>0 benchmark row(s) checked. For each: dTad_noload is the model's own single-blow adiabatic dT at T_mid=T_cold+span/2 (mdot-independent); structural_cap_K=2*dTad_noload is the MAXIMUM span cooling_capacity() can ever reach at that field/T_mid, for ANY mdot; amplification_ratio=span_K/structural_cap_K>1 means the real device's span exceeds that ceiling -- a lower bound on the regenerative-amplification effect the model is missing.
+
+  Cooltech_2013_rotary                   span=  42.0K dTad_noload=  1.41K cap=  2.81K ratio=14.92x  <-- EXCEEDS MODEL'S STRUCTURAL CAP
+  Risoe_DTU_Gd_2011                      span=  30.0K dTad_noload=  2.91K cap=  5.81K ratio= 5.16x  <-- EXCEEDS MODEL'S STRUCTURAL CAP
+  DTU_Eriksen_MAGGIE_2016_noloadspan     span=  29.2K dTad_noload=  3.12K cap=  6.24K ratio= 4.68x  <-- EXCEEDS MODEL'S STRUCTURAL CAP
+  Tusek_singlebed_Gd_2010_spanceiling    span=  19.8K dTad_noload=  4.77K cap=  9.53K ratio= 2.08x  <-- EXCEEDS MODEL'S STRUCTURAL CAP
+  ChubuToshiba_Gd_2016_2T                span=  24.0K dTad_noload=  6.92K cap= 13.84K ratio= 1.73x  <-- EXCEEDS MODEL'S STRUCTURAL CAP
+  DTU_Eriksen_MAGGIE_2016                span=  15.5K dTad_noload=  5.57K cap= 11.15K ratio= 1.39x  <-- EXCEEDS MODEL'S STRUCTURAL CAP
+  Lozano_POLO_UFSC_2016_r2               span=   7.9K dTad_noload=  3.12K cap=  6.24K ratio= 1.27x  <-- EXCEEDS MODEL'S STRUCTURAL CAP
+  Lozano_POLO_UFSC_2016_r1               span=   7.1K dTad_noload=  3.06K cap=  6.13K ratio= 1.16x  <-- EXCEEDS MODEL'S STRUCTURAL CAP
+  Lozano_POLO_UFSC_2016_maxspan          span=  12.0K dTad_noload=  5.33K cap= 10.65K ratio= 1.13x  <-- EXCEEDS MODEL'S STRUCTURAL CAP
+  Lozano_POLO_UFSC_2016_r5               span=   6.5K dTad_noload=  3.02K cap=  6.05K ratio= 1.07x  <-- EXCEEDS MODEL'S STRUCTURAL CAP
+  ChubuToshiba_Gd_2016_4T                span=  26.0K dTad_noload= 12.16K cap= 24.33K ratio= 1.07x  <-- EXCEEDS MODEL'S STRUCTURAL CAP
+  Lozano_POLO_UFSC_2016_r4               span=   6.1K dTad_noload=  3.00K cap=  6.00K ratio= 1.02x  <-- EXCEEDS MODEL'S STRUCTURAL CAP
+  Tusek_singlebed_Gd_2010                span=   7.3K dTad_noload=  3.70K cap=  7.40K ratio= 0.98x
+  DTU_Eriksen_rotary_Gd_2015             span=  10.2K dTad_noload=  5.19K cap= 10.38K ratio= 0.98x
+  Lozano_POLO_UFSC_2016_r6               span=   5.0K dTad_noload=  2.93K cap=  5.85K ratio= 0.85x
+  Okamura_Hirano_2013                    span=   5.0K dTad_noload=  3.44K cap=  6.87K ratio= 0.73x
+  Lozano_POLO_UFSC_2016_r7               span=   3.7K dTad_noload=  2.85K cap=  5.70K ratio= 0.65x
+  Astronautics_rotary_2014               span=  11.0K dTad_noload= 0.020K (~0)  -> ratio undefined (material/T_mid mismatch, see docstring)
+  DTU_MagQueen_2018                      span=  25.0K dTad_noload= 0.015K (~0)  -> ratio undefined (material/T_mid mismatch, see docstring)
+----------------------------------------------------------------------------------------------------
+12/17 rows with a well-defined dTad_noload exceed the model's own structural span cap; ratio range 1.02x-14.92x, median 1.39x. INDEPENDENT CROSS-CHECK: DTU_Eriksen_MAGGIE_2016_noloadspan (added to amr_experimental_benchmarks.csv this pass) reports a directly-measured 29.2K no-load span for the SAME physical hardware (1.13T, 1.7kg Gd/Gd-Y graded bed) as the two calibrated MAGGIE rows above, at its own best achievable frequency -- independent of any mdot back-calculation, unlike every other row here. This confirms the amplification effect is real and of the same order the rest of this table already implies, not an artifact of any single device's data quality.
+This is a lower bound, not the model's full error: a genuinely graded/layered real bed (Astronautics, DTU_MagQueen, MAGGIE) additionally loses accuracy from being approximated here as one uniform-Tc material (see core/cascade.py's *_graded_bed validation functions, which address that separately for those three devices by using real per-layer Curie temperatures instead).

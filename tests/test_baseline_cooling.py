@@ -24,7 +24,7 @@ def test_baseline_cops_below_carnot():
     assert liq.COP > 0
 
 
-# --- Phase 21: passive/hybrid magnetic regenerator augmentation ---
+# --- passive/hybrid magnetic regenerator augmentation ---
 
 def test_aligned_material_gains_more_than_misaligned():
     """Gd's own Curie temperature (294K) sits inside [291.15, 301.15]K;
@@ -63,7 +63,7 @@ def test_augmented_regenerator_cop_return_shape():
         result.base_COP * (1.0 + result.cop_gain_fraction))
 
 
-# --- Phase 23: elastocaloric static literature reference ---
+# --- elastocaloric static literature reference ---
 
 def test_elastocaloric_reference_returns_expected_shape():
     result = elastocaloric_reference_cop()
@@ -82,7 +82,7 @@ def test_elastocaloric_reference_representative_is_geometric_mean_within_range()
 
 def test_elastocaloric_reference_takes_no_span_argument():
     """This is a deliberately STATIC reference (see the module's own
-    Phase 23 honesty flag) -- confirms the function is callable with no
+     honesty flag) -- confirms the function is callable with no
     arguments and returns the identical value every time, i.e. it is not
     secretly reading global mutable state or varying with anything."""
     a = elastocaloric_reference_cop()

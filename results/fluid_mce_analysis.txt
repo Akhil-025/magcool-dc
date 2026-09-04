@@ -1,0 +1,42 @@
+==========================================================================================
+PHASE 20: magnetocaloric fluids (ferrofluid/MR suspension) as an alternative
+working-body class. See core/fluid_mce_cycle.py's module docstring (HONESTY
+FLAGS 1-2) for book-access limitations and benchmark availability.
+==========================================================================================
+
+--- Volume-fraction sweep (T_cold=291.0K, mu0H=1.5T, mdot=0.05kg/s, each phi evaluated at its OWN favorable span = 0.9*dTad_suspension) ---
+
+   phi   dTad (K)   span (K)   visc (mPa.s)     Qc (W)    W_par (W)   COP_elec
+  0.01     0.0351     0.0316         0.9127     0.7034      0.03246    21.4144
+  0.02     0.0703     0.0633         0.9364     1.3530      0.03019    42.7301
+  0.05     0.1769     0.1592         1.0138     3.0352      0.02472    91.8992
+  0.10     0.3578     0.3220         1.1685     5.1867      0.01860   109.6473
+  0.15     0.5428     0.4885         1.3658     6.7964      0.01468    94.7486
+  0.20     0.7320     0.6588         1.6242     8.0500      0.01204    78.0344
+  0.25     0.9256     0.8331         1.9733     9.0575      0.01018    64.7754
+  0.30     1.1238     1.0114         2.4643     9.8878      0.00886    54.7215
+  0.35     1.3267     1.1941         3.1921    10.5864      0.00537    47.5651
+  0.40     1.5346     1.3811         4.3514    11.1847      0.00622    41.1750
+
+Best COP_electrical at phi=0.10 (COP_electrical=109.6473)
+FINDING: a genuine INTERIOR optimum exists in phi within the swept range -- the viscosity-vs-phi and MCE-intensity-vs-phi tradeoff the plan named DOES produce a real tradeoff in this model, not a monotonic result at either boundary.
+
+--- Fixed-span comparison (PRIMARY): all four technologies held to the SAME 10K representative span, rather than each evaluated at its own favorable span ---
+
+At span=10.0K (fixed), phi=0.20:
+ Ferrofluid MCE:      Qc=0.000W COP_electrical=0.000   [INFEASIBLE (Qc clipped to 0)]   (own achievable dTad_suspension=1.257K vs. the 10K span asked of it)
+ Solid AMR (Gd):      Qc=409.612W COP_electrical=4.628   [feasible]
+ Liquid cooling:      COP=19.889
+ Vapor compression:   COP=12.222
+
+FINDING: at a realistic, externally-imposed 10K span, the ferrofluid system is infeasible (its own achievable dTad_suspension, 1.26K, does not cover the span) while the solid AMR still delivers real cooling capacity -- this is the headline result of this module (the SPAN gap), shown here as a direct feasibility comparison at a shared span rather than inferred from two systems quietly evaluated at different spans.
+
+--- Comparison at the fluid system's own favorable span (SECONDARY -- kept for the phi=0.20 span/COP detail, but read the fixed-span table above first), vs. solid AMR and vs. core/baseline_cooling.py's liquid-cooling/vapor-compression references ---
+
+At span=0.659K, phi=0.20:
+ Ferrofluid MCE (this module):  Qc=8.050W COP_electrical=78.034
+ Solid AMR (Gd, same field/flow): Qc=698.032W COP_electrical=6.479
+ Liquid cooling (baseline_cooling.py): COP=89.206
+ Vapor compression (baseline_cooling.py): COP=185.516
+
+CONCLUSION: at realistic particle loadings (phi swept up to 0.63, the random-close-packing ceiling), the mixture-heat-capacity dilution model (core/fluid_mce_cycle.py physics item 1) combined with this architecture's lack of regeneration (physics item 3) collapses the usable span to a few Kelvin (0.66K at phi=0.20 in this specific comparison) -- dramatically less than solid AMR achieves at the same field/flow, whose regenerator bed amplifies achievable span well beyond a single stage's own dTad (see core/amr_cycle.py's own characteristic-curve discussion). Notably, the ferrofluid system's own COP_electrical (78.0) is actually HIGHER than the solid AMR's (6.5) at this shared, ultra-narrow span -- because W_parasitic (Darcy-Weisbach pipe flow) is small relative to W_mag at this flow rate, and both systems' COP formulas have Qc largely cancel out of the ratio -- but BOTH trail the liquid-cooling and vapor-compression baselines at this span (see the numbers above). This COP comparison should not be read as 'ferrofluid MCE beats solid AMR' in general: it holds only at the ferrofluid system's own tiny achievable span, which the solid AMR could trivially also hit (and does, with far more Qc); the real headline result is the SPAN, not this specific COP comparison. This is a genuine, unforced finding from this pass's own model, not assumed going in. As HONESTY FLAG #2 in core/fluid_mce_cycle.py states, this is a design-exploration/comparison tool, not a validated result -- no benchmark magnetocaloric-fluid-as-working-body refrigeration device was found in this project's corpus or this pass's own literature search.

@@ -13,7 +13,7 @@ GWP/emissions comparisons.
 Run:    python plots.py
 Output: results/figures/  (PNG + PDF, one pair per figure)
 
-Figures 27-34 cover analyses added in Phases 16-22 that previously had no
+Figures 27-34 cover analyses added in earlier rounds that previously had no
 figure: Tc-broadening (27), nanocomposite off-design robustness (28),
 thermal-diode actuation cost (29), magnetocaloric-fluid volume-fraction
 sweep (30), passive-regenerator alignment effect (31), rotary-device
@@ -141,7 +141,7 @@ def save(fig, name):
     _atomic_savefig(fig, path.with_suffix('.png'), bbox_inches='tight', dpi=150)
     _atomic_savefig(fig, path.with_suffix('.pdf'), bbox_inches='tight')
     plt.close(fig)
-    print(f"  Saved -> {path}.png / .pdf")
+    print(f" Saved -> {path}.png / .pdf")
 
 
 def _read_csv_rows(path):
@@ -459,7 +459,7 @@ def plot_amr_vs_baselines(precomputed=None):
     precomputed = precomputed or {}
     baseline_rows = precomputed.get('baseline_rows')
 
-    # Phase 23: elastocaloric reference line. A SINGLE static literature
+    # elastocaloric reference line. A SINGLE static literature
     # value (core/baseline_cooling.py's own honesty flag explains why it
     # is not a span-dependent simulation the way the other three curves
     # are), repeated across every span so it plots as a flat horizontal
@@ -539,7 +539,7 @@ def plot_regenerator_effectiveness():
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# FIG 10 / 11 — Geometry-dependent pumping power trade-offs (Phase 7)
+# FIG 10 / 11 — Geometry-dependent pumping power trade-offs
 # ══════════════════════════════════════════════════════════════════════════
 
 def plot_geometry_packed_bed():
@@ -648,7 +648,7 @@ def plot_parasitic_fraction_scaling():
         ax.annotate(n_, (qc_, f_), fontsize=7, xytext=(5, 4), textcoords='offset points')
     ax.set_xscale('log')
     ax.set_xlabel('Device cooling capacity Qc [W] (log)')
-    ax.set_ylabel('Parasitic fraction  W_parasitic / Qc')
+    ax.set_ylabel('Parasitic fraction W_parasitic / Qc')
     ax.set_title('Parasitic Fraction vs. Device Scale\n'
                  '(no monotonic size trend — Astronautics outlier attributed to '
                  '"mediocre" electrical-component efficiency, not scale)')
@@ -716,15 +716,42 @@ def plot_curve_validation():
     fig, ax = plt.subplots(figsize=(8.5, 5.5))
     x = np.arange(len(names))
     w = 0.35
-    ax.bar(x - w / 2, lit, w, label='Literature (companion span point)',
-           color=COLOR_MAIN, alpha=0.85, edgecolor='white')
-    ax.bar(x + w / 2, model, w, label='Model (predicted from anchor-point calibration)',
-           color=COLOR_POWER, alpha=0.85, edgecolor='white')
+    bars_lit = ax.bar(x - w / 2, lit, w, label='Literature (companion span point)',
+                       color=COLOR_MAIN, alpha=0.85, edgecolor='white')
+    bars_model = ax.bar(x + w / 2, model, w, label='Model (predicted from anchor-point calibration)',
+                         color=COLOR_POWER, alpha=0.85, edgecolor='white')
     ax.set_xticks(x)
     ax.set_xticklabels(names, rotation=10, ha='right', fontsize=9)
     ax.set_ylabel('Qc at companion span [W]')
-    ax.set_title('Curve-Level (2-Point) Validation:\n'
-                  'Qc(span) Shape Check — Companion Point NOT Used in Calibration')
+
+    # Explicit value labels: without these, a genuinely-zero (or near-zero)
+    # result is visually indistinguishable from an empty/broken chart --
+    # which is exactly what happens for the n=1 case below (Tusek's own
+    # companion point is a reported zero-capacity max-span point, so both
+    # bars are legitimately 0.0W, not missing data).
+    ax.bar_label(bars_lit, fmt='%.1f W', fontsize=8, padding=3)
+    ax.bar_label(bars_model, fmt='%.1f W', fontsize=8, padding=3)
+    ax.set_ylim(bottom=0)  # avoid matplotlib auto-scaling to a +/-0.04 W
+                           # range around an all-zero series, which hides
+                           # the (correct) 0-vs-0 result behind empty axes
+
+    if len(ok) == 0:
+        ax.set_title('Curve-Level (2-Point) Validation:\n'
+                      'No device currently has a usable companion point '
+                      '(see console log for why each was skipped)')
+    elif len(ok) == 1:
+        ax.set_title('Curve-Level (2-Point) Validation: Qc(span) Shape Check\n'
+                      f'n=1 device has a usable second span point ({names[0]})')
+        note = ('Companion point is this device\'s own reported zero-capacity\n'
+                '(max-span) point -- model correctly predicts 0W, matching literature.'
+                if abs(lit[0]) < 1e-6 and abs(model[0]) < 1e-6 else
+                'Only one benchmark device currently has a second, independent\n'
+                'span point usable for this shape check; see run_curve_validation().')
+        ax.annotate(note, xy=(0.5, 0.92), xycoords='axes fraction', ha='center', va='top',
+                    fontsize=8.5, style='italic', color='dimgray')
+    else:
+        ax.set_title('Curve-Level (2-Point) Validation:\n'
+                      'Qc(span) Shape Check — Companion Point NOT Used in Calibration')
     ax.legend(fontsize=9)
     fig.tight_layout()
     save(fig, 'fig15_curve_validation_companion')
@@ -755,7 +782,7 @@ def plot_sobol_sensitivity(precomputed=None):
         st_state = dict(zip(names, Si_state['ST']))
     elif HAVE_SALIB:
         Si_const = sensitivity_mod.run_sobol(
-            out_path=str(RESULTS_DIR / 'sobol_results_phase2_constant.txt'),
+            out_path=str(RESULTS_DIR / 'sobol_results_constant_losses.txt'),
             use_state_dependent_losses=False)
         Si_state = sensitivity_mod.run_sobol(
             out_path=str(RESULTS_DIR / 'sobol_results.txt'),
@@ -765,7 +792,7 @@ def plot_sobol_sensitivity(precomputed=None):
         st_state = dict(zip(names, Si_state['ST']))
     else:
         print("  [SALib unavailable — falling back to pre-computed results/sobol_results*.txt]")
-        st_const = _parse_sobol_txt(RESULTS_DIR / 'sobol_results_phase2_constant.txt')
+        st_const = _parse_sobol_txt(RESULTS_DIR / 'sobol_results_constant_losses.txt')
         st_state = _parse_sobol_txt(RESULTS_DIR / 'sobol_results.txt')
         names = list(st_state.keys()) or list(st_const.keys())
 
@@ -1215,14 +1242,14 @@ def plot_astronautics_validation(precomputed=None):
             ax.set_xticks([])
             ax.set_yticks([])
 
-    fig.suptitle('Phase 9: 6-Layer Curie-Graded La(Fe,Si)13Hy Bed vs. '
+    fig.suptitle('6-Layer Curie-Graded La(Fe,Si)13Hy Bed vs. '
                  'Real Astronautics_rotary_2014 Device', fontsize=12)
     fig.tight_layout()
     save(fig, 'fig25_astronautics_graded_bed_validation')
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# FIG 26 — Eight-way material family comparison (Track A2 item + Phase 22 item 2 + Phase 24/25)
+# FIG 26 — Eight-way material family comparison (Track A2 item +  + )
 # ══════════════════════════════════════════════════════════════════════════
 
 def plot_material_family_comparison(precomputed=None):
@@ -1239,8 +1266,8 @@ def plot_material_family_comparison(precomputed=None):
     labels = [r['candidate'].replace(' (', '\n(') for r in rep]
     colors8 = [COLOR_MAIN, COLOR_POWER, '#85bb65', '#e8a33d', '#7b52ab', '#c2585d',
                '#2f9599', '#d64545']
-    # Phase 22 item 2 added a 6th candidate (nanocomposite); Phase 24 added a
-    # 7th (Ga1-xCMn3+x antiperovskite); Phase 25 added an 8th (Mn1-xCuxCoGe).
+    #  added a 6th candidate (nanocomposite);  added a
+    # 7th (Ga1-xCMn3+x antiperovskite);  added an 8th (Mn1-xCuxCoGe).
     # colors8 must cover exactly as many entries as `rep` -- checked in
     # tests/test_plots.py::test_plot_material_family_comparison_color_count_matches_candidates.
     colors8 = colors8[:len(rep)] if len(rep) <= len(colors8) else (
@@ -1273,7 +1300,7 @@ def plot_material_family_comparison(precomputed=None):
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# FIG 27 — Inhomogeneous/polycrystalline Tc-broadening sensitivity (Phase 22 item 1)
+# FIG 27 — Inhomogeneous/polycrystalline Tc-broadening sensitivity
 # ══════════════════════════════════════════════════════════════════════════
 
 def plot_inhomogeneous_broadening():
@@ -1304,14 +1331,14 @@ def plot_inhomogeneous_broadening():
     axes[1].set_title('Validation Error vs. Tc-Broadening')
 
     fig.suptitle('Gaussian Inhomogeneous/Polycrystalline Tc-Broadening Sensitivity\n'
-                 '(Phase 22 item 1 — standard literature broadening treatment, '
+                 '( — standard literature broadening treatment, '
                  'not digitized book content)', fontsize=11)
     fig.tight_layout()
     save(fig, 'fig27_inhomogeneous_tc_broadening')
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# FIG 28 — Nanocomposite off-design robustness check (Phase 22 item 2 follow-up)
+# FIG 28 — Nanocomposite off-design robustness check ( follow-up)
 # ══════════════════════════════════════════════════════════════════════════
 
 def plot_nanocomposite_robustness():
@@ -1337,13 +1364,26 @@ def plot_nanocomposite_robustness():
     ax.set_ylabel('Qc [W]   (0 = infeasible at this span)')
     ax.set_title('Nanocomposite Off-Design Robustness\n'
                  'Broad blend keeps Qc>0 where a sharply-tuned single phase collapses')
+
+    # A zero-height bar is otherwise indistinguishable from a missing data
+    # point -- mark genuinely-infeasible (Qc=0) bars explicitly.
+    y_span = max(max(nano_qc, default=0), max(single_qc, default=0)) or 1.0
+    for xi, v in zip(x - w / 2, nano_qc):
+        if v == 0:
+            ax.text(xi, 0.015 * y_span, '\u2715 infeasible', ha='center', va='bottom',
+                    fontsize=7.5, color='gray', rotation=90)
+    for xi, v in zip(x + w / 2, single_qc):
+        if v == 0:
+            ax.text(xi, 0.015 * y_span, '\u2715 infeasible', ha='center', va='bottom',
+                    fontsize=7.5, color='gray', rotation=90)
+
     ax.legend()
     fig.tight_layout()
     save(fig, 'fig28_nanocomposite_offdesign_robustness')
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# FIG 29 — Mechanical-contact thermal-diode actuation-cost sensitivity (Phase 18)
+# FIG 29 — Mechanical-contact thermal-diode actuation-cost sensitivity
 # ══════════════════════════════════════════════════════════════════════════
 
 def plot_thermal_diode_sensitivity():
@@ -1368,14 +1408,14 @@ def plot_thermal_diode_sensitivity():
     axes[1].set_ylabel('COP_electrical change [%]')
     axes[1].set_title('Diode Actuation-Cost Penalty\n(cost-only accounting, no rectification benefit modeled)')
 
-    fig.suptitle('Mechanical-Contact Active Thermal Diode — Sensitivity Study (Phase 18)',
+    fig.suptitle('Mechanical-Contact Active Thermal Diode — Sensitivity Study ',
                  fontsize=12)
     fig.tight_layout()
     save(fig, 'fig29_thermal_diode_sensitivity')
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# FIG 30 — Magnetocaloric-fluid (ferrofluid/MR suspension) volume-fraction sweep (Phase 20)
+# FIG 30 — Magnetocaloric-fluid (ferrofluid/MR suspension) volume-fraction sweep
 # ══════════════════════════════════════════════════════════════════════════
 
 def plot_fluid_mce_sweep():
@@ -1391,20 +1431,24 @@ def plot_fluid_mce_sweep():
     ax1.plot(phi, cop, color=COLOR_MAIN, marker='o', label='COP_electrical')
     ax2.plot(phi, qc, color=COLOR_POWER, marker='s', linestyle='--', label='Qc')
     ax1.axvline(best['phi'], color=COLOR_MAIN, linestyle=':', linewidth=1)
+    # Offset well clear of the curve (was sitting directly on the peak,
+    # colliding with the line) -- push down-and-right with a visible arrow
+    # so the label and the data stay legible independently.
     ax1.annotate(f"interior optimum\nphi={best['phi']:.2f}", xy=(best['phi'], best['COP_electrical']),
-                 xytext=(10, 10), textcoords='offset points', fontsize=8, color=COLOR_MAIN,
-                 arrowprops=dict(arrowstyle='->', color=COLOR_MAIN))
+                 xytext=(45, -35), textcoords='offset points', fontsize=8, color=COLOR_MAIN,
+                 ha='left',
+                 arrowprops=dict(arrowstyle='->', color=COLOR_MAIN, lw=1))
     ax1.set_xlabel('Particle volume fraction $\\phi$')
     ax1.set_ylabel('COP_electrical', color=COLOR_MAIN)
     ax2.set_ylabel('Qc [W]  (each $\\phi$ at its own favorable span)', color=COLOR_POWER)
-    ax1.set_title('Ferrofluid/MR-Suspension MCE — Volume-Fraction Trade-off (Phase 20)\n'
+    ax1.set_title('Ferrofluid/MR-Suspension MCE — Volume-Fraction Trade-off \n'
                  'Viscosity-vs-MCE-intensity trade-off produces a genuine interior optimum')
     fig.tight_layout()
     save(fig, 'fig30_fluid_mce_volume_fraction')
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# FIG 31 — Passive/hybrid magnetic-regenerator augmentation alignment effect (Phase 21)
+# FIG 31 — Passive/hybrid magnetic-regenerator augmentation alignment effect
 # ══════════════════════════════════════════════════════════════════════════
 
 def plot_passive_regenerator_alignment():
@@ -1422,20 +1466,28 @@ def plot_passive_regenerator_alignment():
     axes[0].set_title('Candidate-Material Alignment\n(T_cold=291.15K, span=10K)')
     axes[0].tick_params(axis='x', labelsize=7, rotation=20)
 
+    # Zero-gain candidates (no usable alignment at this operating point)
+    # otherwise render as an empty gap, indistinguishable from missing data.
+    y_span = max(gain_pct, default=0) or 1.0
+    for xi, v in enumerate(gain_pct):
+        if v == 0:
+            axes[0].text(xi, 0.015 * y_span, '\u2715 no alignment', ha='center', va='bottom',
+                         fontsize=7, color='gray', rotation=90)
+
     axes[1].plot(spans, best_gain, marker='o', color=COLOR_POWER)
     axes[1].set_xlabel('Span [K]')
     axes[1].set_ylabel('Best-material COP gain [%]')
     axes[1].set_title('Gain vs. Span\n(alignment window widens/narrows with span)')
 
     fig.suptitle('Passive Magnetic-Regenerator Augmentation of a Vapor-Compression Cycle '
-                 '(Phase 21)\nIllustrative literature-range ceiling, not a fitted coefficient',
+                 '\nIllustrative literature-range ceiling, not a fitted coefficient',
                  fontsize=11)
     fig.tight_layout()
     save(fig, 'fig31_passive_regenerator_alignment')
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# FIG 32 — Rotary-device cycle-type (Ericsson- vs. Brayton-like) validation (Phase 17)
+# FIG 32 — Rotary-device cycle-type (Ericsson- vs. Brayton-like) validation
 # ══════════════════════════════════════════════════════════════════════════
 
 def plot_cycle_type_validation():
@@ -1464,7 +1516,7 @@ def plot_cycle_type_validation():
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# FIG 33 — Hysteresis-loss Pareto-front material-selection sensitivity (Phase 16)
+# FIG 33 — Hysteresis-loss Pareto-front material-selection sensitivity
 # ══════════════════════════════════════════════════════════════════════════
 
 def plot_hysteresis_sensitivity(precomputed=None):
@@ -1495,14 +1547,14 @@ def plot_hysteresis_sensitivity(precomputed=None):
     fig, ax = plt.subplots(figsize=(8.5, 5.5))
     x = np.arange(len(materials))
     w = 0.35
-    ax.bar(x - w / 2, n_off, w, label='Hysteresis OFF (pre-Phase-16)',
+    ax.bar(x - w / 2, n_off, w, label='Hysteresis OFF (previous)',
            color=COLOR_MAIN, alpha=0.85, edgecolor='white')
     ax.bar(x + w / 2, n_on, w, label='Hysteresis ON (literature-placeholder)',
            color=COLOR_POWER, alpha=0.85, edgecolor='white')
     ax.set_xticks(x)
     ax.set_xticklabels([m.replace(' (', '\n(') for m in materials], fontsize=7)
     ax.set_ylabel('Designs on merged Pareto front')
-    ax.set_title('Thermal-Hysteresis Loss: Material-Selection Sensitivity (Phase 16)\n'
+    ax.set_title('Thermal-Hysteresis Loss: Material-Selection Sensitivity \n'
                  'A/B NSGA-III comparison, identical pop_size/n_gen/seed')
     ax.legend(fontsize=8)
     fig.tight_layout()
@@ -1510,7 +1562,7 @@ def plot_hysteresis_sensitivity(precomputed=None):
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# FIG 34 — Halbach-cylinder magnet-mass Pareto-front sensitivity (Phase 19)
+# FIG 34 — Halbach-cylinder magnet-mass Pareto-front sensitivity
 # ══════════════════════════════════════════════════════════════════════════
 
 def plot_magnet_geometry_pareto_sensitivity(precomputed=None):
@@ -1541,7 +1593,7 @@ def plot_magnet_geometry_pareto_sensitivity(precomputed=None):
     fields_geom = [r['mu0H_max_T'] for r in rows_geom]
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    axes[0].hist(fields_flat, bins=8, alpha=0.6, color=COLOR_MAIN, label='FLAT (pre-Phase-19)')
+    axes[0].hist(fields_flat, bins=8, alpha=0.6, color=COLOR_MAIN, label='FLAT (previous)')
     axes[0].hist(fields_geom, bins=8, alpha=0.6, color=COLOR_POWER, label='GEOMETRIC (Halbach)')
     axes[0].set_xlabel('mu0H_max [T]')
     axes[0].set_ylabel('Designs on merged Pareto front')
@@ -1563,7 +1615,7 @@ def plot_magnet_geometry_pareto_sensitivity(precomputed=None):
     axes[1].set_title('Material-Selection Sensitivity')
     axes[1].legend(fontsize=8)
 
-    fig.suptitle('Halbach-Cylinder Magnet-Mass Cost Term: Pareto-Front Sensitivity (Phase 19)',
+    fig.suptitle('Halbach-Cylinder Magnet-Mass Cost Term: Pareto-Front Sensitivity ',
                  fontsize=12)
     fig.tight_layout()
     save(fig, 'fig34_magnet_geometry_pareto_sensitivity')
@@ -1686,17 +1738,17 @@ def run_all(precomputed=None):
     precomputed, if given, is a dict that may carry results already
     computed earlier in the SAME pipeline run (main.py steps
     2/2f/4/7/7b/7c/8d/9/9b/11/11b/11d):
-      - 'system_validation_results'         (step 2)
-      - 'baseline_rows'                     (step 4)
-      - 'sobol_const_Si', 'sobol_state_Si'  (step 9 / step 9b)
-      - 'pareto_rows'                       (step 11)
-      - 'cascade_rows_gd', 'cascade_rows_giant'  (step 7)
-      - 'graded_rows'                       (step 7b)
-      - 'astro_result'                      (step 7c)
-      - 'material_rows'                     (step 8d)
-      - 'hysteresis_result'                 (step 11b)
-      - 'magnet_geometry_result'            (step 11d)
-      - 'override_check_result'             (step 2f)
+      - 'system_validation_results' (step 2)
+      - 'baseline_rows' (step 4)
+      - 'sobol_const_Si', 'sobol_state_Si' (step 9 / step 9b)
+      - 'pareto_rows' (step 11)
+      - 'cascade_rows_gd', 'cascade_rows_giant' (step 7)
+      - 'graded_rows' (step 7b)
+      - 'astro_result' (step 7c)
+      - 'material_rows' (step 8d)
+      - 'hysteresis_result' (step 11b)
+      - 'magnet_geometry_result' (step 11d)
+      - 'override_check_result' (step 2f)
     Figures 8, 14, 16, 18, 19, 20, 21, 25, 26, 33, 34, and 35 reuse
     whichever of these are supplied instead of recomputing them, which
     otherwise adds several minutes of redundant work (mostly fig21's
@@ -1748,21 +1800,21 @@ def run_all(precomputed=None):
          lambda: plot_astronautics_validation(precomputed)),
         ("26 Material family comparison (Track A2 item)",
          lambda: plot_material_family_comparison(precomputed)),
-        ("27 Inhomogeneous/polycrystalline Tc-broadening sensitivity (Phase 22 item 1)",
+        ("27 Inhomogeneous/polycrystalline Tc-broadening sensitivity ",
          plot_inhomogeneous_broadening),
-        ("28 Nanocomposite off-design robustness (Phase 22 item 2 follow-up)",
+        ("28 Nanocomposite off-design robustness ( follow-up)",
          plot_nanocomposite_robustness),
-        ("29 Mechanical-contact thermal-diode sensitivity (Phase 18)",
+        ("29 Mechanical-contact thermal-diode sensitivity ",
          plot_thermal_diode_sensitivity),
-        ("30 Magnetocaloric-fluid volume-fraction sweep (Phase 20)",
+        ("30 Magnetocaloric-fluid volume-fraction sweep ",
          plot_fluid_mce_sweep),
-        ("31 Passive magnetic-regenerator alignment effect (Phase 21)",
+        ("31 Passive magnetic-regenerator alignment effect ",
          plot_passive_regenerator_alignment),
-        ("32 Rotary-device cycle-type validation (Phase 17)",
+        ("32 Rotary-device cycle-type validation ",
          plot_cycle_type_validation),
-        ("33 Hysteresis-loss Pareto-front sensitivity (Phase 16)",
+        ("33 Hysteresis-loss Pareto-front sensitivity ",
          lambda: plot_hysteresis_sensitivity(precomputed)),
-        ("34 Magnet-geometry (Halbach) Pareto-front sensitivity (Phase 19)",
+        ("34 Magnet-geometry (Halbach) Pareto-front sensitivity ",
          lambda: plot_magnet_geometry_pareto_sensitivity(precomputed)),
         ("35 Regenerative-amplification override check (this session)",
          lambda: plot_regenerative_amplification_override_check(precomputed)),

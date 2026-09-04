@@ -1,7 +1,7 @@
 """
 uncertainty_propagation.py
 ===========================
-Phase 30 addition.
+ addition.
 
 `core/loss_model.py`'s CORE calibration is an exactly-determined 3-point
 NNLS fit (`leave_one_out_cv()` already documents leave-one-out errors up to
@@ -113,7 +113,7 @@ def monte_carlo_cop_uncertainty(
     qcs = np.array(qcs)
     if len(cops) == 0:
         if verbose:
-            print(f"  WARNING: all {n_draws} draws infeasible at span={span_K}K "
+            print(f" WARNING: all {n_draws} draws infeasible at span={span_K}K "
                   f"(0-D model structural span cap, see regenerator_1d.py) -- "
                   f"no COP/Qc distribution computable at this point.")
         return MCResult(n_draws=n_draws, measurement_uncertainty_frac=measurement_uncertainty_frac,
@@ -139,14 +139,14 @@ def monte_carlo_cop_uncertainty(
         print(f"Monte Carlo COP/Qc uncertainty, {n_draws} draws, "
               f"+/-{measurement_uncertainty_frac*100:.0f}% assumed calibration-input "
               f"noise, at span={span_K}K, mu0H={mu0H_max}T:")
-        print(f"  COP_electrical: mean={result.COP_electrical_mean:.3f}  "
+        print(f" COP_electrical: mean={result.COP_electrical_mean:.3f}  "
               f"std={result.COP_electrical_std:.3f}  "
               f"90% CI=[{result.COP_electrical_p05:.3f}, {result.COP_electrical_p95:.3f}]")
-        print(f"  Qc (W):         mean={result.Qc_mean:.1f}  std={result.Qc_std:.1f}  "
+        print(f" Qc (W):         mean={result.Qc_mean:.1f}  std={result.Qc_std:.1f}  "
               f"90% CI=[{result.Qc_p05:.1f}, {result.Qc_p95:.1f}]")
-        print(f"  fraction of draws with infeasible/failed COP: "
+        print(f" fraction of draws with infeasible/failed COP: "
               f"{result.fraction_failed_draws*100:.1f}%")
-        print("  HONEST FRAMING FOR THE PAPER: the +/-15% default is a "
+        print(" HONEST FRAMING FOR THE PAPER: the +/-15% default is a "
               "reasoned assumption, not a source-derived measurement "
               "uncertainty (none of the 3 CORE calibration papers report "
               "device-level error bars). Report this CI as 'uncertainty "
@@ -177,7 +177,7 @@ def uncertainty_band_across_spans(spans_K=range(5, 21), n_draws=500,
             "Qc_p95_W": round(mc.Qc_p95, 1),
         })
         if verbose:
-            print(f"  span={span:>2}K  COP_electrical mean={rows[-1]['COP_electrical_mean']:.2f}  "
+            print(f" span={span:>2}K COP_electrical mean={rows[-1]['COP_electrical_mean']:.2f}  "
                   f"90% CI=[{rows[-1]['COP_electrical_p05']:.2f}, "
                   f"{rows[-1]['COP_electrical_p95']:.2f}]")
     return rows

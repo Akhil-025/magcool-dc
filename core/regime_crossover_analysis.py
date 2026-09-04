@@ -1,7 +1,7 @@
 """
 regime_crossover_analysis.py
 ==============================
-Phase 34: the direct answer to "where, if anywhere, does this repo's OWN
+the direct answer to "where, if anywhere, does this repo's OWN
 model show magnetic cooling beating conventional cooling" -- not by
 picking one favorable-looking point (as core.beverage_cooler_validation
 and core.heat_pump_validation both deliberately do NOT do; both of those
@@ -136,8 +136,8 @@ def run_cop_crossover_search(verbose=True):
             "AMR_beats_worst_case_VCC": amr_beats_worst_case_vcc,
         })
         if verbose:
-            vcc_str = "  ".join(f"eta={e:.2f}:COP={c:.2f}" for e, c in vcc_cops.items())
-            print(f"span={span:>5.1f}K  best_AMR_COP_electrical={best_amr_cop:6.2f} "
+            vcc_str = " ".join(f"eta={e:.2f}:COP={c:.2f}" for e, c in vcc_cops.items())
+            print(f"span={span:>5.1f}K best_AMR_COP_electrical={best_amr_cop:6.2f} "
                   f"(mass={best_design[0]}kg freq={best_design[1]}Hz mdot={best_design[2]}kg/s "
                   f"mu0H={best_design[3]}T)  |  VCC: {vcc_str}  |  "
                   f"AMR beats VCC's OWN worst case: {amr_beats_worst_case_vcc}")

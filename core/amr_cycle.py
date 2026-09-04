@@ -35,8 +35,8 @@ for system-level COP comparison against vapor-compression / liquid cooling,
 NOT a replacement for a full 2-D/3-D COMSOL regenerator-bed solve (see
 COMSOL_setup.md in the roadmap for that follow-on step).
 
-Phase 17 (ROADMAP.md) added an AMR cycle-topology switch (`cycle_type`,
-default "brayton" = pre-Phase-17 behavior unchanged): "ericsson" and
+ (ROADMAP.md) added an AMR cycle-topology switch (`cycle_type`,
+default "brayton" = previous behavior unchanged): "ericsson" and
 "carnot" variants apply small, documented multipliers to specific cooling
 power and the second-law efficiency ceiling, intended to reproduce the
 QUALITATIVE ranking Carnot-like >= Ericsson-like >= Brayton-like described
@@ -44,12 +44,12 @@ in the AMR-cycle-comparison literature -- see CYCLE_TYPE_FACTORS below for
 the honesty flag on why these are illustrative multipliers rather than a
 digitization of Kitanovski et al.'s own closed-form relations.
 
-Phase 18 (ROADMAP.md) added an optional `thermal_diode` parameter
-(default None = pre-Phase-18 behavior unchanged): when a
+ (ROADMAP.md) added an optional `thermal_diode` parameter
+(default None = previous behavior unchanged): when a
 `core.thermal_diode.MechanicalContactDiode` instance is supplied,
 its (illustrative -- see that module's honesty flag)
 `actuation_energy_J_per_cycle * frequency` switching power is added to
-W_parasitic, the same additive-parasitic-load accounting Phase 16 used
+W_parasitic, the same additive-parasitic-load accounting used
 for hysteresis loss. See `_diode_switching_power_W()` and
 `core/thermal_diode_analysis.py`'s docstring for what this module
 deliberately does NOT claim (no frequency-ceiling relaxation is
@@ -61,7 +61,7 @@ from dataclasses import dataclass
 from core.mce_material import MagnetocaloricMaterial
 
 
-# --- AMR cycle topology (Phase 17, ROADMAP.md) ---
+# --- AMR cycle topology (, ROADMAP.md) ---
 #
 # Source intent: Kitanovski et al. (2015) Sect. 4.1.1-4.1.4 ("Characteristics
 # of an Ericsson-like AMR Cycle" / "...Hybrid Brayton-Ericsson-like AMR
@@ -80,11 +80,11 @@ from core.mce_material import MagnetocaloricMaterial
 # Kitanovski's own formulas. They encode only the QUALITATIVE, well-
 # established ranking of the three cycle types (Brayton-like: adiabatic
 # magnetization/demagnetization with the fluid static, isofield blows only,
-# already this model's pre-Phase-17 behavior; Ericsson-like: field change
+# already this model's previous behavior; Ericsson-like: field change
 # happens under continuous fluid contact, so the magnetization/
 # demagnetization legs also exchange heat rather than being "wasted"
 # adiabatic excursions, which the general AMR-cycle-comparison literature
-# -- and this project's own Phase 17 planning note -- describes as
+# -- and this project's own planning note -- describes as
 # improving both specific cooling power and second-law efficiency relative
 # to Brayton; Carnot-like: the idealized reversible reference bound, a
 # theoretical upper limit rather than a claim that a real regenerator bed
@@ -187,10 +187,10 @@ class AMRCycleResult:
     Qh: float           # W, heat rejected
     W_mag: float         # W, net magnetic (thermodynamic-cycle) work input
     W_parasitic: float    # W, pump + motor-drive overhead (see note below) --
-                            # Phase 16: also includes material thermal-
+                            # also includes material thermal-
                             # hysteresis loss (_hysteresis_power_W()), 0.0
-                            # for GADOLINIUM/pre-Phase-16 materials.
-                            # Phase 18: also includes thermal-diode
+                            # for GADOLINIUM/previous materials.
+                            # also includes thermal-diode
                             # actuation switching power
                             # (_diode_switching_power_W()), 0.0 unless a
                             # thermal_diode is supplied
@@ -205,7 +205,7 @@ class AMRCycleResult:
 
 class AMRSystem:
     PUMP_MOTOR_EFFICIENCY_LITERATURE = 0.6
-    # Phase 28 addition. Two independent industry sources agree small
+    #  addition. Two independent industry sources agree small
     # (fractional-scale, lab/prototype-appropriate) centrifugal pumps run
     # 50-70% wire-to-water efficiency (Pumps & Systems, "How to Define &
     # Measure Centrifugal Pump Efficiency": "typical efficiencies are 55
@@ -220,8 +220,8 @@ class AMRSystem:
     #
     # NOT the class default: `pump_motor_efficiency` defaults to 1.0 (see
     # __init__ below) -- i.e. idealized, no pump/motor loss, EXACTLY the
-    # pre-Phase-28 behavior -- matching this repo's own established
-    # discipline (Phase 15/16/24-27) of adding a new, real, literature-
+    # previous behavior -- matching this repo's own established
+    # discipline of adding a new, real, literature-
     # grounded capability as an OPT-IN parameter rather than silently
     # changing every existing caller's numeric output. Every existing
     # optimize.py NSGA-III run always sets particle_diameter (it is a
@@ -230,7 +230,7 @@ class AMRSystem:
     # ever generated. Callers that want the literature-grounded 0.6 value
     # (e.g. `optimize.py`, if/when it opts in) must pass
     # `pump_motor_efficiency=AMRSystem.PUMP_MOTOR_EFFICIENCY_LITERATURE`
-    # explicitly -- see ROADMAP.md's Phase 28 entry for the concrete
+    # explicitly -- see ROADMAP.md for the concrete
     # follow-up this leaves open.
 
     def __init__(self, material: MagnetocaloricMaterial, mu0H_max: float,
@@ -299,9 +299,9 @@ class AMRSystem:
                                      for the honesty flags on this
                                      calibration (two points, one operating
                                      condition, extrapolated shape).
-        particle_diameter          : Phase 15 addition. Packed-sphere-bed
+        particle_diameter          :  addition. Packed-sphere-bed
                                      particle diameter, m. Default None
-                                     preserves ALL pre-Phase-15 behavior
+                                     preserves ALL previous behavior
                                      exactly (regenerator_effectiveness is
                                      used as before if
                                      use_ntu_thermal_model=False, or the
@@ -344,7 +344,7 @@ class AMRSystem:
                                      0.002 m^2 matches thermal.py's and
                                      geometry_analysis.py's own default
                                      (a representative ~5x4cm bed face).
-        hypereg_n_parallel          : Phase 15 addition. If set (and
+        hypereg_n_parallel          :  addition. If set (and
                                      particle_diameter and loss_model are
                                      also set), uses core.thermal.
                                      pumping_power_packed_bed_hypereg()
@@ -358,17 +358,17 @@ class AMRSystem:
                                      None reproduces the conventional
                                      (non-Hypereg) geometry-explicit
                                      pumping term.
-        cycle_type                  : Phase 17 addition. One of "brayton"
+        cycle_type                  :  addition. One of "brayton"
                                      (default), "ericsson", or "carnot" --
                                      see CYCLE_TYPE_FACTORS above and its
                                      honesty flag. Default "brayton"
-                                     preserves ALL pre-Phase-17 behavior
+                                     preserves ALL previous behavior
                                      exactly (qc_multiplier=eta_uplift=1.0).
                                      Raises ValueError for any other value.
-        thermal_diode                : Phase 18 addition. Optional
+        thermal_diode                :  addition. Optional
                                      core.thermal_diode.MechanicalContactDiode
                                      instance. Default None preserves ALL
-                                     pre-Phase-18 behavior exactly (no
+                                     previous behavior exactly (no
                                      switching-power term is added to
                                      W_parasitic). When supplied, its
                                      switching_power_W(frequency) --
@@ -376,7 +376,7 @@ class AMRSystem:
                                      actuation cost, see that module's
                                      honesty flag -- is added to
                                      W_parasitic unconditionally, the same
-                                     accounting pattern Phase 16 used for
+                                     accounting pattern used for
                                      hysteresis loss. This parameter does
                                      NOT change cooling_capacity() or
                                      magnetic_work() in any way: no
@@ -467,14 +467,14 @@ class AMRSystem:
         self._last_ntu_info = None
 
     def _cycle_type_factor(self):
-        """Phase 17 addition. Returns this system's {"qc_multiplier",
+        """ addition. Returns this system's {"qc_multiplier",
         "eta_uplift"} dict from CYCLE_TYPE_FACTORS -- see that constant's
         docstring for the honesty flags on where these numbers do (and do
         not) come from."""
         return CYCLE_TYPE_FACTORS[self.cycle_type]
 
     def _hysteresis_power_W(self):
-        """Phase 16 addition. Returns the parasitic electrical power (W)
+        """ addition. Returns the parasitic electrical power (W)
         attributable to irreversible thermal-hysteresis loss in the
         regenerator material itself, computed as:
 
@@ -488,8 +488,8 @@ class AMRSystem:
         this returns exactly 0.0 for GADOLINIUM (mce_material.py's
         MagnetocaloricMaterial has no such field at all -- a genuinely,
         not just approximately, hysteresis-free second-order transition)
-        and for any FirstOrderMCEMaterial instance that predates Phase 16,
-        so every pre-Phase-16 caller and test gets IDENTICAL numbers to
+        and for any FirstOrderMCEMaterial instance that predates ,
+        so every previous caller and test gets IDENTICAL numbers to
         before this addition.
 
         Modeling simplification, stated plainly: this treats hysteresis
@@ -502,7 +502,7 @@ class AMRSystem:
         core.loss_model.StateDependentLossModel. This is a reasonable
         first-order treatment, not a claim that hysteresis loss is
         electrically identical in character to eddy-current or pumping
-        loss -- see ROADMAP.md's Phase 16 entry for the full discussion
+        loss -- see ROADMAP.md for the full discussion
         of why this accounting choice was made over folding it into
         eta_2nd_law instead.
         """
@@ -510,12 +510,12 @@ class AMRSystem:
         return hysteresis_loss_J_per_kg * self.m_reg * self.f
 
     def _diode_switching_power_W(self):
-        """Phase 18 addition. Returns the parasitic electrical power (W)
+        """ addition. Returns the parasitic electrical power (W)
         to actuate this system's `thermal_diode` (a
         core.thermal_diode.MechanicalContactDiode) once per AMR cycle, or
         exactly 0.0 if thermal_diode is None (the default) -- so every
-        pre-Phase-18 caller and test gets IDENTICAL numbers to before this
-        addition, the same backward-compatibility guarantee Phase 15-17
+        previous caller and test gets IDENTICAL numbers to before this
+        addition, the same backward-compatibility guarantee
         used for particle_diameter/cycle_type/etc. Unlike
         _hysteresis_power_W(), this does NOT scale with mass_regenerator:
         see core.thermal_diode.MechanicalContactDiode's docstring for why
@@ -540,7 +540,7 @@ class AMRSystem:
         """If use_ntu_thermal_model is enabled, compute regenerator
         effectiveness from the NTU model (core/thermal.py) instead of using
         the prescribed constant value. This allows regenerator mass to
-        influence cooling capacity. Phase 15: when particle_diameter is
+        influence cooling capacity. when particle_diameter is
         also set, it is passed through so geometry (not just mass/
         frequency/mdot) affects the NTU calculation too -- see __init__'s
         docstring."""
@@ -555,16 +555,16 @@ class AMRSystem:
         return info["eps"]
 
     def _geometry_pumping_power_W(self):
-        """Phase 15 addition. Returns the geometry-explicit hydraulic
+        """ addition. Returns the geometry-explicit hydraulic
         pumping power (W) if particle_diameter is set, else None (meaning
         "no override -- use loss_model's generic k_pump*mdot**2 term
-        unchanged", the pre-Phase-15 behavior). Uses the Hypereg parallel-
+        unchanged", the previous behavior). Uses the Hypereg parallel-
         hydraulic variant (core.thermal.pumping_power_packed_bed_hypereg)
         instead of the conventional series-flow one if hypereg_n_parallel
         is also set -- see results/hypereg_findings.md and
         core/hypereg_analysis.py.
 
-        Phase 28 addition: the value returned here is divided by
+         addition: the value returned here is divided by
         `self.pump_motor_efficiency` (default 1.0, i.e. no change, unless
         the caller explicitly opts into a lower value -- see
         PUMP_MOTOR_EFFICIENCY_LITERATURE's own comment above for the
@@ -614,11 +614,11 @@ class AMRSystem:
         return info["P_pump_W"] / self.pump_motor_efficiency
 
     def _geometry_eddy_power_W(self):
-        """Phase 27 addition. Returns the geometry-explicit intragranular
+        """ addition. Returns the geometry-explicit intragranular
         eddy-current power (W) if particle_diameter is set, else 0.0
         (meaning "no additional term -- use loss_model's CORE-calibrated
         k_eddy*f**2*mu0H**2 support-structure term alone, unchanged", the
-        pre-Phase-27 behavior). Unlike `_geometry_pumping_power_W()`
+        previous behavior). Unlike `_geometry_pumping_power_W()`
         (which OVERRIDES the generic k_pump term), this is ADDED on top of
         k_eddy -- see loss_model.StateDependentLossModel.parasitic_power()'s
         `intragranular_eddy_power_W` parameter docstring for why the two
@@ -676,6 +676,72 @@ class AMRSystem:
         Qc *= self._cycle_type_factor()["qc_multiplier"]
         return max(Qc, 0.0), dTad_noload
 
+    def cooling_capacity_span_sweep(self, T_cold, spans, n_dense_points=400):
+        """Evaluates cooling_capacity() over the requested `spans` PLUS an
+        internal dense scan grid (0 to max(spans), n_dense_points points),
+        then applies a running-minimum monotonicity clamp: Qc at a given
+        span can never exceed Qc at any smaller span already evaluated in
+        the same sweep.
+
+        WHY THIS EXISTS (see core/validation_system.py's
+        diagnose_qc_feasibility_reopening() for the full mechanism, and
+        core/mce_material.py's magnetic_heat_capacity() docstring for the
+        root cause): the mean-field magnetic heat capacity has a genuine
+        finite-jump discontinuity approaching Tc from below. Because
+        cooling_capacity() evaluates dTad_noload at a single T_mid per
+        call with no knowledge of neighboring spans, a raw single-point Qc
+        evaluation can REPORT A LARGER value at a bigger span than at a
+        smaller one, right where T_mid crosses that discontinuity --
+        physically backwards, since a real device's achievable cooling
+        capacity cannot increase as the demanded span widens.
+
+        WHY A DENSE GRID, NOT JUST THE CALLER'S OWN SPANS: if the reopening
+        artifact's positive-to-negative-to-positive excursion falls
+        entirely BETWEEN two widely-spaced requested spans, a running
+        minimum computed only over those sparse points would never see the
+        intervening zero and would under-clamp (report the reopened value
+        as if it were legitimate). The internal dense grid guarantees the
+        clamp sees the discontinuity regardless of how sparse the caller's
+        own `spans` are.
+
+        This is a POST-HOC MONOTONICITY CLAMP, not a new physical
+        mechanism and not a fit to any literature value -- it can only
+        reduce a reported Qc relative to a smaller span already evaluated
+        in the sweep, never invent or increase a number.
+        `cooling_capacity()` itself is completely unchanged (same
+        signature, same return value, same default behavior) -- this is
+        an additive, opt-in method; no existing caller anywhere in this
+        repo uses it, so no existing result changes because of it.
+
+        Returns a list of dicts, one per requested span (in the order
+        given), each with span_K, Qc_raw_W (the unclamped
+        cooling_capacity() value), Qc_W (the clamped value actually safe
+        to report/plot), and dTad_noload_K (from cooling_capacity() at
+        that exact span, unaffected by the clamp)."""
+        spans = [float(s) for s in spans]
+        max_span = max(spans) if spans else 0.0
+        dense_grid = np.linspace(0.0, max_span, n_dense_points) if max_span > 0 else np.array([0.0])
+        combined = np.unique(np.concatenate([dense_grid, np.array(spans)]))
+        combined.sort()
+
+        raw_Qc = np.empty_like(combined)
+        dTads = np.empty_like(combined)
+        for i, s in enumerate(combined):
+            Qc_i, dTad_i = self.cooling_capacity(T_cold, float(s))
+            raw_Qc[i] = Qc_i
+            dTads[i] = dTad_i
+        running_min_Qc = np.minimum.accumulate(raw_Qc)
+
+        # combined is sorted+unique, so searchsorted gives an exact index
+        # for every requested span (each is itself a member of combined).
+        idx_map = np.searchsorted(combined, spans)
+        out = []
+        for s, i in zip(spans, idx_map):
+            out.append({"span_K": s, "Qc_raw_W": float(raw_Qc[i]),
+                        "Qc_W": float(running_min_Qc[i]),
+                        "dTad_noload_K": float(dTads[i])})
+        return out
+
     def magnetic_work(self, T_cold, T_span, Qc):
         """Net magnetic work input per unit time (W). Approximated from the
         entropy generated by finite-effectiveness regeneration plus the
@@ -707,16 +773,16 @@ class AMRSystem:
                 intragranular_eddy_power_W=eddy_intragranular)
         else:
             W_parasitic = self.parasitic_fraction * Qc
-        # Phase 16: hysteresis loss is added HERE, unconditionally, rather
+        # hysteresis loss is added HERE, unconditionally, rather
         # than threaded through loss_model.parasitic_power() -- this
         # deliberately catches BOTH the loss_model and the constant-
         # parasitic_fraction branches above with one code path (e.g.
         # cascade.py's _single_stage() baseline helper does not pass a
         # loss_model at all; it would otherwise silently miss this term).
-        # Returns 0.0 for GADOLINIUM and for any pre-Phase-16
+        # Returns 0.0 for GADOLINIUM and for any previous
         # FirstOrderMCEMaterial -- see _hysteresis_power_W()'s docstring.
         W_parasitic += self._hysteresis_power_W()
-        # Phase 18: thermal-diode actuation switching power, added HERE
+        # thermal-diode actuation switching power, added HERE
         # unconditionally for the same reason (catches both the
         # loss_model and constant-parasitic_fraction branches above with
         # one code path). Returns 0.0 unless thermal_diode is supplied --

@@ -12,7 +12,7 @@ Physics
 For a localized-moment ferromagnet (Gd and Gd-based alloys behave close to this
 limit), the magnetization follows the Brillouin function:
 
-    M(T, H) = N g mu_B J * B_J(x),      x = g mu_B J mu0(H + lambda*M) / (kB T)
+    M(T, H) = N g mu_B J * B_J(x), x = g mu_B J mu0(H + lambda*M) / (kB T)
 
 where lambda is the Weiss molecular-field constant, fixed by the Curie
 temperature: lambda = 3 kB Tc / (N g^2 mu_B^2 J(J+1) mu0).
@@ -29,12 +29,12 @@ Adiabatic temperature change:   DeltaT_ad(T, H) = -T/C_lattice(T) * DeltaS_M(T,H
                                  Conversion", Springer 2015)
 
 Calibration targets (literature, gadolinium, polycrystalline, ~294 K):
-    mu0*DeltaH = 1 T  -> DeltaT_ad ~ 3.0-3.3 K   (Pecharsky & Gschneidner, 1999)
+    mu0*DeltaH = 1 T  -> DeltaT_ad ~ 3.0-3.3 K (Pecharsky & Gschneidner, 1999)
     mu0*DeltaH = 2 T  -> DeltaT_ad ~ 6.1-6.6 K
     mu0*DeltaH = 5 T  -> DeltaT_ad ~ 14-15 K
     Peak isothermal DeltaS_M at 5 T ~ -18 J/kg/K (Pecharsky & Gschneidner,
         Phys. Rev. Lett. 78, 4494 (1997) for the giant-MCE Gd5Si2Ge2 family;
-        pure Gd baseline ~ -4.2 to -4.8 J/kg/K at 2 T near Tc). Phase 35
+        pure Gd baseline ~ -4.2 to -4.8 J/kg/K at 2 T near Tc).
         correction: this line previously read "~-9.5 J/kg/K", inconsistent
         with giguere_validation.py's own correctly-cited ~18 J/(kg K) for
         the SAME quantity/paper -- re-checked directly against Ref. [Phys.
@@ -73,6 +73,22 @@ class MagnetocaloricMaterial:
     n_atoms_per_fu: int = 1   # atoms per formula unit contributing lattice modes
     source: str = ""
     curie_shift_K_per_T: float = 0.0
+    sommerfeld_gamma_J_per_molK2: float = 0.0
+    # Electronic (Sommerfeld) heat-capacity/entropy coefficient, J/(mol K^2):
+    # C_el(T) = gamma*T, S_el(T) = gamma*T (per mole). This module's
+    # total_heat_capacity()/total_entropy() previously omitted this term
+    # entirely ("+ small electronic term, ~ a few J/kg/K for Gd, neglected
+    # here" -- this module's own old docstring). de Oliveira & von Ranke,
+    # Phys. Rep. 489 (2010) 89-159 -- Sec. 4.2, "Application to Gd based
+    # compounds" -- give gamma=5.4 mJ/(mol K^2) for Gd (their ref. [195]),
+    # used directly below for GADOLINIUM. At T~294K this is
+    # gamma*T/M_molar ~ 10 J/(kg K) -- small next to the lattice term but
+    # NOT negligible next to DeltaT_ad's near-Tc error budget (see
+    # run_validation()'s improved numbers in core/validation.py). Default
+    # 0.0 for every other material in this library: gamma is a measured,
+    # material-specific Fermi-surface property with no literature value
+    # cited here for GD5SI2GE2 or LACAMNO3, so it is left at its old,
+    # honest (zero) default for those rather than guessed.
     # Phenomenological field-shift of the Curie point, d(Tc_eff)/d(mu0*H),
     # K per Tesla. Added directly in response to run_curie_shift_check()'s
     # (core/validation.py) documented null result: the plain Brillouin
@@ -263,6 +279,62 @@ class MagnetocaloricMaterial:
         c_kg = c_molar / self.M_molar
         return c_kg
 
+    def electronic_heat_capacity(self, T):
+        """Sommerfeld (conduction-electron) heat capacity, J/(kg K):
+        C_el(T) = gamma*T (per mole), divided by M_molar. Zero unless
+        sommerfeld_gamma_J_per_molK2 is set (see that field's docstring)."""
+        T = np.atleast_1d(np.asarray(T, dtype=float))
+        return self.sommerfeld_gamma_J_per_molK2 * T / self.M_molar
+
+    def entropy_lattice(self, T, n_debye_points=400):
+        """Debye lattice entropy, J/(kg K), closed-form standard result
+        (e.g. Kittel, 'Introduction to Solid State Physics'; the same
+        Debye integral this module's own lattice_heat_capacity() already
+        uses, reused here for consistency rather than a fresh formula):
+
+            S_lat(T) = n*R*[12*(T/theta_D)^3 * Integral_0^(theta_D/T) x^3/(e^x-1) dx
+                            - 3*ln(1 - exp(-theta_D/T))]
+
+        Needed (together with entropy_magnetic() and electronic_entropy()
+        below) for total_entropy()/delta_T_adiabatic_exact()'s isentropic
+        solve -- see that method's docstring for why the lattice entropy,
+        not just the lattice heat capacity, is required."""
+        T = np.atleast_1d(np.asarray(T, dtype=float))
+        R = 8.314462618
+        s_molar = np.zeros_like(T)
+        for i, Ti in enumerate(T):
+            Ti = max(Ti, 1.0)
+            y = self.theta_D / Ti
+            xs = np.linspace(1e-6, y, n_debye_points)
+            integrand = xs ** 3 / np.expm1(xs)
+            trapz_fn = getattr(np, "trapezoid", None) or np.trapz
+            integral = trapz_fn(integrand, xs)
+            term1 = 12 * (Ti / self.theta_D) ** 3 * integral
+            term2 = -3 * np.log(-np.expm1(-y))
+            s_molar[i] = self.n_atoms_per_fu * R * (term1 + term2)
+        return s_molar / self.M_molar
+
+    def electronic_entropy(self, T):
+        """Sommerfeld electronic entropy, J/(kg K): S_el(T) = gamma*T
+        (per mole), divided by M_molar. Zero unless
+        sommerfeld_gamma_J_per_molK2 is set."""
+        T = np.atleast_1d(np.asarray(T, dtype=float))
+        return self.sommerfeld_gamma_J_per_molK2 * T / self.M_molar
+
+    def total_entropy(self, T, H):
+        """Total entropy S(T,H) = S_lattice(T) + S_magnetic(T,H) +
+        S_electronic(T), J/(kg K) -- Eq. (1) of de Oliveira & von Ranke,
+        Phys. Rep. 489 (2010) 89-159 (nuclear term dropped, as they do,
+        as negligible outside very low T). Used by
+        delta_T_adiabatic_exact() below for the exact isentropic
+        definition of DeltaT_ad; delta_T_adiabatic()'s linear formula
+        does not need this directly (it only uses DeltaS_M and
+        total_heat_capacity), so this method is additive -- nothing
+        upstream is changed by its presence."""
+        T = np.atleast_1d(np.asarray(T, dtype=float))
+        return (self.entropy_lattice(T) + self.entropy_magnetic(T, H)
+                + self.electronic_entropy(T))
+
     def magnetic_heat_capacity(self, T, H=0.0, dT=0.5):
         """Magnetic (lambda-anomaly) contribution to heat capacity, J/(kg K),
         via C_mag = T * dS_M/dT at fixed field. This term peaks sharply at Tc
@@ -310,10 +382,13 @@ class MagnetocaloricMaterial:
         return T * (S_plus - S_minus) / (2 * dT)
 
     def total_heat_capacity(self, T, H=0.0):
-        """C_total = C_lattice + C_magnetic (+ small electronic term, ~ a few
-        J/kg/K for Gd, neglected here). This is the physically appropriate
-        denominator for DeltaT_ad, not the lattice term alone."""
-        return self.lattice_heat_capacity(T) + self.magnetic_heat_capacity(T, H)
+        """C_total = C_lattice + C_magnetic + C_electronic. The electronic
+        (Sommerfeld) term was previously omitted here entirely (see
+        sommerfeld_gamma_J_per_molK2's docstring); now included so this is
+        the physically complete denominator for DeltaT_ad, not lattice+
+        magnetic alone."""
+        return (self.lattice_heat_capacity(T) + self.magnetic_heat_capacity(T, H)
+                + self.electronic_heat_capacity(T))
 
     def delta_T_adiabatic(self, T, H_final, H_initial=0.0):
         """Adiabatic temperature change, K, using DeltaT ~ -T*DeltaS_M / C_total(T,H_initial)
@@ -324,13 +399,65 @@ class MagnetocaloricMaterial:
         C = self.total_heat_capacity(T, H_initial)
         return -T * dS / C
 
+    def delta_T_adiabatic_exact(self, T_initial, H_final, H_initial=0.0,
+                                 search_window_K=60.0):
+        """Exact adiabatic temperature change via the isentropic definition
+        -- de Oliveira & von Ranke, Phys. Rep. 489 (2010) 89-159, Eq. (3):
+
+            DeltaT_ad(T, B2-B1) = T2(B2) - T1(B1),
+            under the adiabatic condition S(T2,B2) = S(T1,B1).
+
+        delta_T_adiabatic() above implements only the INFINITESIMAL-field-
+        step linearization of this same definition (that paper's own Sec.
+        2.1 derives -T*dS/C from Eq. (3) via a first-order Taylor
+        expansion in a small field increment delta_B) -- adequate for a
+        small delta_B, but 1-7.5 T is not a small step relative to the
+        curvature of S(T,H) near a sharp lambda-transition, which is
+        exactly where this repo's Dan'kov et al. (1998) calibration
+        errors are largest. This method instead solves Eq. (3) directly
+        by root-finding on the actual S(T,H) curves (using
+        total_entropy(), i.e. the FULL lattice+magnetic+electronic
+        entropy, not just the magnetic part), so it is not subject to
+        that linearization error.
+
+        T_initial must be a scalar (not an array) -- this is a genuine
+        1-D root-find per call (brentq), unlike every other method in
+        this class, so it is not vectorized over T and is not intended
+        for the hot loops in core/amr_cycle.py/core/optimize.py (which
+        use the fast linear delta_T_adiabatic() instead, now also
+        improved by the electronic-term fix above at negligible extra
+        cost). This method is for material-level validation/reporting
+        (see core/validation.py's run_validation()), not for the system-
+        level AMR simulation.
+        """
+        from scipy.optimize import brentq
+        T1 = float(T_initial)
+        S_target = float(np.asarray(self.total_entropy(np.array([T1]), H_initial)).ravel()[0])
+
+        def f(T2):
+            S2 = float(np.asarray(self.total_entropy(np.array([T2]), H_final)).ravel()[0])
+            return S2 - S_target
+
+        lo, hi = T1 - search_window_K, T1 + search_window_K
+        # f is monotonically increasing in T2 away from any near-Tc kink
+        # for the field/temperature ranges this repo evaluates (checked in
+        # tests/test_mce_material.py); widen the bracket if brentq can't
+        # find a sign change within the default window.
+        f_lo, f_hi = f(lo), f(hi)
+        while f_lo * f_hi > 0 and hi - lo < 400.0:
+            lo -= 20.0
+            hi += 20.0
+            f_lo, f_hi = f(lo), f(hi)
+        T2 = brentq(f, lo, hi, xtol=1e-6)
+        return T2 - T1
+
     def with_Tc(self, new_Tc):
         """Returns a new MagnetocaloricMaterial identical to this one except
         for Tc (and the derived Weiss constant lambda, recomputed by
         __post_init__ for the new Tc). Every other parameter (J, g, M_molar,
         theta_D, n_atoms_per_fu) is shared unchanged.
 
-        Added for Phase 22 item 1 (core/inhomogeneous_broadening.py): a
+        Added for (core/inhomogeneous_broadening.py): a
         polycrystalline/inhomogeneous sample is modeled as an ensemble of
         grains whose LOCAL Curie temperature is distributed around the
         bulk-reported Tc (grain-to-grain composition/strain variation), each
@@ -352,7 +479,10 @@ GADOLINIUM = MagnetocaloricMaterial(
     theta_D=169.0,       # K, Debye temperature of Gd
     n_atoms_per_fu=1,
     source="Pecharsky & Gschneidner, J. Magn. Magn. Mater. 200 (1999) 44-56; "
-           "Tishin & Spichkin, 'The Magnetocaloric Effect and its Applications', IOP (2003)",
+           "Tishin & Spichkin, 'The Magnetocaloric Effect and its Applications', IOP (2003); "
+           "sommerfeld_gamma_J_per_molK2 from de Oliveira & von Ranke, Phys. Rep. 489 "
+           "(2010) 89-159, Sec. 4.2 (their ref. [195]).",
+    sommerfeld_gamma_J_per_molK2=5.4e-3,
 )
 
 GD5SI2GE2 = MagnetocaloricMaterial(
@@ -423,4 +553,5 @@ GADOLINIUM_FIELD_SHIFTED = MagnetocaloricMaterial(
            "calibrate_curie_shift()); NOT part of the original calibration "
            "and NOT used by any other module in this repo.",
     curie_shift_K_per_T=0.0,  # overwritten by calibrate_curie_shift()
+    sommerfeld_gamma_J_per_molK2=GADOLINIUM.sommerfeld_gamma_J_per_molK2,
 )

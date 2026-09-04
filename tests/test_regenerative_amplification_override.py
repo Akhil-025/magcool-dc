@@ -183,12 +183,12 @@ def test_no_load_span_cache_hit_matches_uncached_result():
     import os
     from core.regenerator_1d import _CACHE_PATH, _cache_load
 
-    # Phase 31 test-hygiene fix: this test's "cached_first ... was the cache
+    #  test-hygiene fix: this test's "cached_first ... was the cache
     # MISS/write" assertion below is only valid if these exact inputs are
     # NOT already sitting in the shared, on-disk, cross-test-session cache
     # from some earlier/unrelated test run or manual session (this cache
     # has no per-test isolation fixture). That was a latent fragility even
-    # before Phase 31 -- exposed here because Phase 31 added several new
+    # before  -- exposed here because added several new
     # test files, which shifted pytest's file collection order enough to
     # change what had (by luck) previously been a collision-free run
     # order. Delete the on-disk cache file before this test's own writes
@@ -221,7 +221,7 @@ def test_no_load_span_cache_key_distinguishes_different_inputs():
     import os
     from core.regenerator_1d import _CACHE_PATH
 
-    # Phase 31 test-hygiene fix: see the identical note in
+    #  test-hygiene fix: see the identical note in
     # test_no_load_span_cache_hit_matches_uncached_result() just above --
     # both "not r.get('from_cache')" assertions below are only meaningful
     # against a guaranteed-clean cache.

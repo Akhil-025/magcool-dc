@@ -1,4 +1,4 @@
-"""Phase 31 addition: core/uncertainty_propagation.py had no dedicated
+""" addition: core/uncertainty_propagation.py had no dedicated
 test file even though it is wired into main.py's pipeline (see README's
 Tier-1 test-coverage gap). n_draws is kept small (20-40) throughout so
 this file runs in well under a second, rather than the module's own

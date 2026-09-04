@@ -1,5 +1,5 @@
 """
-Tests for core/antiperovskite_material.py (Phase 24: Ga1-xCMn3+x
+Tests for core/antiperovskite_material.py (Ga1-xCMn3+x
 composition-tunable antiperovskite family).
 """
 import numpy as np

@@ -1,6 +1,6 @@
 """
-Unit tests for core/material_family_comparison.py (Track A2 item + Phase
-22 item 2, which added the nanocomposite candidate as a sixth family).
+Unit tests for core/material_family_comparison.py (Track A2 item, which
+added the nanocomposite candidate as a sixth family).
 """
 from core.material_family_comparison import (
     build_comparison_table, run_analysis, _tuned_candidate, REPRESENTATIVE_SPAN_K,
@@ -9,8 +9,8 @@ from core.cascade import GD_FAMILY, LAFESIH_FAMILY, MNFEPSI_FAMILY
 
 
 def test_build_comparison_table_covers_all_eight_candidates_per_span():
-    # Updated for Phase 25 (adds MNCUCOGE_FAMILY, the Mn1-xCuxCoGe
-    # candidate) -- was 7 candidates as of Phase 24.
+    # Updated for (adds MNCUCOGE_FAMILY, the Mn1-xCuxCoGe
+    # candidate) -- was 7 candidates as of .
     rows = build_comparison_table(spans_K=(10.0,))
     candidates = {r["candidate"] for r in rows}
     assert len(candidates) == 8
@@ -69,7 +69,7 @@ def test_fallback_candidates_are_not_given_a_fake_independent_rank(tmp_path):
     run_analysis(out_csv=str(out_csv), out_txt=str(out_txt))
     text = out_txt.read_text()
     assert "Not independently ranked" in text
-    # no numbered rank line ("  N. (Mn,Fe)2(P,Si)...") for the fallback candidate
+    # no numbered rank line (" N. (Mn,Fe)2(P,Si)...") for the fallback candidate
     for line in text.splitlines():
         if "(Mn,Fe)2(P,Si)" in line and line.strip()[:1].isdigit():
             assert False, f"fallback candidate given a fake numbered rank: {line!r}"

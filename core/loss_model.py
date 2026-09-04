@@ -33,7 +33,7 @@ The coefficients (k_eddy, k_pump, base_frac) are obtained by fitting a
 published operating conditions and calibrated flow rates. The CORE set
 (3 devices, 3 unknowns) is exactly determined.
 
-Phase 7 update: the fit is solved with non-negative least squares (NNLS,
+ update: the fit is solved with non-negative least squares (NNLS,
 Lawson & Hanson 1974, `scipy.optimize.nnls`) rather than unconstrained
 least squares with post-hoc clipping of negative coefficients to zero.
 NNLS is the correct tool once the physical constraint is "loss
@@ -44,14 +44,14 @@ that constraint and can silently mask an unstable fit. For the CORE
 3-point set the unconstrained optimum is already non-negative, so NNLS
 and the old lstsq-then-clip approach agree exactly (checked by
 `tests/test_loss_model.py`). For the EXTENDED 4-point set, NNLS
-removes the negative k_eddy/base_frac Phase 6 reported (`k_eddy=0` is
+removes the negative k_eddy/base_frac reported (`k_eddy=0` is
 now the constrained optimum instead of a clipped negative value), but
 leave-one-out error predicting the smallest device (Tušek, 5.3 W --
-Phase 31: Qc/Wp corrected from an old, unverified 6.5W/0.76W guessed
+Qc/Wp corrected from an old, unverified 6.5W/0.76W guessed
 point to a genuinely digitized one, see CALIBRATION_POINTS_CORE below)
 from the other three is now ~333% (down from ~680% under the old,
-pre-Phase-31 Tušek point, and from +1639% with plain lstsq before that,
-but still an order-of-magnitude miss) -- confirming Phase 6's conclusion
+previous Tušek point, and from +1639% with plain lstsq before that,
+but still an order-of-magnitude miss) -- confirming the earlier conclusion
 that pooling four orders of magnitude of device scale needs a structural
 change to the model, not just a better-behaved solver or better-sourced
 calibration data.
@@ -61,7 +61,7 @@ hypothesis -- that this is a simple device-size effect, i.e. that
 smaller devices carry proportionally more fixed (non-Qc-scaling)
 overhead. Sorting the four devices by Qc shows this does NOT hold in
 the fixed-overhead/economies-of-scale direction: the smallest device
-(Tušek, 5.3 W -- Phase 31: updated from the old 6.5W point, see above)
+(Tušek, 5.3 W -- updated from the old 6.5W point, see above)
 has the *lowest* parasitic fraction (13.8%), and the
 largest (Astronautics, 2502 W) has the *highest* (45.3%) -- the
 opposite of what a fixed-overhead story predicts (which would put
@@ -84,12 +84,12 @@ is independently flagged by its own source paper as reflecting
 device-specific engineering choice), not a generic size law, and with
 only 4 points spanning orders of magnitude in scale and design era,
 a genuinely monotonic trend by itself is not strong evidence of a real
-physical size law either. So a size/scale *term* -- as the Phase 6
+physical size law either. So a size/scale *term* -- as the
 write-up speculated -- is still not adopted here; what varies
 device-to-device looks more like motor/inverter efficiency class and
 drivetrain topology (rotary vs. reciprocating single-bed) than raw
 cooling capacity. Flagged as a
-correction to the Phase 7 roadmap: more benchmark devices with
+correction to the roadmap: more benchmark devices with
 independently reported component efficiencies, not a size term, is the
 concrete next step.
 
@@ -97,8 +97,8 @@ A fifth candidate dataset (Risø/DTU 2011, 30 K span) could not be
 calibrated because the corresponding operating point does not yield
 positive cooling capacity under the present AMR model.
 
-Phase 15 note -- "does a rotary-specific loss term belong here?" (this
-question was re-raised going into Phase 15; re-checking the existing
+ note -- "does a rotary-specific loss term belong here?" (this
+question was re-raised going into ; re-checking the existing
 analysis below shows it was already answered, no new code needed): YES,
 in the specific, data-supported sense already implemented as
 `RotaryDriveLossModel` below, and NO in the broader "flag every rotary
@@ -195,8 +195,8 @@ from scipy.optimize import nnls
 # Verified by directly checking whether they reproduce their own literature
 # Qc under amr_cycle.py's CURRENT cooling_capacity() -- none did:
 #   Astronautics: old mdot=1.0854 -> predicted 10734W, not 2502W (4.3x off)
-#   DTU:          old mdot=0.3251 -> predicted 1343W,  not  818W (1.64x off)
-#   Tusek:        old mdot=0.0045 -> predicted   12W,  not  6.5W (1.86x off)
+#   DTU:          old mdot=0.3251 -> predicted 1343W, not 818W (1.64x off)
+#   Tusek:        old mdot=0.0045 -> predicted 12W, not 6.5W (1.86x off)
 # i.e. the cooling-capacity model was changed at some point after these
 # were hardcoded (most likely the NTU thermal-model work) and this
 # calibration set was never re-synced -- meaning every downstream user of
@@ -217,7 +217,7 @@ from scipy.optimize import nnls
 # `tests/test_loss_model.py::test_core_calibration_points_are_self_consistent`
 # guards against this drifting again silently.
 CALIBRATION_POINTS_CORE = [
-    # CITATION AUDIT (Phase 30, CITATION_AUDIT_PHASE30.md items 1-2):
+    # CITATION AUDIT (, CITATION_AUDIT_PHASE30.md items 1-2):
     # Astronautics_rotary_2014 and DTU_Eriksen_rotary_Gd_2015 below were
     # independently re-verified this pass directly against their PDF
     # source text (Jacobs et al. and Eriksen et al. respectively, both
@@ -242,7 +242,7 @@ CALIBRATION_POINTS_CORE = [
     #   mdot_cal = 0.084666 kg/s  ->  Qc_model = 102.8W (exact match)
     #   COP_ideal = 14.73  ->  Wp_required = 102.8*(1/3.1 - 1/14.73) = 26.18W
     ("DTU_Eriksen_rotary_Gd_2015", 0.75, 1.13, 0.084666, 102.8, 26.18),
-    # Tusek: FIXED (Phase 31). Previously used the pre-correction field/mass/
+    # Tusek: FIXED . Previously used the pre-correction field/mass/
     # frequency (1.69T, 0.196kg, 0.25Hz) as a deliberate stopgap, because the
     # corrected, paper-verified operating point (1.15T, 0.1763kg, 0.3Hz) did
     # not calibrate at all against the old guessed (span=15K, Qc=6.5W) pair
@@ -286,7 +286,7 @@ CALIBRATION_POINTS_EXTENDED = CALIBRATION_POINTS_CORE + [
 # comes from that device's OWN calibrated mdot: Wp = Qc * (1/COP_lit -
 # 1/COP_ideal), same formula used to build CORE/EXTENDED above.
 #
-# CITATION AUDIT FLAG (Phase 30, CITATION_AUDIT_PHASE30.md item 4 --
+# CITATION AUDIT FLAG (, CITATION_AUDIT_PHASE30.md item 4 --
 # UPDATED/RESOLVED by a follow-up web search pass, see item 4a below):
 # the "2016" citation itself is CORRECT. Lozano, Capovilla, Trevizoli,
 # Bahl, Engelbrecht, Nielsen, Barbosa, "Development of a novel rotary
@@ -376,7 +376,7 @@ CALIBRATION_POINTS_CORE_PLUS_MAGGIE_HIGHSPAN = CALIBRATION_POINTS_CORE + [
     ("DTU_Eriksen_MAGGIE_2016", 0.61, 1.13, 0.014650, 81.5, 14.23),
 ]
 
-# CORE_PLUS_TUSEK_MULTIPOINT (Phase 33): the SAME experiment as
+# CORE_PLUS_TUSEK_MULTIPOINT : the SAME experiment as
 # CORE_PLUS_MAGGIE_HIGHSPAN just above, run against Tusek_singlebed_Gd_2010
 # instead of DTU_Eriksen_rotary_Gd_2015 -- CORE + 3 more points read off
 # the SAME device (Tusek AMR-A, 1.15T/0.1763kg/0.3Hz), at three DIFFERENT
@@ -384,7 +384,7 @@ CALIBRATION_POINTS_CORE_PLUS_MAGGIE_HIGHSPAN = CALIBRATION_POINTS_CORE + [
 # comment already flagged as available but unused ("several of the other 8
 # digitized AMR-A points do NOT calibrate... left undigitized-into-CSV" --
 # data/tusek_ate2013_figs/fig10_data.csv, fig11_data.csv). Directly tested
-# (Phase 33) which of those other 8 AMR-A points actually calibrate under
+#  which of those other 8 AMR-A points actually calibrate under
 # this repo's CURRENT cooling_capacity() model (same brentq(qc_residual,
 # 1e-6, 5.0) procedure CORE itself uses): 3 of the remaining 8 do, 5 do
 # not (V*=0.42/span=13.38K and the four near-zero "endpoint"/
@@ -448,8 +448,8 @@ def leave_one_out_cv(points=None, verbose=True):
         err_pct = 100 * (Wp_pred - Wp_true) / Wp_true if Wp_true != 0 else float("nan")
         results.append((name, Wp_true, Wp_pred, err_pct))
         if verbose:
-            print(f"  held out {name:<28} W_parasitic true={Wp_true:8.2f}W  "
-                  f"predicted={Wp_pred:8.2f}W  error={err_pct:+7.1f}%")
+            print(f" held out {name:<28} W_parasitic true={Wp_true:8.2f}W "
+                  f"predicted={Wp_pred:8.2f}W error={err_pct:+7.1f}%")
     return results
 
 
@@ -472,23 +472,23 @@ def calibrate_loss_coefficients(points=None, verbose=True, label="CORE (producti
               f"{len(points)} points, 3 unknowns "
               f"({'exactly-determined' if len(points) == 3 else 'over-determined'}, "
               f"NNLS, residual norm={resid_norm:.4f}):")
-        print(f"  k_eddy    = {k_eddy: .6f}  W / (Hz^2 * T^2)")
-        print(f"  k_pump    = {k_pump: .6f}  W / (kg/s)^2")
-        print(f"  base_frac = {base_frac: .6f}  (dimensionless, x Qc)")
-        print("  Fit residuals (predicted - required W_parasitic):")
+        print(f" k_eddy    = {k_eddy: .6f}  W / (Hz^2 * T^2)")
+        print(f" k_pump    = {k_pump: .6f}  W / (kg/s)^2")
+        print(f" base_frac = {base_frac: .6f}  (dimensionless, x Qc)")
+        print(" Fit residuals (predicted - required W_parasitic):")
         for (name, *_, Wp_true), Wp_pred in zip(points, pred):
-            print(f"    {name:<28} true={Wp_true:8.2f}W  fit={Wp_pred:8.2f}W  "
+            print(f"    {name:<28} true={Wp_true:8.2f}W fit={Wp_pred:8.2f}W "
                   f"resid={Wp_pred - Wp_true:+7.2f}W")
         for c, name in zip(coeffs, ["k_eddy", "k_pump", "base_frac"]):
             if c == 0.0:
-                print(f"  NOTE: {name} pinned to 0 by the non-negativity "
+                print(f" NOTE: {name} pinned to 0 by the non-negativity "
                       "constraint (the unconstrained optimum was negative here).")
     return {"k_eddy": k_eddy, "k_pump": k_pump,
             "base_frac": base_frac, "raw": coeffs}
 
 
 def analyze_parasitic_fraction_scaling(points=None, verbose=True):
-    """Tests the hypothesis (raised in the Phase 6 write-up) that the loss
+    """Tests the hypothesis (raised in the write-up) that the loss
     model's cross-device instability is a simple device-*size* effect --
     e.g. small devices carrying proportionally more fixed overhead. Sorts
     the benchmark devices by Qc and reports the parasitic fraction
@@ -500,13 +500,13 @@ def analyze_parasitic_fraction_scaling(points=None, verbose=True):
     if verbose:
         print("Parasitic fraction (W_parasitic / Qc) sorted by device scale:")
         for name, Qc, frac in rows:
-            print(f"    {name:<28} Qc={Qc:8.1f} W   fraction={frac:.3f}")
+            print(f"    {name:<28} Qc={Qc:8.1f} W fraction={frac:.3f}")
         fracs = [r[2] for r in rows]
         monotonic = all(fracs[i] <= fracs[i + 1] for i in range(len(fracs) - 1)) or \
                     all(fracs[i] >= fracs[i + 1] for i in range(len(fracs) - 1))
-        print(f"  Monotonic in device scale? {monotonic}")
+        print(f" Monotonic in device scale? {monotonic}")
         if not monotonic:
-            print(f"  CONCLUSION: no monotonic size trend in this {len(rows)}-point "
+            print(f" CONCLUSION: no monotonic size trend in this {len(rows)}-point "
                   "set -- the smallest device (Tusek, 6.5W) does NOT have the "
                   "highest overhead fraction, and the largest (Astronautics, "
                   "2502W) does NOT have the lowest. A simple size/scale term is "
@@ -520,7 +520,7 @@ def analyze_parasitic_fraction_scaling(points=None, verbose=True):
                   "well above Okamura (200W, 0.367) and Astronautics (2502W, "
                   "0.453) -- i.e. grouped by device/paper, not ordered by scale.")
         else:
-            print("  NOTE (Paper-Mining Pass Part 6): with the DTU point corrected "
+            print(" NOTE (Paper-Mining Pass Part 6): with the DTU point corrected "
                   "from its old fabricated 818W/0.171 figure to the verified "
                   "102.8W/0.255 figure, this 4-point EXTENDED set is now "
                   "monotonically INCREASING with Qc -- the opposite direction "
@@ -540,18 +540,18 @@ def run_extended_diagnostic():
     print("=" * 90)
     calibrate_loss_coefficients(CALIBRATION_POINTS_EXTENDED, verbose=True,
                                   label="EXTENDED (4pt, diagnostic only, NNLS)")
-    print("\n  Leave-one-out cross-validation on the EXTENDED set (NNLS per fold):")
+    print("\n Leave-one-out cross-validation on the EXTENDED set (NNLS per fold):")
     loo = leave_one_out_cv(CALIBRATION_POINTS_EXTENDED, verbose=True)
     worst = max(loo, key=lambda r: abs(r[3]))
-    print(f"\n  CONCLUSION: switching from unconstrained lstsq to NNLS removes the "
-          f"negative (unphysical) coefficients Phase 6 found, and improves the "
+    print(f"\n CONCLUSION: switching from unconstrained lstsq to NNLS removes the "
+          f"negative (unphysical) coefficients found, and improves the "
           f"worst leave-one-out error from +1639% to {worst[3]:+.0f}% "
           f"(held-out device: {worst[0]}) -- but that is still an order-of-"
           f"magnitude miss. A better-behaved solver alone does not make a "
           f"single linear model generalize across devices spanning 6.5W to "
           f"2502W of cooling capacity. The CORE 3-point fit remains the "
           f"production default.")
-    print("\n  Testing the natural next hypothesis -- that this is a simple "
+    print("\n Testing the natural next hypothesis -- that this is a simple "
           "device-size effect:")
     analyze_parasitic_fraction_scaling(CALIBRATION_POINTS_EXTENDED, verbose=True)
 
@@ -574,12 +574,12 @@ def run_further_extended_diagnostic():
     print("=" * 90)
     calibrate_loss_coefficients(CALIBRATION_POINTS_FURTHER_EXTENDED, verbose=True,
                                   label="FURTHER_EXTENDED (8pt, diagnostic only, NNLS)")
-    print("\n  Leave-one-out cross-validation on the FURTHER_EXTENDED set (NNLS per fold):")
+    print("\n Leave-one-out cross-validation on the FURTHER_EXTENDED set (NNLS per fold):")
     loo = leave_one_out_cv(CALIBRATION_POINTS_FURTHER_EXTENDED, verbose=True)
     worst = max(loo, key=lambda r: abs(r[3]))
     lozano_loo = [r for r in loo if r[0].startswith("Lozano")]
     lozano_mean_err = np.mean([r[3] for r in lozano_loo])
-    print(f"\n  CONCLUSION: the naive 'worst leave-one-out error' metric actually "
+    print(f"\n CONCLUSION: the naive 'worst leave-one-out error' metric actually "
           f"IMPROVES with 8 points ({worst[3]:+.0f}%, held-out device: {worst[0]}) "
           f"versus the 4-point EXTENDED set's +682% -- but this is misleading, "
           f"not genuine progress: it happens because Tusek's small W_parasitic "
@@ -596,7 +596,7 @@ def run_further_extended_diagnostic():
           f"state-variable-only loss model (frequency, field, mdot, Qc) cannot "
           f"represent, regardless of solver. The CORE 3-point fit remains the "
           f"production default.")
-    print("\n  Re-testing scale monotonicity with the enlarged 8-device set:")
+    print("\n Re-testing scale monotonicity with the enlarged 8-device set:")
     analyze_parasitic_fraction_scaling(CALIBRATION_POINTS_FURTHER_EXTENDED, verbose=True)
 
 
@@ -619,9 +619,9 @@ def run_core_plus_maggie_highspan_diagnostic():
     print("=" * 90)
     calibrate_loss_coefficients(CALIBRATION_POINTS_CORE_PLUS_MAGGIE_HIGHSPAN, verbose=True,
                                   label="CORE_PLUS_MAGGIE_HIGHSPAN (4pt, NNLS)")
-    print("\n  Leave-one-out cross-validation (NNLS per fold):")
+    print("\n Leave-one-out cross-validation (NNLS per fold):")
     loo_4pt = leave_one_out_cv(CALIBRATION_POINTS_CORE_PLUS_MAGGIE_HIGHSPAN, verbose=True)
-    print("\n  Same three folds under the 3-point CORE set alone, for direct comparison:")
+    print("\n Same three folds under the 3-point CORE set alone, for direct comparison:")
     loo_3pt = leave_one_out_cv(CALIBRATION_POINTS_CORE, verbose=True)
     err_3pt = {r[0]: r[3] for r in loo_3pt}
     lines = []
@@ -632,10 +632,10 @@ def run_core_plus_maggie_highspan_diagnostic():
         else:
             lines.append(f"    {name:<28} (new point, no 3pt baseline) "
                           f"CORE_PLUS_MAGGIE_HIGHSPAN(4pt)={err4:+7.1f}%")
-    print("\n  Per-device comparison:")
+    print("\n Per-device comparison:")
     for line in lines:
         print(line)
-    print(f"\n  CONCLUSION: unlike EXTENDED/FURTHER_EXTENDED (which add devices spanning "
+    print(f"\n CONCLUSION: unlike EXTENDED/FURTHER_EXTENDED (which add devices spanning "
           f"additional orders of magnitude and do NOT generalize -- see "
           f"run_extended_diagnostic()/run_further_extended_diagnostic() above), this point "
           f"is the SAME physical prototype as an existing CORE point at a different "
@@ -669,12 +669,12 @@ def run_core_plus_tusek_multipoint_diagnostic():
     print("=" * 90)
     calibrate_loss_coefficients(CALIBRATION_POINTS_CORE_PLUS_TUSEK_MULTIPOINT, verbose=True,
                                   label="CORE_PLUS_TUSEK_MULTIPOINT (6pt, NNLS)")
-    print("\n  Leave-one-out cross-validation (NNLS per fold):")
+    print("\n Leave-one-out cross-validation (NNLS per fold):")
     loo_6pt = leave_one_out_cv(CALIBRATION_POINTS_CORE_PLUS_TUSEK_MULTIPOINT, verbose=True)
-    print("\n  Same three folds under the 3-point CORE set alone, for direct comparison:")
+    print("\n Same three folds under the 3-point CORE set alone, for direct comparison:")
     loo_3pt = leave_one_out_cv(CALIBRATION_POINTS_CORE, verbose=True)
     err_3pt = {r[0]: r[3] for r in loo_3pt}
-    print("\n  Per-device comparison:")
+    print("\n Per-device comparison:")
     for name, _true, _pred, err6 in loo_6pt:
         if name in err_3pt:
             print(f"    {name:<32} CORE(3pt)={err_3pt[name]:+7.1f}%  "
@@ -688,14 +688,14 @@ def run_core_plus_tusek_multipoint_diagnostic():
     old_tusek_err_3pt = err_3pt.get("Tusek_singlebed_Gd_2010")
     tusek_err_6pt = [r[3] for r in loo_6pt if r[0] == "Tusek_singlebed_Gd_2010"]
     tusek_err_6pt = tusek_err_6pt[0] if tusek_err_6pt else None
-    print(f"\n  CONCLUSION (honest, NOT the rosier MAGGIE-style result): the original "
+    print(f"\n CONCLUSION (honest, NOT the rosier MAGGIE-style result): the original "
           f"Tusek_singlebed_Gd_2010 point's own held-out error moves only marginally, "
           f"{old_tusek_err_3pt:+.0f}% (3pt CORE) to {tusek_err_6pt:+.0f}% (6pt) -- but the "
           f"3 NEW points' OWN held-out errors are dramatically WORSE "
           f"({', '.join(f'{e:+.0f}%' for e in new_point_errs)}), not comparable to the "
           f"~250-700% range run_core_plus_maggie_highspan_diagnostic() found. This does "
           f"NOT confirm 'same device class generalizes' the way the MAGGIE experiment did --")
-    print(f"  it reveals a DIFFERENT, previously-untested effect the MAGGIE experiment could "
+    print(f" it reveals a DIFFERENT, previously-untested effect the MAGGIE experiment could "
           f"not have shown (it added only one point, with no same-family point small enough "
           f"to expose this): these 3 new points' TRUE Wp_required values are tiny "
           f"(0.14-0.79W, vs. MAGGIE's 14.23W and the other CORE points' tens-to-thousands of "
@@ -770,9 +770,9 @@ def fit_rotary_drive_term(points=None, verbose=True):
     if verbose:
         print(f"Rotary-drive term fit to Lozano et al. (2016) Table 3 WM data "
               f"({len(f)} points):")
-        print(f"  W_drive(f) = {k_drive0:.2f} + {k_drive1:.2f} * f    "
+        print(f" W_drive(f) = {k_drive0:.2f} + {k_drive1:.2f} * f "
               f"[W, f in Hz]   R^2={r2:.3f}")
-        print(f"  (i.e. a large near-constant ~{k_drive0:.0f}W drivetrain "
+        print(f" (i.e. a large near-constant ~{k_drive0:.0f}W drivetrain "
               f"overhead plus a weak, roughly-linear-in-f term -- NOT an "
               f"eddy-current f^2 scaling)")
     return {"k_drive0": float(k_drive0), "k_drive1": float(k_drive1), "r2": r2}
@@ -793,10 +793,10 @@ class StateDependentLossModel:
                          intragranular_eddy_power_W=0.0):
         """W_eddy + W_pump + W_base, as documented in the module docstring.
 
-        Phase 15 addition: `pumping_power_override`, default None, changes
+         addition: `pumping_power_override`, default None, changes
         NOTHING about existing behaviour when omitted (every existing
         caller -- amr_cycle.py without a particle_diameter, sensitivity.py,
-        rsm.py, the pre-Phase-15 optimize.py -- keeps getting the
+        rsm.py, the previous optimize.py -- keeps getting the
         CORE-calibrated generic W_pump = k_pump*mdot**2 term exactly as
         before). When provided, it REPLACES that generic Darcy-flow term
         with a caller-supplied geometry-explicit hydraulic pumping-power
@@ -806,13 +806,13 @@ class StateDependentLossModel:
         factor correlation) is not DOUBLE-COUNTED against this module's
         own generic, independently-CORE-calibrated k_pump term -- see
         core/amr_cycle.py's AMRSystem docstring and core/optimize.py's
-        Phase 15 section for the full reasoning. k_eddy and base_frac are
+         section for the full reasoning. k_eddy and base_frac are
         unaffected either way, since geometry does not change eddy-current
         or baseline-electronics losses.
 
-        Phase 27 addition: `intragranular_eddy_power_W`, default 0.0,
+         addition: `intragranular_eddy_power_W`, default 0.0,
         changes NOTHING about existing behavior when omitted (every
-        pre-Phase-27 caller keeps getting exactly W_eddy + W_pump + W_base
+        previous caller keeps getting exactly W_eddy + W_pump + W_base
         as before). When provided (by amr_cycle.AMRSystem when a
         particle_diameter is set -- see its own `_geometry_eddy_power_W()`),
         it is ADDED to (not swapped in place of) the CORE-calibrated

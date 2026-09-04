@@ -1,0 +1,26 @@
+Open item (see ROADMAP.md, and this module's own honesty flag #1):
+does the ON/OFF La(Fe,Si)13Hy-share reversal found at pop_size=32/n_gen=15/
+seed=1 (88% OFF -> 100% ON) hold at production pop_size/n_gen settings and
+across multiple seeds, or was it search noise at the smaller setting?
+
+Settings: pop_size=40, n_gen=25, seeds=[1, 2, 3]
+
+  seed   frac_OFF    frac_ON  front_OFF   front_ON
+--------------------------------------------------
+     1      100%      100%         23         21
+     2      100%       91%         21         23
+     3       95%      100%         20         15
+--------------------------------------------------
+
+RESULT: NOT STABLE. At least one seed's ON run had a LOWER La(Fe,Si)13Hy
+share than its own OFF run -- the direction of the original
+pop_size=32/n_gen=15/seed=1 finding does NOT hold universally across
+seeds at production settings. Treat the original 88%->100% finding as
+seed-dependent, not a settled result -- see the per-seed table above for
+which seed(s) disagree.
+
+Caveat carried over unchanged from this module's own honesty flag #2: the
+hysteresis_loss_J_per_kg VALUES this whole comparison depends on remain
+literature analogs for different exact compositions, not measurements of
+the calibrated compositions themselves -- this check resolves the
+NSGA-III-search-noise question, not the underlying-data-quality question.

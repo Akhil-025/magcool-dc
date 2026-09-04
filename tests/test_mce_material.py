@@ -18,7 +18,7 @@ this module (see mce_material.py docstrings for the full explanation):
 import numpy as np
 import pytest
 
-from core.mce_material import GADOLINIUM, kB
+from core.mce_material import GADOLINIUM, kB, MagnetocaloricMaterial
 
 
 def test_magnetization_converges_quickly():
@@ -109,3 +109,98 @@ def test_first_order_material_flagged_in_source_metadata():
     from core.mce_material import GD5SI2GE2
     assert GD5SI2GE2.Tc == pytest.approx(276.0)
     assert "Pecharsky" in GD5SI2GE2.source
+
+
+def test_electronic_heat_capacity_zero_for_default_materials():
+    """Sommerfeld term defaults to 0.0 -- must not silently appear for
+    materials that don't specify a gamma (GD5SI2GE2, LACAMNO3)."""
+    from core.mce_material import GD5SI2GE2, LACAMNO3
+    T = np.array([294.0])
+    assert GD5SI2GE2.electronic_heat_capacity(T)[0] == 0.0
+    assert LACAMNO3.electronic_heat_capacity(T)[0] == 0.0
+
+
+def test_gadolinium_electronic_heat_capacity_matches_cited_gamma():
+    """GADOLINIUM.sommerfeld_gamma_J_per_molK2 = 5.4 mJ/(mol K^2) (de
+    Oliveira & von Ranke, Phys. Rep. 489 (2010), Sec. 4.2) -> C_el(294K)
+    = gamma*T/M_molar."""
+    T = np.array([294.0])
+    expected = 5.4e-3 * 294.0 / GADOLINIUM.M_molar
+    assert GADOLINIUM.electronic_heat_capacity(T)[0] == pytest.approx(expected, rel=1e-9)
+
+
+def test_total_heat_capacity_includes_electronic_term():
+    T = np.array([294.0])
+    C_no_el = GADOLINIUM.lattice_heat_capacity(T) + GADOLINIUM.magnetic_heat_capacity(T, 0.0)
+    C_total = GADOLINIUM.total_heat_capacity(T, 0.0)
+    assert C_total[0] > C_no_el[0]
+    assert C_total[0] == pytest.approx(
+        (C_no_el + GADOLINIUM.electronic_heat_capacity(T))[0], rel=1e-9)
+
+
+def test_entropy_lattice_positive_and_increasing_with_temperature():
+    """Third law + monotonicity: S_lattice(T) >= 0 and increases with T."""
+    T = np.array([50.0, 150.0, 294.0, 500.0])
+    S = GADOLINIUM.entropy_lattice(T)
+    assert np.all(S >= 0)
+    assert np.all(np.diff(S) > 0)
+
+
+def test_entropy_lattice_high_T_dulong_petit_limit():
+    """At T >> theta_D, S_lattice should approach the Dulong-Petit-consistent
+    high-T expansion 3*n*R*[1/3 + ln(T/theta_D)] (per mole), i.e. grow
+    logarithmically -- loose sanity check, not a tight fit."""
+    R = 8.314462618
+    T_lo, T_hi = 5000.0, 50000.0
+    S_lo = GADOLINIUM.entropy_lattice(np.array([T_lo]))[0] * GADOLINIUM.M_molar
+    S_hi = GADOLINIUM.entropy_lattice(np.array([T_hi]))[0] * GADOLINIUM.M_molar
+    expected_diff = 3 * R * np.log(T_hi / T_lo)
+    assert (S_hi - S_lo) == pytest.approx(expected_diff, rel=0.05)
+
+
+def test_total_entropy_equals_sum_of_parts():
+    T = np.array([294.0])
+    H = 1.0 / (4 * np.pi * 1e-7)
+    total = GADOLINIUM.total_entropy(T, H)
+    parts = (GADOLINIUM.entropy_lattice(T) + GADOLINIUM.entropy_magnetic(T, H)
+             + GADOLINIUM.electronic_entropy(T))
+    assert total[0] == pytest.approx(parts[0], rel=1e-9)
+
+
+def test_delta_T_adiabatic_exact_zero_field_step_is_zero():
+    """No field change -> no temperature change, by construction of the
+    isentropic root-solve (S(T,H)=S(T,H) trivially at T2=T1)."""
+    mu0 = 4 * np.pi * 1e-7
+    dT = GADOLINIUM.delta_T_adiabatic_exact(294.0, 1.0 / mu0, H_initial=1.0 / mu0)
+    assert dT == pytest.approx(0.0, abs=1e-4)
+
+
+def test_delta_T_adiabatic_exact_matches_linear_for_small_field_step():
+    """For a small field step, the exact isentropic solve and the linear
+    -T*dS/C approximation should agree closely (the linear formula is a
+    first-order Taylor expansion of the exact one, valid in this limit --
+    de Oliveira & von Ranke, Phys. Rep. 489 (2010), Sec. 2.1)."""
+    mu0 = 4 * np.pi * 1e-7
+    H_small = 0.02 / mu0  # 0.02 T, a genuinely small step
+    T = np.array([294.0])
+    dT_linear = float(GADOLINIUM.delta_T_adiabatic(T, H_small)[0])
+    dT_exact = GADOLINIUM.delta_T_adiabatic_exact(294.0, H_small)
+    # T=294K sits right at the sharp lambda-anomaly, so even a "small" field
+    # step retains some curvature error -- 10% here is still a meaningful
+    # small-step agreement check, not a loosened pass condition.
+    assert dT_exact == pytest.approx(dT_linear, rel=0.10)
+
+
+def test_delta_T_adiabatic_exact_reduces_dankov_error_vs_linear():
+    """The whole point of the fix: at the actual Dan'kov et al. (1998)
+    calibration fields (1-5T, well outside the small-step regime above),
+    the exact isentropic method should sit closer to the literature value
+    than the old linear approximation, at every field."""
+    mu0 = 4 * np.pi * 1e-7
+    for B, dT_lit in ((1.0, 3.2), (2.0, 5.8), (5.0, 12.3)):
+        H = B / mu0
+        dT_linear = float(GADOLINIUM.delta_T_adiabatic(np.array([294.0]), H)[0])
+        dT_exact = GADOLINIUM.delta_T_adiabatic_exact(294.0, H)
+        err_linear = abs(dT_linear - dT_lit)
+        err_exact = abs(dT_exact - dT_lit)
+        assert err_exact < err_linear

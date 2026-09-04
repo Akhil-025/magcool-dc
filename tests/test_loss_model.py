@@ -17,7 +17,7 @@ from core.mce_material import GADOLINIUM
 _SELF_CONSISTENCY_SPANS = {
     "Astronautics_rotary_2014": 11.0,
     "DTU_Eriksen_rotary_Gd_2015": 10.2,
-    # Phase 31: updated from the old 15.0K guessed span to the genuinely
+    # updated from the old 15.0K guessed span to the genuinely
     # digitized 7.26K point now used in CALIBRATION_POINTS_CORE (see that
     # module's comment for the fig10_data.csv/fig11_data.csv provenance).
     "Tusek_singlebed_Gd_2010": 7.26,
@@ -29,7 +29,7 @@ _SELF_CONSISTENCY_SPANS = {
 }
 _SELF_CONSISTENCY_MASS = {
     "Astronautics_rotary_2014": 1.52, "DTU_Eriksen_rotary_Gd_2015": 1.7,
-    # Phase 31: updated from the pre-correction 0.196kg placeholder to the
+    # updated from the pre-correction 0.196kg placeholder to the
     # paper-verified 0.1763kg used in CALIBRATION_POINTS_CORE and
     # data/amr_experimental_benchmarks.csv (Table 1 / Abstract).
     "Tusek_singlebed_Gd_2010": 0.1763,
@@ -146,7 +146,7 @@ def test_loss_model_exactly_determined_zero_residual():
 
 
 def test_nnls_extended_fit_is_nonnegative():
-    """Phase 6 found the unconstrained lstsq fit on the 4-point EXTENDED set
+    """ found the unconstrained lstsq fit on the 4-point EXTENDED set
     gives negative k_eddy/base_frac. NNLS must give a non-negative fit by
     construction -- this is the whole point of switching solvers."""
     cal = calibrate_loss_coefficients(CALIBRATION_POINTS_EXTENDED, verbose=False,
@@ -158,8 +158,8 @@ def test_nnls_extended_fit_is_nonnegative():
 
 def test_nnls_loo_error_improves_but_remains_large():
     """NNLS should improve (reduce) the worst leave-one-out error on the
-    EXTENDED set relative to the +1639% Phase 6 reported with plain lstsq,
-    but should NOT bring it down to a "solved" small error -- the Phase 7
+    EXTENDED set relative to the +1639%  reported with plain lstsq,
+    but should NOT bring it down to a "solved" small error -- the
     finding is that a better solver helps but does not fix the underlying
     structural mismatch across four orders of magnitude of device scale."""
     loo = leave_one_out_cv(CALIBRATION_POINTS_EXTENDED, verbose=False)
@@ -179,7 +179,7 @@ def test_further_extended_fit_is_nonnegative():
 
 
 def test_further_extended_lozano_points_consistently_underpredicted():
-    """Phase 7 finding: when each Lozano point is held out, the pooled fit
+    """ finding: when each Lozano point is held out, the pooled fit
     consistently UNDERpredicts its required W_parasitic by a similar
     amount (all leave-one-out errors strongly negative and clustered
     within about 12 points of each other) rather than scattering randomly
@@ -203,7 +203,7 @@ def test_further_extended_lozano_points_consistently_underpredicted():
 
 
 def test_parasitic_fraction_scaling_is_monotonically_increasing_with_qc():
-    """The Phase 6 write-up speculated that a size/scale term (smaller
+    """The write-up speculated that a size/scale term (smaller
     devices carrying proportionally more FIXED overhead, i.e. fraction
     FALLING with Qc) would fix the loss model.
 

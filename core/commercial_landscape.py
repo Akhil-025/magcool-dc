@@ -1,7 +1,7 @@
 """
 commercial_landscape.py
 ========================
-Phase 24 addition.
+ addition.
 
 Magnetocaloric cooling for data centers stopped being a purely theoretical
 question during this project's own lifetime: Magnotherm (DE) announced
@@ -188,12 +188,12 @@ def model_prediction_at_cooltech_point(mu0H_max=1.5, frequency=2.0,
         print(f"Model prediction at Cooltech-class point "
               f"(span={span_K}K, mu0H={mu0H_max}T, f={frequency}Hz, "
               f"mdot={fluid_mdot}kg/s, mass={mass_regenerator}kg):")
-        print(f"  COP_electrical (this model, CORE calibration) = {res.COP_electrical:.2f}")
-        print(f"  Qc = {res.Qc:.1f} W")
-        print(f"  Cooltech claimed COP (trade press, unverified) = "
+        print(f" COP_electrical (this model, CORE calibration) = {res.COP_electrical:.2f}")
+        print(f" Qc = {res.Qc:.1f} W")
+        print(f" Cooltech claimed COP (trade press, unverified) = "
               f"{cooltech.claimed_COP_range}")
-        print(f"  Gap vs. claimed midpoint: {gap_pct:+.1f}%")
-        print("  HONEST FRAMING FOR THE PAPER: this repo's own "
+        print(f" Gap vs. claimed midpoint: {gap_pct:+.1f}%")
+        print(" HONEST FRAMING FOR THE PAPER: this repo's own "
               "amr_experimental_benchmarks.csv already documents that the "
               "CORE loss-model calibration does not reproduce "
               "Cooltech_France_2016 at any tested flow rate. A large gap "
@@ -222,10 +222,10 @@ def write_commercial_landscape_report(path="results/commercial_landscape.txt"):
         if not c.is_magnetocaloric:
             continue
         lines.append(f"* {c.name}")
-        lines.append(f"    capacity: {c.claimed_capacity_kW} kW  "
+        lines.append(f" capacity: {c.claimed_capacity_kW} kW "
                       f"COP: {c.claimed_COP_range or c.claimed_COP}")
-        lines.append(f"    status: {c.status_2026}")
-        lines.append(f"    source: {c.source_note}")
+        lines.append(f" status: {c.status_2026}")
+        lines.append(f" source: {c.source_note}")
         lines.append("")
     lines.append("Naming-collision systems (NOT magnetocaloric, documented for disambiguation):")
     lines.append("-" * 60)
@@ -237,10 +237,10 @@ def write_commercial_landscape_report(path="results/commercial_landscape.txt"):
     gap = model_prediction_at_cooltech_point(verbose=False)
     lines.append("This model vs. Cooltech's own data-center-oriented claim:")
     lines.append("-" * 60)
-    lines.append(f"  model COP_electrical = {gap['model_COP_electrical']:.2f}")
-    lines.append(f"  Cooltech claimed COP range = {gap['cooltech_claimed_COP_range']}")
-    lines.append(f"  gap vs. claimed midpoint = {gap['gap_pct_vs_claimed_midpoint']:+.1f}%")
-    lines.append("  (see docstring / run this module directly for full honest framing)")
+    lines.append(f" model COP_electrical = {gap['model_COP_electrical']:.2f}")
+    lines.append(f" Cooltech claimed COP range = {gap['cooltech_claimed_COP_range']}")
+    lines.append(f" gap vs. claimed midpoint = {gap['gap_pct_vs_claimed_midpoint']:+.1f}%")
+    lines.append(" (see docstring / run this module directly for full honest framing)")
     with open(path, "w") as f:
         f.write("\n".join(lines) + "\n")
     print(f"Wrote {path}")

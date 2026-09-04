@@ -1,5 +1,5 @@
 """
-Tests for the Phase 28 addition: AMRSystem's pump_motor_efficiency
+Tests for the addition: AMRSystem's pump_motor_efficiency
 parameter and its effect on _geometry_pumping_power_W().
 """
 import pytest
@@ -19,7 +19,7 @@ def _make_system(**kwargs):
 
 def test_default_pump_motor_efficiency_is_one():
     """Default must be 1.0 (idealized, no loss) -- preserves every
-    pre-Phase-28 caller's behavior exactly, since particle_diameter is
+    previous caller's behavior exactly, since particle_diameter is
     always set by optimize.py's NSGA-III search."""
     sys_ = _make_system()
     assert sys_.pump_motor_efficiency == 1.0

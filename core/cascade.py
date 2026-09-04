@@ -17,20 +17,20 @@ reject the same cooling load (steady state, neglecting inter-stage losses):
 
 run_cascade()/compare_staging() below assume identical regenerator stages
 (all Gd, or all Gd5Si2Ge2). run_graded_cascade()/compare_graded_cascade()
-implement the more advanced Curie-graded variant (ROADMAP.md Phase 7 open
+implement the more advanced Curie-graded variant (ROADMAP.md open
 item): each stage uses a hypothetical composition-tuned Gd5(SixGe1-x)4(-Ga)
 material whose own peak MCE effect is matched to that stage's local
 operating temperature, checked against the literature-documented
 composition-tunability range and against an independent direct-measurement
 validation (see core/first_order_mce.py and core/giguere_validation.py).
 
-Phase 9 addendum: the Curie-graded machinery was generalized to a pluggable
+ addendum: the Curie-graded machinery was generalized to a pluggable
 `GradedFamily` (see below) rather than being hardcoded to the Gd5(SixGe1-x)4
 family, so the SAME grading mechanism can be applied to the La(Fe,Si)13Hy
-family added in Phase 9 (core.first_order_mce.lafesih_composition_tuned_material)
+family added in (core.first_order_mce.lafesih_composition_tuned_material)
 -- specifically to test whether a 6-layer Curie-graded La(Fe,Si)13Hy bed can
 reproduce the REAL Astronautics_rotary_2014 benchmark device (which is
-exactly such a bed), closing the gap validation_system.py's Phase 9
+exactly such a bed), closing the gap validation_system.py's
 single-layer approximation flagged as a "natural next step, not done here".
 GD_FAMILY below reproduces the original Gd5(SixGe1-x)4 behavior exactly
 (default argument, so existing calls are unaffected); LAFESIH_FAMILY is new.
@@ -116,7 +116,7 @@ MNFEPSI_FAMILY = GradedFamily(
     reference_material=MNFEPSI_FIRST_ORDER, fallback_material=GADOLINIUM,
 )
 
-# Phase 24: fourth pluggable family, Ga1-xCMn3+x (see
+# fourth pluggable family, Ga1-xCMn3+x (see
 # core/antiperovskite_material.py for the full literature-verification
 # writeup -- this is NOT the material a user-supplied "10 materials"
 # document named ("GaCMn3" at ~296K), which turned out on checking to be
@@ -137,7 +137,7 @@ GA1XCMN3X_FAMILY = GradedFamily(
     reference_material=GA1XCMN3X_REF, fallback_material=GADOLINIUM,
 )
 
-# Phase 25: fifth pluggable family, Mn1-xCuxCoGe (see the block comment
+# fifth pluggable family, Mn1-xCuxCoGe (see the block comment
 # above core/first_order_mce.py's MNCUCOGE_FIRST_ORDER for the full
 # literature-verification writeup). Unlike GA1XCMN3X_FAMILY (a SECOND-
 # order family reusing mce_material.py), this is a first-order Landau
@@ -154,7 +154,7 @@ MNCUCOGE_FAMILY = GradedFamily(
 
 
 # --------------------------------------------------------------------------
-# Phase 16: process-pool parallelization helpers.
+# process-pool parallelization helpers.
 #
 # GradedFamily objects themselves are never sent across a process boundary
 # (GD_FAMILY's tuned_fn is a lambda, and validate_astronautics_graded_bed()'s
@@ -226,7 +226,7 @@ def _single_threaded_blas_env():
 logger = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------
-# Phase 31: process-pool HANG robustness fix.
+# process-pool HANG robustness fix.
 #
 # What was actually wrong (found by directly running this project's own
 # test suite in a sandboxed/restricted container, not by inspection alone):
@@ -245,7 +245,7 @@ logger = logging.getLogger(__name__)
 # mode nothing raises, so the bare `except Exception:` never fires -- the
 # calling process (or `pytest`, or a live `main.py` run, or, worst case, a
 # grading/demo run under time pressure) just hangs forever. This is a
-# genuinely different failure mode from the ones this module's own Phase 16
+# genuinely different failure mode from the ones this module's own
 # docstring above already anticipated (unrecognized family objects,
 # single-cell sweeps, outright pool-creation failure) -- it was not
 # previously covered by any fallback.
@@ -294,18 +294,18 @@ def _pool_map_or_none(executor, worker_fn, args_list, timeout_s=_MAP_TIMEOUT_S):
     Does not shut the executor down -- callers that own the executor's
     lifecycle (rather than borrowing one built elsewhere) do that
     themselves via `_safe_pool_shutdown()` below."""
-    if getattr(executor, "_phase31_poisoned", False):
+    if getattr(executor, "_executor_poisoned", False):
         return None
     try:
         return list(executor.map(worker_fn, args_list, timeout=timeout_s))
     except Exception as exc:
         logger.warning(
-            "Phase 31: ProcessPoolExecutor.map() failed or exceeded its "
+            "ProcessPoolExecutor.map() failed or exceeded its "
             "%ss timeout (%s: %s) -- falling back to the sequential path "
             "for the rest of this executor's lifetime.",
             timeout_s, type(exc).__name__, exc)
         try:
-            executor._phase31_poisoned = True
+            executor._executor_poisoned = True
         except Exception:
             pass  # best-effort marker only; worst case we retry once more
         return None
@@ -329,7 +329,7 @@ def _pool_submit_all_or_none(pool, worker_fn, items, timeout_s=_DEFAULT_POOL_TIM
         return results
     except Exception as exc:
         logger.warning(
-            "Phase 31: a pool.submit()/future.result() call failed or "
+            "a pool.submit()/future.result() call failed or "
             "exceeded its overall %ss timeout (%s: %s) -- falling back to "
             "the sequential path.", timeout_s, type(exc).__name__, exc)
         for fut in futures:
@@ -355,7 +355,7 @@ def _safe_pool_shutdown(pool, wait_s=5):
     t.join(timeout=wait_s)
     if t.is_alive():
         logger.warning(
-            "Phase 31: pool.shutdown(wait=True) did not complete within "
+            "pool.shutdown(wait=True) did not complete within "
             "%ss -- abandoning the wait (worker processes may still be "
             "running in the background; this process itself will not "
             "hang).", wait_s)
@@ -620,7 +620,7 @@ def validate_maggie_real_graded_bed(cycle_type="brayton"):
     non-magnetic Y lowers Tc without introducing first-order/
     magnetostructural character. This is therefore modeled with
     GADOLINIUM.with_Tc() (core/mce_material.py -- already built for
-    exactly this purpose by core/inhomogeneous_broadening.py, Phase 22
+    exactly this purpose by core/inhomogeneous_broadening.py,
     item 1: same J/g/M_molar/theta_D as pure Gd, only Tc shifted), NOT
     cascade.py's GD_FAMILY/LAFESIH_FAMILY machinery, which composition-
     tunes a FIRST-ORDER Landau model (core/first_order_mce.py) -- the
@@ -740,17 +740,17 @@ def run_maggie_span_sensitivity(cycle_type="brayton", verbose=True):
 
     if verbose:
         if maggie.get("feasible"):
-            print(f"  MAGGIE (15.5K, 0.61Hz):  Qc={maggie['Qc_W']}W (target {maggie['Qc_lit_W']}W)  "
+            print(f" MAGGIE (15.5K, 0.61Hz):  Qc={maggie['Qc_W']}W (target {maggie['Qc_lit_W']}W)  "
                   f"COP_cascade={maggie['COP_cascade']}  vs. lit COP={maggie['COP_lit']}  "
                   f"({maggie['COP_error_pct']:+.1f}% error)")
         else:
-            print(f"  MAGGIE (15.5K, 0.61Hz):  {maggie.get('status')}")
+            print(f" MAGGIE (15.5K, 0.61Hz):  {maggie.get('status')}")
         if companion.get("feasible"):
-            print(f"  Companion (10.2K, 0.75Hz):  Qc={companion['Qc_W']}W "
+            print(f" Companion (10.2K, 0.75Hz):  Qc={companion['Qc_W']}W "
                   f"(target {companion['Qc_lit_W']}W)  COP_cascade={companion['COP_cascade']}  "
                   f"vs. lit COP={companion['COP_lit']}  ({companion['COP_error_pct']:+.1f}% error)")
         else:
-            print(f"  Companion (10.2K, 0.75Hz):  {companion.get('status')}")
+            print(f" Companion (10.2K, 0.75Hz):  {companion.get('status')}")
     return {"maggie": maggie, "companion_2015": companion}
 
 
@@ -911,10 +911,10 @@ def _target_composition_for_peak(T_target_K, mu0H_max, family, max_iter=6, tol_K
     LAFESIH_FAMILY), so this is a straightforward bracketed root-find
     (scipy.optimize.brentq) on peak_T(Tc) - T_target_K = 0.
 
-    This turned out to matter more than expected. The original (Phase 7)
+    This turned out to matter more than expected. The original
     implementation used a simple fixed-point update (Tc += err from a
     single global offset), which worked fine for GD_FAMILY but was found
-    (Phase 9, while adding LAFESIH_FAMILY) to visibly FAIL for it: this
+    (, while adding LAFESIH_FAMILY) to visibly FAIL for it: this
     Landau model's transition is narrower for La(Fe,Si)13Hy than for
     Gd5Si2Ge2 (DeltaT_ad can fall by more than an order of magnitude
     within ~0.05K of the true peak -- narrower still than the ~0.2-0.5K
@@ -972,8 +972,8 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
                         executor=None, cycle_type="brayton",
                         particle_diameter=None, blow_fraction=0.5,
                         pump_motor_efficiency=1.0, shared_hardware=False):
-    """Curie-graded cascade (ROADMAP.md Phase 7 open item; generalized in
-    Phase 9): rather than identical stages of one material (run_cascade
+    """Curie-graded cascade (ROADMAP.md; generalized in
+    ): rather than identical stages of one material (run_cascade
     above), each stage is assigned a hypothetical composition-tuned material
     from `family` (a GradedFamily -- see GD_FAMILY/LAFESIH_FAMILY above)
     whose Curie temperature matches THAT stage's own local midpoint
@@ -984,7 +984,7 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
     family defaults to GD_FAMILY (Gd5(SixGe1-x)4(-Ga), with the Giguere et
     al. (1999) empirical DeltaT_ad correction applied iff
     apply_giguere_correction=True), reproducing this function's original
-    Phase 7 behavior exactly -- apply_giguere_correction is IGNORED if you
+     behavior exactly -- apply_giguere_correction is IGNORED if you
     pass an explicit `family` (build the correction into family.tuned_fn
     instead, as GD_FAMILY itself does).
 
@@ -996,7 +996,7 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
     result honestly reflects what is and is not supported by the
     composition-tunability literature at the requested operating point.
 
-    Phase 16: `executor`, if given a live concurrent.futures.ProcessPoolExecutor,
+    `executor`, if given a live concurrent.futures.ProcessPoolExecutor,
     fans the n_stages independent Curie-target root-searches below out
     across that pool instead of running them one at a time in this process
     -- each stage's target composition depends only on ITS OWN local T_mid,
@@ -1009,7 +1009,7 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
     families (a custom/closure-based family can't be resolved inside a
     separate worker process; see _family_name() above).
 
-    `cycle_type`: ROADMAP.md Phase 17 addition, threaded through here as
+    `cycle_type`: ROADMAP.md addition, threaded through here as
     a follow-up closing that phase's own "did NOT do" item (cycle_type
     was NOT threaded through core/cascade.py's multi-stage/graded-bed
     helpers). Default "brayton" reproduces every pre-existing call's
@@ -1020,12 +1020,12 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
     mechanism, so there is no physical reason for cycle_type to vary
     stage-to-stage.
 
-    Phase 29 addition: `particle_diameter` (m, default None),
+     addition: `particle_diameter` (m, default None),
     `blow_fraction` (default 0.5), and `pump_motor_efficiency` (default
     1.0) are threaded through to every per-stage AMRSystem unchanged from
     their own individual defaults -- i.e. omitting all three reproduces
-    every pre-Phase-29 call's behavior exactly (same "opt-in, default
-    preserves old behavior" discipline as Phase 15/28's own additions to
+    every previous call's behavior exactly (same "opt-in, default
+    preserves old behavior" discipline as the earlier additions to
     AMRSystem itself). This exists so `core.optimize.LayeredAMRDesignProblem`
     can expose the SAME geometry/blow-fraction/pump-efficiency design
     dimensions to a multi-layer graded-bed search that
@@ -1061,7 +1061,7 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
     span_per_stage = total_span_K / n_stages
 
     # Compute each stage's own T_mid the same way (incremental addition, so
-    # this is bit-for-bit identical to the pre-Phase-16 code) whether or not
+    # this is bit-for-bit identical to the previous code) whether or not
     # the target-composition search below ends up running in parallel.
     mid_temps = []
     T_local = T_cold_K
@@ -1076,9 +1076,9 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
             executor, _stage_target_worker,
             [(t, mu0H_max, family_name) for t in mid_temps])
     if Tc_targets is None:
-        # Phase 31: also the path taken on any pool timeout/failure above,
+        # also the path taken on any pool timeout/failure above,
         # not just when executor is None/unsuitable -- bit-for-bit
-        # identical to the pre-Phase-31 sequential result either way.
+        # identical to the previous sequential result either way.
         Tc_targets = [_target_composition_for_peak(t, mu0H_max, family) for t in mid_temps]
 
     stage_materials = []
@@ -1157,7 +1157,7 @@ def compare_graded_cascade(T_cold_C=18.0, spans=range(5, 21), stage_counts=(1, 2
     """Same sweep as compare_staging(), but using run_graded_cascade()
     instead of identical-stage run_cascade(). family is passed straight
     through to run_graded_cascade() (default: GD_FAMILY, i.e. the original
-    Phase 7 Gd5(SixGe1-x)4(-Ga) behavior). At the ASHRAE data-center range
+     Gd5(SixGe1-x)4(-Ga) behavior). At the ASHRAE data-center range
     (T_cold_C=18 -> T_cold_K=291.15K) with the default GD_FAMILY, each
     stage's needed composition Tc is checked against GIANT_MCE_TC_MAX_K=
     290K: for small spans/stage-counts every stage stays within that
@@ -1166,7 +1166,7 @@ def compare_graded_cascade(T_cold_C=18.0, spans=range(5, 21), stage_counts=(1, 2
     to plain Gd for that stage only. See the __main__ block below for the
     actual breakdown across the sweep (computed, not assumed).
 
-    Phase 16: this span x stage_count sweep is embarrassingly parallel --
+    this span x stage_count sweep is embarrassingly parallel --
     every cell is an independent run_graded_cascade() call with no shared
     mutable state -- so by default (parallel=True) it now fans out across a
     ProcessPoolExecutor (max_workers defaults to min(#cells, cpu_count())).
@@ -1201,12 +1201,12 @@ def compare_graded_cascade(T_cold_C=18.0, spans=range(5, 21), stage_counts=(1, 2
             # environment without subprocess spawn rights) -- distinct
             # from the map()-level timeout/failure _pool_map_or_none
             # already handles internally, but the same fallback applies.
-            logger.warning("Phase 31: ProcessPoolExecutor creation failed "
+            logger.warning("ProcessPoolExecutor creation failed "
                             "(%s: %s) -- falling back to sequential.",
                             type(exc).__name__, exc)
             cell_results = None
         finally:
-            # Phase 31: never `with ProcessPoolExecutor(...) as pool:` here --
+            # never `with ProcessPoolExecutor(...) as pool:` here --
             # that context manager's own __exit__ calls the blocking
             # pool.shutdown(wait=True), which can hang exactly like the
             # bare future.result()/pool.map() calls this fix targets.
@@ -1262,7 +1262,7 @@ def compare_staging(T_cold_C=18.0, spans=range(5, 21), stage_counts=(1, 2, 3, 4)
 
 
 def validate_astronautics_graded_bed(apply_correction=None, cycle_type="brayton"):
-    """Phase 9 follow-up: builds a 6-layer Curie-graded La(Fe,Si)13Hy bed
+    """ follow-up: builds a 6-layer Curie-graded La(Fe,Si)13Hy bed
     (LAFESIH_FAMILY) at the REAL Astronautics_rotary_2014 operating point
     (Jacobs et al., Int. J. Refrig. 37 (2014) 84-91: mu0H=1.44T, 1.52kg
     total MCM, f=4Hz, T_cold=305K/32C, span=11K, reported Qc=2502W,
@@ -1274,7 +1274,7 @@ def validate_astronautics_graded_bed(apply_correction=None, cycle_type="brayton"
     from first principles (same caveat validation_system.py's own
     docstring states for its methodology).
 
-    This directly tests the hypothesis raised in ROADMAP.md Phase 9: that
+    This directly tests the hypothesis raised in ROADMAP.md that
     validation_system.py's single-Tc=287K LAFESIH_FIRST_ORDER material
     failed to calibrate against this device because the real device is SIX
     Curie-graded layers (~303.6-316.2K), not because the general modeling
@@ -1290,10 +1290,10 @@ def validate_astronautics_graded_bed(apply_correction=None, cycle_type="brayton"
     Giguere-style correction is available for this family) unless
     explicitly overridden.
 
-    Phase 16: brentq calls run_graded_cascade() repeatedly to calibrate
+    brentq calls run_graded_cascade() repeatedly to calibrate
     mdot, and each of those calls does 6 independent per-stage Curie-target
     searches (run_graded_cascade's dominant cost -- see that function's own
-    Phase 16 note) -- so this function opens ONE ProcessPoolExecutor up
+     note) -- so this function opens ONE ProcessPoolExecutor up
     front and reuses it across every brentq iteration plus the final
     result call, rather than paying process-startup cost repeatedly. This
     only activates for the default (apply_correction=None) LAFESIH_FAMILY
@@ -1307,7 +1307,7 @@ def validate_astronautics_graded_bed(apply_correction=None, cycle_type="brayton"
     and the per-stage breakdown -- or a "no calibration found" status dict
     if no mdot in [1e-6, 1.0] kg/s reproduces the reported Qc.
 
-    `cycle_type` (ROADMAP.md Phase 17 addition, follow-up closing that
+    `cycle_type` (ROADMAP.md addition, follow-up closing that
     phase's "did NOT do" item on cascade.py): default "brayton"
     reproduces pre-existing behavior exactly. Astronautics_rotary_2014 is
     itself the one device `core.validation_system.infer_cycle_type_for_device()`
@@ -1317,7 +1317,7 @@ def validate_astronautics_graded_bed(apply_correction=None, cycle_type="brayton"
     docstring). `run_astronautics_cycle_type_sensitivity()` below
     directly checks whether "ericsson" narrows that error for the
     graded-bed reproduction the way it narrowed DTU_Eriksen_rotary_Gd_2015's
-    (-2.1% -> +0.6%, Phase 17's own single comparable-device result).
+    (-2.1% -> +0.6%, the earlier single comparable-device result).
     """
     from scipy.optimize import brentq
 
@@ -1378,7 +1378,7 @@ def validate_astronautics_graded_bed(apply_correction=None, cycle_type="brayton"
                                      cycle_type=cycle_type, shared_hardware=True)
 
     finally:
-        # Phase 31: bounded, non-hanging shutdown -- see _safe_pool_shutdown()'s
+        # bounded, non-hanging shutdown -- see _safe_pool_shutdown()'s
         # own docstring for why plain pool.shutdown(wait=True) is unsafe here.
         _safe_pool_shutdown(pool)
         if _blas_env_cm is not None:
@@ -1395,7 +1395,7 @@ def validate_magqueen_graded_bed(mass_total_kg=1.0, n_stages=10,
                                   apply_correction=None, cycle_type="brayton",
                                   use_internal_pool=True):
     """Extends the validate_astronautics_graded_bed() pattern (ROADMAP.md
-    Phase 9) to DTU_MagQueen_2018, the calibration_failure_diagnostics.txt
+    ) to DTU_MagQueen_2018, the calibration_failure_diagnostics.txt
     step-2c diagnostic's OTHER LAFESIH_FAMILY device (margin=-24.97K,
     "structural"). Like Astronautics_rotary_2014, MagQueen's own reported
     hardware genuinely IS Curie-graded -- data/amr_experimental_benchmarks.csv's
@@ -1493,7 +1493,7 @@ def validate_magqueen_graded_bed(mass_total_kg=1.0, n_stages=10,
                                      cycle_type=cycle_type, shared_hardware=True)
 
     finally:
-        # Phase 31: bounded, non-hanging shutdown -- see _safe_pool_shutdown()'s
+        # bounded, non-hanging shutdown -- see _safe_pool_shutdown()'s
         # own docstring for why plain pool.shutdown(wait=True) is unsafe here.
         _safe_pool_shutdown(pool)
         if _blas_env_cm is not None:
@@ -1551,15 +1551,15 @@ def run_magqueen_mass_sensitivity(masses_kg=(0.5, 1.0, 2.0, 5.0, 10.0), verbose=
             _blas_env_cm.__enter__()
             pool = ProcessPoolExecutor(max_workers=min(len(masses_kg), os.cpu_count() or 1),
                                         initializer=_pool_worker_init)
-            # Phase 31 fix: this exact line -- bare `f.result()` with no
+            #  fix: this exact line -- bare `f.result()` with no
             # timeout on a submit-then-collect pattern -- is the reproduced
             # cause of test_magqueen_mass_sensitivity_parallel_matches_sequential
             # hanging indefinitely in a sandboxed environment. See this
-            # module's "Phase 31" comment block above _pool_submit_all_or_none
+            # module's "" comment block above _pool_submit_all_or_none
             # for the full diagnosis.
             results = _pool_submit_all_or_none(pool, _magqueen_mass_worker, masses_kg)
         except Exception as exc:
-            logger.warning("Phase 31: ProcessPoolExecutor creation failed "
+            logger.warning("ProcessPoolExecutor creation failed "
                             "(%s: %s) -- falling back to sequential.",
                             type(exc).__name__, exc)
             results = None  # fall through to the sequential path below
@@ -1574,12 +1574,12 @@ def run_magqueen_mass_sensitivity(masses_kg=(0.5, 1.0, 2.0, 5.0, 10.0), verbose=
     if verbose:
         for m, r in zip(masses_kg, results):
             if r.get("feasible"):
-                print(f"  mass_total={m:5.2f}kg  mdot_cal={r['mdot_calibrated_kg_s']:.5f}kg/s  "
-                      f"Qc={r['Qc_W']:.1f}W  COP_cascade={r['COP_cascade']:.3f}  "
+                print(f" mass_total={m:5.2f}kg mdot_cal={r['mdot_calibrated_kg_s']:.5f}kg/s "
+                      f"Qc={r['Qc_W']:.1f}W COP_cascade={r['COP_cascade']:.3f}  "
                       f"COP_error={r['COP_error_pct']:+.1f}%  "
                       f"n_fallback_to_Gd={r['n_stages_out_of_range']}/10")
             else:
-                print(f"  mass_total={m:5.2f}kg  {r.get('status', 'infeasible')}")
+                print(f" mass_total={m:5.2f}kg  {r.get('status', 'infeasible')}")
     n_feasible = sum(1 for r in results if r.get("feasible"))
     if verbose:
         print(f"CONCLUSION: {n_feasible}/{len(masses_kg)} swept masses calibrate at all -- "
@@ -1625,10 +1625,10 @@ def validate_magqueen_masche2021_real_graded_bed(cycle_type="brayton"):
       - Table 3: "Distribution of Curie temperatures, peak temperature
         (Tpeak) ... and refrigerant mass across the regenerator bed" for
         the ten La(Fe,Mn,Si)13Hy (CALORIVAC-HS) layers, hot to cold:
-          TCurie (K):  292.1  290.1  288.7  287.0  283.8
-                       282.6  280.6  278.4  275.8  273.1
-          Mass (g):     40.5   29.0   25.5   28.0   23.0
-                        22.5   19.0   21.0   25.0   28.8
+          TCurie (K):  292.1 290.1 288.7 287.0 283.8
+                       282.6 280.6 278.4 275.8 273.1
+          Mass (g):     40.5 29.0 25.5 28.0 23.0
+                        22.5 19.0 21.0 25.0 28.8
         (sums to 262.3g, matching the paper's own per-bed total of "about
         262 g" -- Sec. 2.1 -- to within the table's own rounding; total
         across all 13 beds = 3.41kg, also independently stated directly
@@ -1731,7 +1731,7 @@ def validate_magqueen_masche2021_real_graded_bed(cycle_type="brayton"):
 
 def validate_risoe_dtu_graded_bed(n_stages=6, apply_correction=None,
                                    cycle_type="brayton", family=None):
-    """Extends the graded-bed structural-fix pattern (ROADMAP.md Phase 9,
+    """Extends the graded-bed structural-fix pattern (ROADMAP.md ,
     validate_astronautics_graded_bed()) to Risoe_DTU_Gd_2011, one of the
     calibration_failure_diagnostics.txt step-2c devices flagged
     STRUCTURAL (margin=2*dTad_noload-span=-23.80K -- the largest-span
@@ -1821,7 +1821,7 @@ def validate_risoe_dtu_graded_bed(n_stages=6, apply_correction=None,
                                      fluid_mdot=mdot_cal, family=family, executor=pool,
                                      cycle_type=cycle_type)
     finally:
-        # Phase 31: bounded, non-hanging shutdown -- see _safe_pool_shutdown()'s
+        # bounded, non-hanging shutdown -- see _safe_pool_shutdown()'s
         # own docstring for why plain pool.shutdown(wait=True) is unsafe here.
         _safe_pool_shutdown(pool)
         if _blas_env_cm is not None:
@@ -1951,13 +1951,13 @@ def run_cooltech_mass_sensitivity(masses_kg=(0.5, 1.0, 2.0, 5.0, 10.0), verbose=
             _blas_env_cm.__enter__()
             pool = ProcessPoolExecutor(max_workers=min(len(masses_kg), os.cpu_count() or 1),
                                         initializer=_pool_worker_init)
-            # Phase 31 fix: same reproduced hang as
+            #  fix: same reproduced hang as
             # run_magqueen_mass_sensitivity() above (bare `f.result()` with
-            # no timeout) -- see this module's "Phase 31" comment block
+            # no timeout) -- see this module's "" comment block
             # above _pool_submit_all_or_none for the full diagnosis.
             results = _pool_submit_all_or_none(pool, _cooltech_mass_worker, masses_kg)
         except Exception as exc:
-            logger.warning("Phase 31: ProcessPoolExecutor creation failed "
+            logger.warning("ProcessPoolExecutor creation failed "
                             "(%s: %s) -- falling back to sequential.",
                             type(exc).__name__, exc)
             results = None
@@ -1972,11 +1972,11 @@ def run_cooltech_mass_sensitivity(masses_kg=(0.5, 1.0, 2.0, 5.0, 10.0), verbose=
     if verbose:
         for m, r in zip(masses_kg, results):
             if r.get("feasible"):
-                print(f"  mass_total={m:5.2f}kg  mdot_cal={r['mdot_calibrated_kg_s']:.6f}kg/s  "
+                print(f" mass_total={m:5.2f}kg mdot_cal={r['mdot_calibrated_kg_s']:.6f}kg/s "
                       f"Qc={r['Qc_W']:.1f}W (target {r['Qc_lit_W']:.1f}W)  "
                       f"n_fallback_to_Gd={r['n_stages_out_of_range']}/6")
             else:
-                print(f"  mass_total={m:5.2f}kg  {r.get('status', 'infeasible')}")
+                print(f" mass_total={m:5.2f}kg  {r.get('status', 'infeasible')}")
     n_feasible = sum(1 for r in results if r.get("feasible"))
     if verbose:
         print(f"CONCLUSION: {n_feasible}/{len(masses_kg)} swept masses reach positive Qc "
@@ -1988,7 +1988,7 @@ def run_cooltech_mass_sensitivity(masses_kg=(0.5, 1.0, 2.0, 5.0, 10.0), verbose=
 
 
 def run_astronautics_cycle_type_sensitivity(apply_correction=None, verbose=True):
-    """ROADMAP.md Phase 17 follow-up, closing that phase's own "did NOT
+    """ROADMAP.md follow-up, closing that phase's own "did NOT
     do" item: cycle_type was validated system-wide in step 2b
     (core.validation_system.run_cycle_type_validation()) but NEVER
     threaded through core/cascade.py's graded-bed helpers, so
@@ -2022,21 +2022,21 @@ def run_astronautics_cycle_type_sensitivity(apply_correction=None, verbose=True)
 
     if verbose:
         print("Astronautics_rotary_2014 6-layer graded-bed reproduction: "
-              "brayton (baseline) vs. ericsson (ROADMAP.md Phase 17 follow-up)")
+              "brayton (baseline) vs. ericsson (ROADMAP.md follow-up)")
         if both_feasible:
-            print(f"  brayton:  COP_cascade={brayton_result['COP_cascade']}  "
+            print(f" brayton:  COP_cascade={brayton_result['COP_cascade']}  "
                   f"COP_error={brayton_result['COP_error_pct']}%")
-            print(f"  ericsson: COP_cascade={ericsson_result['COP_cascade']}  "
+            print(f" ericsson: COP_cascade={ericsson_result['COP_cascade']}  "
                   f"COP_error={ericsson_result['COP_error_pct']}%")
             if improved:
-                print(f"  FINDING: ericsson narrows the error "
+                print(f" FINDING: ericsson narrows the error "
                       f"({brayton_result['COP_error_pct']}% -> "
                       f"{ericsson_result['COP_error_pct']}%), consistent with "
                       f"DTU_Eriksen_rotary_Gd_2015's step-2b result -- a second, "
                       f"independent (graded-bed, not single-Tc) data point in the "
                       f"same direction.")
             else:
-                print(f"  FINDING: ericsson does NOT narrow the error "
+                print(f" FINDING: ericsson does NOT narrow the error "
                       f"({brayton_result['COP_error_pct']}% -> "
                       f"{ericsson_result['COP_error_pct']}%) for this device's "
                       f"graded-bed reproduction -- unlike DTU_Eriksen_rotary_Gd_2015's "
@@ -2050,7 +2050,7 @@ def run_astronautics_cycle_type_sensitivity(apply_correction=None, verbose=True)
                       f"~2.4x DeltaT_ad overestimate documented in "
                       f"giguere_validation.py -- not by cycle topology).")
         else:
-            print("  Not comparable: one or both cycle_type runs did not calibrate.")
+            print(" Not comparable: one or both cycle_type runs did not calibrate.")
 
     return {"brayton": brayton_result, "ericsson": ericsson_result,
             "both_feasible": both_feasible, "ericsson_improves": improved}
@@ -2112,12 +2112,12 @@ def run_astronautics_giguere_correction_sensitivity(cycle_type="brayton", verbos
               f"(DTAD_CORRECTION_FACTOR={DTAD_CORRECTION_FACTOR:.4f}, "
               f"cycle_type={cycle_type})")
         if both_feasible:
-            print(f"  uncorrected: COP_cascade={baseline['COP_cascade']}  "
+            print(f" uncorrected: COP_cascade={baseline['COP_cascade']}  "
                   f"COP_error={baseline['COP_error_pct']}%")
-            print(f"  corrected:   COP_cascade={corrected['COP_cascade']}  "
+            print(f" corrected:   COP_cascade={corrected['COP_cascade']}  "
                   f"COP_error={corrected['COP_error_pct']}%")
             if improved:
-                print(f"  FINDING: applying the Giguere correction narrows the error "
+                print(f" FINDING: applying the Giguere correction narrows the error "
                       f"({baseline['COP_error_pct']}% -> {corrected['COP_error_pct']}%). "
                       f"This does NOT establish that DTAD_CORRECTION_FACTOR transfers to "
                       f"La(Fe,Si)13Hy -- it was fit to a Gd5Si2Ge2-specific direct-"
@@ -2130,7 +2130,7 @@ def run_astronautics_giguere_correction_sensitivity(cycle_type="brayton", verbos
                       f"actually shows what applying it would do, as an explicitly-labeled "
                       f"sensitivity check rather than an adopted correction.")
             else:
-                print(f"  FINDING: applying the Giguere correction does NOT narrow the "
+                print(f" FINDING: applying the Giguere correction does NOT narrow the "
                       f"error ({baseline['COP_error_pct']}% -> {corrected['COP_error_pct']}%) "
                       f"-- consistent with the existing honesty flag that this factor was "
                       f"never shown to transfer to La(Fe,Si)13Hy. The -81.1% baseline error "
@@ -2139,7 +2139,7 @@ def run_astronautics_giguere_correction_sensitivity(cycle_type="brayton", verbos
                       f"approximation of the real 6-real-layer device (see this function's "
                       f"own docstring) remains the more likely dominant cause.")
         else:
-            print("  Not comparable: one or both apply_correction runs did not calibrate.")
+            print(" Not comparable: one or both apply_correction runs did not calibrate.")
 
     return {"baseline": baseline, "corrected": corrected,
             "dtad_correction_factor": DTAD_CORRECTION_FACTOR,
@@ -2182,7 +2182,7 @@ if __name__ == "__main__":
           f"(VCC={gd_10K['VaporCompression_COP']}, Liquid={gd_10K['LiquidCooling_COP']})")
 
     print("\n" + "=" * 100)
-    print("--- Curie-graded cascade (ROADMAP.md Phase 7 open item) ---")
+    print("--- Curie-graded cascade (ROADMAP.md) ---")
     print("=" * 100)
     print("Each stage uses a hypothetical composition-tuned Gd5(SixGe1-x)4(-Ga) material")
     print("whose own peak MCE effect is matched (via iterative peak search, see")
@@ -2198,17 +2198,17 @@ if __name__ == "__main__":
     example = next(s for s in stage_info_all if s["span_K"] == 10 and s["n_stages"] == 3)
     print("Example (10K span, 3 stages):")
     for s in example["stage_info"]:
-        print(f"    stage {s['stage']}: T_mid={s['T_mid_K']}K, needed composition Tc="
+        print(f" stage {s['stage']}: T_mid={s['T_mid_K']}K, needed composition Tc="
               f"{s['Tc_target_K']}K -> {s['material']}")
 
     graded_10K_3 = next(r for r in rows_graded if r["span_K"] == 10)
     gd_10K_3 = next(r for r in rows_gd if r["span_K"] == 10)
     print(f"\nAt this point: Graded 3-stage Qc={graded_10K_3['Graded_3stage_Qc_W']}W, "
-          f"COP_elec={graded_10K_3['Graded_3stage_COP']}  vs.  plain-Gd 3-stage "
+          f"COP_elec={graded_10K_3['Graded_3stage_COP']}  vs. plain-Gd 3-stage "
           f"Qc={gd_10K_3['AMR_3stage_Qc_W']}W, COP_elec={gd_10K_3['AMR_3stage_COP']}")
     print("-> consistent with giant_mce_analysis.py's earlier finding: a bigger MCE mostly")
-    print("   buys more Qc per kg (here: substantially more), not a materially better COP")
-    print("   (loss_model.py's field/frequency/flow-dependent parasitics dominate COP either way).")
+    print(" buys more Qc per kg (here: substantially more), not a materially better COP")
+    print(" (loss_model.py's field/frequency/flow-dependent parasitics dominate COP either way).")
 
     n_cells = sum(1 for row in rows_graded for n in (1, 2, 3, 4))
     n_full_range = sum(1 for row in rows_graded for n in (1, 2, 3, 4)
@@ -2246,28 +2246,28 @@ if __name__ == "__main__":
     print("what this material family is documented to reach.")
 
     print("\n" + "=" * 100)
-    print("--- Phase 9: does a 6-layer Curie-graded La(Fe,Si)13Hy bed reproduce the REAL")
-    print("    Astronautics_rotary_2014 device? (validation_system.py's single-Tc=287K")
-    print("    material could not -- see ROADMAP.md Phase 9) ---")
+    print("--- does a 6-layer Curie-graded La(Fe,Si)13Hy bed reproduce the REAL")
+    print(" Astronautics_rotary_2014 device? (validation_system.py's single-Tc=287K")
+    print(" material could not -- see ROADMAP.md ) ---")
     print("=" * 100)
     astro = validate_astronautics_graded_bed()
     if astro.get("feasible"):
         print("Layer Tc targets (evenly spread across the device's reported 303.6-316.2K "
               "layer range):")
         for s in astro["stage_info"]:
-            print(f"    stage {s['stage']}: T_mid={s['T_mid_K']}K, needed composition Tc="
+            print(f" stage {s['stage']}: T_mid={s['T_mid_K']}K, needed composition Tc="
                   f"{s['Tc_target_K']}K -> {s['material']}")
         print(f"\nmdot calibrated to reproduce reported Qc={astro['Qc_lit_W']}W: "
               f"{astro['mdot_calibrated_kg_s']} kg/s")
-        print(f"Predicted COP={astro['COP_cascade']}  vs.  reported COP={astro['COP_lit']} "
+        print(f"Predicted COP={astro['COP_cascade']}  vs. reported COP={astro['COP_lit']} "
               f"({astro['COP_error_pct']:+.1f}% error)")
         print("\n-> a comparable-magnitude error to the Gd devices in validation_system.py's own")
-        print("   point-wise validation, and a very different outcome from the flat 'no")
-        print("   calibration found' the single-layer LAFESIH_FIRST_ORDER material gave this")
-        print("   same device: the graded-bed STRUCTURE, not just the material, was the missing")
-        print("   piece. Still an approximation -- layer Tc's are evenly spread across the")
-        print("   reported range, not the paper's actual (unpublished here) per-layer values,")
-        print("   and mdot is calibrated rather than predicted, same caveat as")
-        print("   validation_system.py's own methodology throughout.")
+        print(" point-wise validation, and a very different outcome from the flat 'no")
+        print(" calibration found' the single-layer LAFESIH_FIRST_ORDER material gave this")
+        print(" same device: the graded-bed STRUCTURE, not just the material, was the missing")
+        print(" piece. Still an approximation -- layer Tc's are evenly spread across the")
+        print(" reported range, not the paper's actual (unpublished here) per-layer values,")
+        print(" and mdot is calibrated rather than predicted, same caveat as")
+        print(" validation_system.py's own methodology throughout.")
     else:
         print(astro.get("status", "infeasible"))

@@ -30,7 +30,7 @@ Reduced field:
     h = g*J*mu_B*(mu0*H) / (kB*Tc)     (same natural scale as the Brillouin
                                           argument used in mce_material.py)
 
-Equilibrium m(tau,h): real root of  A*(tau-1)*m + B*m^3 + C*m^5 = h  that
+Equilibrium m(tau,h): real root of A*(tau-1)*m + B*m^3 + C*m^5 = h that
 GLOBALLY MINIMIZES f (not just any stationary point) -- this correctly
 selects the equilibrium/reversible branch through the first-order jump,
 consistent with treating S as a state function for the ideal AMR cycle
@@ -99,14 +99,14 @@ the only one, and note the real spread when citing this in the paper.
      model property (not a bug) -- do not "fix" it by shifting Tc to
      equal a target operating temperature; composition_tuned_material()
      already accounts for it by construction.
-  4. Phase 16 addition: `hysteresis_loss_J_per_kg` quantifies the
+  4. addition: `hysteresis_loss_J_per_kg` quantifies the
      irreversible thermal hysteresis loss of the first-order transition
      itself -- energy dissipated per kg of magnetocaloric material per
      FULL magnetization/demagnetization loop, i.e. per AMR cycle. This
      model's entropy/DeltaT_ad machinery above computes the EQUILIBRIUM
      (globally-minimizing, reversible) branch through the transition by
      construction (see the class-level "Equilibrium m(tau,h)" note) --
-     it has no notion of hysteresis at all on its own. Before Phase 16,
+     it has no notion of hysteresis at all on its own. Before ,
      this was a documented but entirely UNQUANTIFIED honesty flag (see
      the module docstring's hysteresis mention and cascade.py's/
      giguere_validation.py's prose-only caveats). It is now a real
@@ -157,7 +157,7 @@ class FirstOrderMCEMaterial:
     # calibration for GD5SI2GE2_FIRST_ORDER below; composition_tuned_material()
     # sets this to core.giguere_validation.DTAD_CORRECTION_FACTOR by default.
     hysteresis_loss_J_per_kg: float = 0.0
-    # Phase 16 addition (see module docstring honesty flag #4). Irreversible
+    #  addition (see module docstring honesty flag #4). Irreversible
     # energy dissipated per kg of material per full field-up/field-down
     # hysteresis loop (i.e. per AMR cycle), in J/kg -- the same quantity
     # several MCE papers report directly (e.g. as "Wy_peak" or "hysteresis
@@ -175,7 +175,7 @@ class FirstOrderMCEMaterial:
     # Tc range -- flagged per-family where set.
     latent_heat_J_per_kg: float = 0.0
     latent_heat_width_K: float = 1.0
-    # Phase 26 addition -- see this module's honesty flag #1 (the
+    #  addition -- see this module's honesty flag #1 (the
     # "lattice-only C_lattice denominator" concern) and
     # core/giguere_validation.py's own documented ~2.4x overestimate this
     # was added in direct response to. delta_T_adiabatic()'s denominator
@@ -416,7 +416,7 @@ GD5SI2GE2_FIRST_ORDER = FirstOrderMCEMaterial(
            "review); NOT independently validated against a second dataset "
            "(see module docstring honesty flag #2).",
     hysteresis_loss_J_per_kg=65.0,
-    # Phase 30 update (was Phase 16's 8.0 J/kg placeholder -- an order of
+    #  update (was the earlier 8.0 J/kg placeholder -- an order of
     # magnitude too low). Provenzano, Shapiro & Shull's own patent
     # filings covering the SAME Nature (2004) work already cited above
     # (US Patent 8,048,236 / 7,651,574, "Doped Gd5Ge2Si2 compounds and
@@ -433,7 +433,7 @@ GD5SI2GE2_FIRST_ORDER = FirstOrderMCEMaterial(
     # number read directly off the same authors' own reported hysteresis-
     # loop-area measurement for the exact (undoped, stoichiometric)
     # material this repo calibrates.
-    # Phase 16, honesty flag #4. Undoped, stoichiometric Gd5Si2Ge2 is the
+    # , honesty flag #4. Undoped, stoichiometric Gd5Si2Ge2 is the
     # textbook "large hysteresis" first-order magnetocaloric material --
     # Provenzano, Shapiro & Shull, Nature 429, 853-857 (2004) report a
     # >90% REDUCTION in hysteresis loss upon 2% Fe-doping (i.e. the
@@ -456,7 +456,7 @@ GD5SI2GE2_FIRST_ORDER = FirstOrderMCEMaterial(
     # actual J/kg value, not a literature-measured number.
 )
 
-# Phase 26: latent-heat-enabled variant of GD5SI2GE2_FIRST_ORDER -- a
+# latent-heat-enabled variant of GD5SI2GE2_FIRST_ORDER -- a
 # SEPARATE, explicitly-opted-in instance (see latent_heat_J_per_kg's own
 # field comment above for why GD5SI2GE2_FIRST_ORDER itself is untouched).
 #
@@ -584,7 +584,7 @@ LAFESIH_FIRST_ORDER = FirstOrderMCEMaterial(
            "parameter and its honesty flags. NOT independently validated "
            "against a second dataset (same caveat as GD5SI2GE2_FIRST_ORDER).",
     hysteresis_loss_J_per_kg=12.3,
-    # Phase 16, honesty flag #4. Prusty, Molleti, Takanobu, Malladi &
+    # , honesty flag #4. Prusty, Molleti, Takanobu, Malladi &
     # Sepehri-Amin, Sci. Technol. Adv. Mater. (2025), doi:10.1080/
     # 14686996.2025.2525742 ("Reduced hysteresis in La0.7Ce0.3Fe11.5Si1.5
     # hydrides by grain size reduction") directly report hysteresis losses
@@ -608,7 +608,7 @@ LAFESIH_FIRST_ORDER = FirstOrderMCEMaterial(
 )
 
 # --- Composition tunability of the Gd5(SixGe1-x)4 family, for the
-#     Curie-graded cascade (ROADMAP.md Phase 7 open item) ---
+#     Curie-graded cascade (ROADMAP.md) ---
 #
 # Literature range for GIANT (first-order) MCE character in this family,
 # read from the sources cited in giant_mce_analysis.py plus a targeted
@@ -675,7 +675,7 @@ def composition_tuned_material(Tc_target_K, apply_giguere_correction=True, name=
         A=GD5SI2GE2_FIRST_ORDER.A, B=GD5SI2GE2_FIRST_ORDER.B, C=GD5SI2GE2_FIRST_ORDER.C,
         dTad_correction=dTad_correction,
         hysteresis_loss_J_per_kg=GD5SI2GE2_FIRST_ORDER.hysteresis_loss_J_per_kg,
-        # Phase 16: held fixed at the base-composition placeholder value
+        # held fixed at the base-composition placeholder value
         # (same simplifying assumption as A/B/C/theta_D/M_molar above) --
         # NOT re-derived per target Tc. See FirstOrderMCEMaterial's
         # hysteresis_loss_J_per_kg field docstring for why this is
@@ -694,7 +694,7 @@ def composition_tuned_material(Tc_target_K, apply_giguere_correction=True, name=
 #     Int. J. Refrig. 37 (2014) 84-91), which used six layers graded roughly
 #     303.6-316.2K (see LAFESIH_FIRST_ORDER's block comment above; Bahl et
 #     al., Int. J. Refrig. 74 (2017) 22-29, cites this range for a similar
-#     Astronautics-style device). This is the direct follow-up to the Phase 9
+#     Astronautics-style device). This is the direct follow-up to the
 #     finding in ROADMAP.md that a single Tc=287K material can't reproduce
 #     that device -- same mechanism, and same "composition_tuned_material"
 #     pattern, as the Gd5(SixGe1-x)4 family above.
@@ -759,7 +759,7 @@ def lafesih_composition_tuned_material(Tc_target_K, name=None):
         A=LAFESIH_FIRST_ORDER.A, B=LAFESIH_FIRST_ORDER.B, C=LAFESIH_FIRST_ORDER.C,
         dTad_correction=LAFESIH_FIRST_ORDER.dTad_correction,
         hysteresis_loss_J_per_kg=LAFESIH_FIRST_ORDER.hysteresis_loss_J_per_kg,
-        # Phase 16: held fixed at the base-composition placeholder value,
+        # held fixed at the base-composition placeholder value,
         # same caveat as composition_tuned_material() above -- real
         # La(Fe,Si)13Hy hysteresis is known to vary with BOTH Si content
         # and H loading (LAFESIH_FIRST_ORDER's own docstring), which is
@@ -878,7 +878,7 @@ MNFEPSI_FIRST_ORDER = FirstOrderMCEMaterial(
            "each parameter and its honesty flags. NOT independently validated against "
            "a second dataset (same caveat as GD5SI2GE2_FIRST_ORDER/LAFESIH_FIRST_ORDER).",
     hysteresis_loss_J_per_kg=25.0,
-    # Phase 16, honesty flag #4. The source paper (Hanggai et al. 2026)
+    # , honesty flag #4. The source paper (Hanggai et al. 2026)
     # itself was not found to report a hysteresis-loss J/kg number in the
     # material already extracted for this codebase. As a directly-relevant
     # proxy, Zhang et al., arXiv:2312.09341 ("Giant magnetocaloric effect
@@ -942,7 +942,7 @@ def mnfepsi_composition_tuned_material(Tc_target_K, name=None):
         A=MNFEPSI_FIRST_ORDER.A, B=MNFEPSI_FIRST_ORDER.B, C=MNFEPSI_FIRST_ORDER.C,
         dTad_correction=MNFEPSI_FIRST_ORDER.dTad_correction,
         hysteresis_loss_J_per_kg=MNFEPSI_FIRST_ORDER.hysteresis_loss_J_per_kg,
-        # Phase 16: held fixed at the base-composition placeholder value.
+        # held fixed at the base-composition placeholder value.
         # This is the LEAST-grounded of the three tuned_fn hysteresis
         # values to begin with (see MNFEPSI_FIRST_ORDER's own block
         # comment -- proxy system, different composition axis), and the
@@ -959,16 +959,16 @@ def mnfepsi_composition_tuned_material(Tc_target_K, name=None):
 
 
 # --- Mn1-xCuxCoGe (MnCoGe-type hexagonal magnetostructural giant-MCE
-#     family), Phase 25: added on request for a NON-redundant, strongly
+#     family), added on request for a NON-redundant, strongly
 #     (not weakly) evidenced fourth Landau-model family alongside
 #     GD5SI2GE2_FIRST_ORDER/LAFESIH_FIRST_ORDER/MNFEPSI_FIRST_ORDER, and
-#     distinct from Phase 24's core.antiperovskite_material.py (which is a
+#     distinct from the earlier core.antiperovskite_material.py (which is a
 #     SECOND-order, mean-field family reusing mce_material.py -- this one
 #     is a first-order, MnCoGe-type magnetostructural transition using
 #     this module's own Landau (A,B,C) machinery, the same class as the
 #     three families above it).
 #
-# Why this one, and not another item from Phase 24's still-open list: it
+# Why this one, and not another item from the earlier still-open list: it
 # is the single strongest candidate located in a follow-up literature pass
 # -- one internally-consistent paper (Samanta, Dubenko, Quetz, Stadler &
 # Ali, "Giant magnetocaloric effects near room temperature in
@@ -977,7 +977,7 @@ def mnfepsi_composition_tuned_material(Tc_target_K, name=None):
 # landing inside/near this repo's own 285-305K ASHRAE target window:
 #   x=0.080: Tc=302K, |DeltaS_M|=52.5 J/(kg K) at 5T
 #   x=0.085: Tc=316K, |DeltaS_M|=53.3 J/(kg K) at 5T
-# This is the calibration situation Phase 24's own antiperovskite family
+# This is the calibration situation the earlier antiperovskite family
 # explicitly did NOT have (that module's own honesty flag: Tc(x) and one
 # RCP-in-J/cm^3 figure only, no peak DeltaS_M digit at a stated field) --
 # here there IS a directly citable |DeltaS_M| target, the same kind of
@@ -987,7 +987,7 @@ def mnfepsi_composition_tuned_material(Tc_target_K, name=None):
 # groups' related Mn1-xCuxCoGe/MnCo1-xCuxGe papers (e.g. Mn0.89Cu0.11CoGe:
 # |DeltaS_M|=58 J/(kg K) at 5T, RC=258.2 J/kg, ~290K -- ScienceDirect,
 # ~2016) -- not implemented here to avoid combining across different
-# groups' compositions/processing (the same reason Phase 24 deferred the
+# groups' compositions/processing (the same reason deferred the
 # LSMO family), but a strong independent sanity check that the magnitude
 # and temperature range are real and not an outlier of one paper.
 #
@@ -1062,8 +1062,8 @@ MNCUCOGE_FIRST_ORDER = FirstOrderMCEMaterial(
            "(same caveat as the other three FirstOrderMCEMaterial families "
            "in this module).",
     hysteresis_loss_J_per_kg=25.0,
-    # Phase 25, same honesty-flag situation as MNFEPSI_FIRST_ORDER's own
-    # hysteresis_loss_J_per_kg (Phase 16 flag #4). The calibrating paper
+    # , same honesty-flag situation as MNFEPSI_FIRST_ORDER's own
+    # hysteresis_loss_J_per_kg ( flag #4). The calibrating paper
     # (Samanta et al. 2012) was not found to report a J/kg hysteresis-loss
     # figure in the material extracted for this pass. A related paper on
     # the SAME Mn1-xCuxCoGe system (Kumar et al./ScienceDirect, "Enhancing
@@ -1158,8 +1158,8 @@ if __name__ == "__main__":
         dS_peak = dS_scan[i_peak]
         dT_peak = GD5SI2GE2_FIRST_ORDER.delta_T_adiabatic(np.array([T_peak]), H)[0]
         dS_at_Tc = GD5SI2GE2_FIRST_ORDER.delta_S_isothermal(np.array([276.0]), H)[0]
-        print(f"  {B_T}T: peak dS={dS_peak:.2f} J/(kg K) at T={T_peak:.1f}K   "
-              f"dTad(at peak)={dT_peak:.2f} K   "
+        print(f"  {B_T}T: peak dS={dS_peak:.2f} J/(kg K) at T={T_peak:.1f}K "
+              f"dTad(at peak)={dT_peak:.2f} K "
               f"(dS evaluated at fixed Tc=276K instead: {dS_at_Tc:.2f} J/(kg K), "
               "an understatement -- see note above)")
     print("\nTarget: peak dS ~ -18 J/(kg K) at 5T (Pecharsky & Gschneidner 1997 review "
@@ -1175,7 +1175,7 @@ if __name__ == "__main__":
         T_peak = Ts_la[i_peak]
         dS_peak = dS_scan[i_peak]
         dT_peak = LAFESIH_FIRST_ORDER.delta_T_adiabatic(np.array([T_peak]), H)[0]
-        print(f"  {B_T}T: peak dS={dS_peak:.2f} J/(kg K) at T={T_peak:.1f}K   "
+        print(f"  {B_T}T: peak dS={dS_peak:.2f} J/(kg K) at T={T_peak:.1f}K "
               f"dTad(at peak)={dT_peak:.2f} K")
     print("\nTarget: peak dS ~ -31 J/(kg K), dTad(indirect) ~ 15.4 K at 5T near Tc=287K "
           "(Fujieda, Fujita & Fukamichi 2002 and related La(Fe,Si)13Hy literature -- "
@@ -1193,7 +1193,7 @@ if __name__ == "__main__":
         T_peak = Ts_mn[i_peak]
         dS_peak = dS_scan[i_peak]
         dT_peak = MNFEPSI_FIRST_ORDER.delta_T_adiabatic(np.array([T_peak]), H)[0]
-        print(f"  {B_T}T: peak dS={dS_peak:.2f} J/(kg K) at T={T_peak:.1f}K   "
+        print(f"  {B_T}T: peak dS={dS_peak:.2f} J/(kg K) at T={T_peak:.1f}K "
               f"dTad(at peak)={dT_peak:.2f} K")
     print("\nTarget: peak dS ~ -17.6 J/(kg K) at 2T near Tc=331.2K (Hanggai et al. 2026, "
           "16.66 J/(kg K) calorimetric / 17.61 J/(kg K) magnetic, cross-validated -- "

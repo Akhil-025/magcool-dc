@@ -1,9 +1,9 @@
 """
 fluid_mce_cycle.py
 ====================
-Phase 20: magnetocaloric fluids (ferrofluid / magnetorheological particle
+magnetocaloric fluids (ferrofluid / magnetorheological particle
 suspension) as an alternative working-body class, motivated by
-ROADMAP.md's Phase 20 plan item ("Magnetocaloric fluids as an
+ROADMAP.md's plan item ("Magnetocaloric fluids as an
 alternative working-body class").
 
 STRUCTURAL SCOPE (per the plan's own scoping decision, repeated here for
@@ -22,13 +22,13 @@ HONESTY FLAG #1 (book access). This project's copy of Kitanovski et al.
 (2015) is a 30-page front-matter/Chapter-1-only excerpt -- it does NOT
 include Chapter 5 (Magnetocaloric Fluids, pp. 167-209), where Sect. 5.2
 (ferrofluid/magnetorheological rheology), Sect. 5.4/5.5 (device design
-notes) live, the sections the Phase 20 plan itself named as the source
+notes) live, the sections the plan itself named as the source
 for "rheology-adjusted relations." None of that chapter's own equations
 or coefficients could be digitized here. This project's copy of Tishin &
 Spichkin (2003) is a scanned, image-only 486-page PDF with NO extractable
 text layer (`pypdf` returns zero characters from every page checked in
 this pass) -- its actual chapter contents could not be searched or
-digitized either, so the Phase 20 plan's own claim that "Tishin doesn't
+digitized either, so the plan's own claim that "Tishin doesn't
 cover this (its Ch. 11 passive-regenerator focus is solid-state)" is
 taken at face value here, UNVERIFIED by this pass, not independently
 confirmed.
@@ -61,7 +61,7 @@ conflated with this module's own topic:
     refrigeration enhanced by magnetically-activated thermal switch: an
     experimental proof-of-concept" (2024) couples a SOLID Gd regenerator
     with a ferrofluid used as a THERMAL SWITCH (a heat-transfer-
-    enhancement/rectification role, closer in spirit to Phase 18's
+    enhancement/rectification role, closer in spirit to the earlier
     thermal-diode item than to this module's working-body topic) -- its
     own abstract reports no COP advantage from the ferrofluid over plain
     Gd under symmetric cycling.
@@ -71,7 +71,7 @@ conflated with this module's own topic:
     repo's benchmark convention.
   Neither is used as a calibration point here. This module is therefore
   explicitly a DESIGN-EXPLORATION / comparison tool, not a validated
-  feature -- the same disposition Phase 18 gave
+  feature -- the same disposition gave
   core/thermal_diode_analysis.py.
 
 Physics used here
@@ -91,7 +91,7 @@ core.thermal.water_properties()).
 
    This is a MONOTONICALLY INCREASING function of phi (dTad_suspension
    -> dTad_pure as phi -> 1, -> 0 as phi -> 0) -- the "MCE-intensity-vs-
-   phi" side of the tradeoff the Phase 20 plan named.
+   phi" side of the tradeoff the plan named.
 2. Suspension viscosity (Krieger-Dougherty): mu_suspension = mu_carrier *
    (1 - phi/phi_max)^(-[eta]*phi_max), with phi_max=0.63 (random close
    packing) and intrinsic viscosity [eta]=2.5 (Einstein value for rigid

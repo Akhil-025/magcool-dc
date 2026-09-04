@@ -1,0 +1,61 @@
+Phase 16 open item (see ROADMAP.md, and this module's own honesty flag #1):
+does the ON/OFF La(Fe,Si)13Hy-share reversal found at pop_size=32/n_gen=15/
+seed=1 (88% OFF -> 100% ON) hold at production pop_size/n_gen settings and
+across multiple seeds, or was it search noise at the smaller setting?
+
+Settings: pop_size=40, n_gen=25, seeds=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+
+  seed   frac_OFF    frac_ON  front_OFF   front_ON
+--------------------------------------------------
+     1       95%       91%         21         22
+     2       88%       81%         24         21
+     3       92%       80%         24         25
+     4       96%       96%         24         24
+     5       86%       95%         22         21
+     6       96%       90%         23         21
+     7       88%       89%         24         18
+     8       83%       87%         24         23
+     9       92%       92%         25         25
+    10       88%       92%         24         25
+    11       88%       95%         24         19
+    12       91%       77%         23         26
+    13       91%       74%         23         23
+    14       90%       95%         21         22
+    15       96%       95%         24         19
+    16       95%       95%         22         20
+    17       95%       96%         21         24
+    18       88%       91%         26         22
+    19       95%       95%         20         19
+    20       80%       82%         25         22
+--------------------------------------------------
+
+RESULT: NOT STABLE. At least one seed's ON run had a LOWER La(Fe,Si)13Hy
+share than its own OFF run -- the direction of the original
+pop_size=32/n_gen=15/seed=1 finding does NOT hold universally across
+seeds at production settings. Treat the original 88%->100% finding as
+seed-dependent, not a settled result -- see the per-seed table above for
+which seed(s) disagree.
+
+Caveat carried over unchanged from this module's own honesty flag #2: the
+hysteresis_loss_J_per_kg VALUES this whole comparison depends on remain
+literature analogs for different exact compositions, not measurements of
+the calibrated compositions themselves -- this check resolves the
+NSGA-III-search-noise question, not the underlying-data-quality question.
+
+=== Phase 38 statistical summary (n=20 seeds, not just direction-agreement) ===
+ON-minus-OFF La(Fe,Si)13Hy share difference per seed, percentage points:
+  mean   = -1.25 pp
+  std    =  6.89 pp (n-1)
+  n(ON>=OFF) = 13/20, n(ON<OFF) = 7/20
+  one-sample t-test vs 0: t=-0.81, p=0.43
+
+CONCLUSION: statistically indistinguishable from zero at this sample size.
+This supersedes the pass/fail "stable across seeds?" framing above: the
+finding isn't merely unstable, it's that there is no reliable directional
+effect to report. Treat the original single-seed 88%->100% result as noise.
+
+Also flagged: re-running seeds 1-3 at these same settings this pass gave
+DIFFERENT per-seed numbers than the original 3-seed report above (e.g.
+seed 1 was 100%/100% originally, 95%/91% this pass) -- `seed=` alone does
+not fully determine the NSGA-III run's output. See LIMITATIONS.md item 1.5
+for the full note; not root-caused in this pass.

@@ -1,11 +1,11 @@
 """
 magnet_geometry.py
 ====================
-Phase 19: closed-form field-vs-magnet-mass geometry model for the
-permanent-magnet field source, motivated by ROADMAP.md's Phase 19 plan
+closed-form field-vs-magnet-mass geometry model for the
+permanent-magnet field source, motivated by ROADMAP.md's plan
 item ("Magnetic field source: field-vs-mass geometry model").
 
-HONESTY FLAG #1 (book access -- same tier/convention as Phases 17-18).
+HONESTY FLAG #1 (book access -- same tier/convention as this repo's other honesty flags).
 This project's own copy of Kitanovski et al. (2015) is a 30-page front-
 matter/Chapter-1-only excerpt -- it does NOT include Chapter 3 (Magnetic
 Field Sources, pp. 39-96), where Sect. 3.2 (permanent magnets), Sect.
@@ -22,7 +22,7 @@ itself cites for this exact starting point) -- not reproduced from this
 project's own, incomplete copy of Kitanovski.
 
 HONESTY FLAG #2 (citation correction, found while doing this pass). The
-Phase 19 plan handed to this pass, and this project's existing
+ plan handed to this pass, and this project's existing
 Literature_Review.md "Permanent Magnet Design" entry, both cite
 "Bjørk et al., arXiv:1410.1987" for a Halbach field-vs-magnet-mass COST
 tradeoff and a reported ~2 T performance/cost sweet spot. A web search
@@ -51,7 +51,7 @@ against either paper's digitized numbers -- see that function's
 docstring for exactly what is and is not being checked, and its own
 result for whether that check actually confirms the claim. This pass
 does NOT correct Literature_Review.md's citation itself (a real,
-separate cleanup item, noted in ROADMAP.md's Phase 19 entry) since
+separate cleanup item, noted in ROADMAP.md) since
 editing a different, already-committed document is out of scope for a
 physics/model module.
 
@@ -76,10 +76,10 @@ Eq. (1) matter for what this module is FOR:
     for Ro at fixed Ri gives Ro = Ri * exp(B_bore/Br), so the magnet's
     annular cross-sectional area (and hence its mass, at fixed length)
     grows like exp(2*B_bore/Br) -- genuinely, sharply super-linear in
-    field. This is the missing nonlinearity ROADMAP.md's Phase 19 plan
+    field. This is the missing nonlinearity ROADMAP.md's plan
     named explicitly: "achieving high mu0H should cost nonlinearly more
     magnet mass for a fixed air-gap geometry, which is physically real
-    and currently absent" from economics.py's pre-Phase-19
+    and currently absent" from economics.py's previous
     `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA`-based `material_cost()`, which
     is LINEAR in mu0H_max by construction (a "rough fit to two worked
     examples," per that module's own docstring, not a physical model).
@@ -185,7 +185,7 @@ def halbach_field_vs_mass(mu0H_target, air_gap_volume,
                            bed_cross_section_area_m2=0.002,
                            remanence_T=DEFAULT_REMANENCE_T,
                            magnet_density_kg_m3=DEFAULT_MAGNET_DENSITY_KG_M3):
-    """The function ROADMAP.md's Phase 19 plan asked for by name: required
+    """The function ROADMAP.md's plan asked for by name: required
     magnet mass (kg) to reach `mu0H_target` (T) in the bore of an
     idealized Halbach cylinder sized to enclose `air_gap_volume` (m^3) of
     usable air-gap (regenerator) volume, at a fixed representative bed
@@ -292,7 +292,7 @@ def bjork_qualitative_check(air_gap_volume_m3=0.001, mcm_cost_per_kg=20.0,
 
 def run_magnet_geometry_analysis(out_path="results/magnet_geometry_analysis.txt",
                                    verbose=True):
-    """The Phase 19 validation deliverable, same
+    """The validation deliverable, same
     redirect-stdout-to-buffer-then-write pattern as
     core/geometry_analysis.py's run_geometry_analysis() and
     core/hypereg_analysis.py's run_hypereg_analysis(). Runs
@@ -346,7 +346,7 @@ def run_magnet_geometry_analysis(out_path="results/magnet_geometry_analysis.txt"
 
         # Second, independent check: does this module's nonlinear magnet-mass
         # relation actually change core/economics.py's cost_index()-relevant
-        # numbers relative to the pre-Phase-19 flat MAGNET_TO_MCM_MASS_RATIO_
+        # numbers relative to the previous flat MAGNET_TO_MCM_MASS_RATIO_
         # PER_TESLA proxy, at fields spanning core/optimize.py's own search
         # bounds [1.0, 3.0] T? Reports the ratio directly rather than assuming.
         from core.economics import material_cost, MAGNET_TO_MCM_MASS_RATIO_PER_TESLA
@@ -357,11 +357,11 @@ def run_magnet_geometry_analysis(out_path="results/magnet_geometry_analysis.txt"
             geom = halbach_field_vs_mass(B, air_gap_volume_m3, bed_cross_section_area_m2)
             flat_mass = MAGNET_TO_MCM_MASS_RATIO_PER_TESLA * B * mass_regenerator_kg
             ratio = geom["magnet_mass_kg"] / flat_mass if flat_mass > 0 else float("inf")
-            print(f"  mu0H={B:.1f}T  geometric={geom['magnet_mass_kg']:9.3f}kg  "
-                  f"flat-ratio={flat_mass:9.3f}kg  ratio(geom/flat)={ratio:6.2f}x")
+            print(f" mu0H={B:.1f}T geometric={geom['magnet_mass_kg']:9.3f}kg "
+                  f"flat-ratio={flat_mass:9.3f}kg ratio(geom/flat)={ratio:6.2f}x")
         print("\nThe ratio growing with field (rather than staying constant) is exactly "
-              "the missing super-linear-in-field nonlinearity ROADMAP.md's Phase 19 plan "
-              "identified as absent from the pre-Phase-19 flat-ratio proxy -- confirmed "
+              "the missing super-linear-in-field nonlinearity ROADMAP.md's plan "
+              "identified as absent from the previous flat-ratio proxy -- confirmed "
               "directly here, not merely asserted from the closed-form algebra above.")
 
         print("\nCONCLUSION: this module adds a genuinely nonlinear (super-linear-in-"
@@ -401,12 +401,12 @@ def run_geometric_cost_pareto_sensitivity(
         out_csv_flat="results/pareto_front_magnet_flat.csv",
         out_csv_geometric="results/pareto_front_magnet_geometric.csv",
         verbose=True):
-    """Phase 19's second validation deliverable: does switching
+    """the earlier second validation deliverable: does switching
     core/optimize.py's cost objective from the flat per-Tesla magnet-mass
     ratio to this module's nonlinear, closed-form Halbach-cylinder
-    relation change the Phase 15 merged Pareto front's material
+    relation change the merged Pareto front's material
     composition or its high-field representation? Same controlled A/B
-    pattern core/hysteresis_sensitivity.py established for Phase 16
+    pattern core/hysteresis_sensitivity.py established for
     (`run_hysteresis_sensitivity()`): two `core.optimize.run_optimization()`
     calls at IDENTICAL pop_size/n_gen/seed, differing only in
     `use_geometric_magnet_mass`.
@@ -427,8 +427,8 @@ def run_geometric_cost_pareto_sensitivity(
             print(*args, **kwargs)
 
     _p("=" * 70)
-    _p(f"Phase 19 magnet-geometry cost sensitivity: run 1/2 -- FLAT "
-       f"per-Tesla magnet-mass ratio (pre-Phase-19 behavior) [seed={seed}]")
+    _p(f" magnet-geometry cost sensitivity: run 1/2 -- FLAT "
+       f"per-Tesla magnet-mass ratio (previous behavior) [seed={seed}]")
     _p("=" * 70)
     rows_flat = optimize.run_optimization(
         pop_size=pop_size, n_gen=n_gen, seed=seed, out_csv=out_csv_flat,
@@ -436,7 +436,7 @@ def run_geometric_cost_pareto_sensitivity(
 
     _p()
     _p("=" * 70)
-    _p(f"Phase 19 magnet-geometry cost sensitivity: run 2/2 -- GEOMETRIC "
+    _p(f" magnet-geometry cost sensitivity: run 2/2 -- GEOMETRIC "
        f"Halbach-cylinder magnet-mass relation [seed={seed}]")
     _p("=" * 70)
     rows_geometric = optimize.run_optimization(
@@ -451,7 +451,7 @@ def run_geometric_cost_pareto_sensitivity(
     fields_geom = [r["mu0H_max_T"] for r in rows_geometric]
 
     lines = []
-    lines.append("Phase 19 magnet-geometry cost sensitivity: merged, globally")
+    lines.append(" magnet-geometry cost sensitivity: merged, globally")
     lines.append("non-dominated Pareto front, FLAT vs. GEOMETRIC magnet-mass cost term.")
     lines.append(f"(pop_size={pop_size}, n_gen={n_gen}, seed={seed} -- see module")
     lines.append(" docstring honesty flag on why this is smaller than")
@@ -524,7 +524,7 @@ def run_magnet_geometry_multiseed_stability_check(
     already found its own reduced-setting finding was NOT stable at
     production settings/multiple seeds -- see
     results/hysteresis_multiseed_stability.txt. This function is the
-    direct analog for THIS module's own reduced-setting finding (Phase 19's
+    direct analog for THIS module's own reduced-setting finding (the earlier
     "does the geometric magnet-mass cost term pull the merged Pareto
     front's mean mu0H_max_T down relative to the flat-ratio baseline?",
     run at pop_size=32/n_gen=15/seed=1 in
@@ -567,8 +567,8 @@ def run_magnet_geometry_multiseed_stability_check(
             "front_size_flat": len(rows_flat),
             "front_size_geometric": len(rows_geometric),
         })
-        print(f"  seed={seed}: mean mu0H_max_T FLAT={mean_flat:.2f}T -> "
-              f"GEOMETRIC={mean_geometric:.2f}T  "
+        print(f" seed={seed}: mean mu0H_max_T FLAT={mean_flat:.2f}T -> "
+              f"GEOMETRIC={mean_geometric:.2f}T "
               f"(front size FLAT={len(rows_flat)}, GEOMETRIC={len(rows_geometric)})")
 
     for scratch in (scratch_flat, scratch_geometric):
@@ -580,7 +580,7 @@ def run_magnet_geometry_multiseed_stability_check(
     stable = all(s["mean_geometric_T"] <= s["mean_flat_T"] + 1e-9 for s in per_seed)
 
     lines = []
-    lines.append("Phase 19 open item (Paper-Mining Pass review item 4, and this module's")
+    lines.append(" open item (Paper-Mining Pass review item 4, and this module's")
     lines.append("own honesty flag on run_geometric_cost_pareto_sensitivity()): does the")
     lines.append("'geometric cost term does NOT pull the mean field down' finding at")
     lines.append("pop_size=32/n_gen=15/seed=1 hold at production pop_size/n_gen settings")
@@ -615,7 +615,7 @@ def run_magnet_geometry_multiseed_stability_check(
         lines.append("signed, not as a settled result in either direction -- see the per-seed")
         lines.append("table above for which seed(s) disagree. This is the SAME kind of")
         lines.append("outcome core/hysteresis_sensitivity.py's own multiseed check found for")
-        lines.append("its analogous Phase 16 comparison (results/hysteresis_multiseed_")
+        lines.append("its analogous comparison (results/hysteresis_multiseed_")
         lines.append("stability.txt) -- NSGA-III search noise at this problem's scale appears")
         lines.append("large enough to flip BOTH of this repo's reduced-setting Pareto")
         lines.append("sensitivity findings, not just one of them.")

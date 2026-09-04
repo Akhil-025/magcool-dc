@@ -5,7 +5,7 @@ from core.validation_system import (
     run_field_sensitivity_check, run_capacity_only_calibration_check,
     run_tusek_multipoint_curve_validation, _load_tusek_curve,
     calibrate_and_check, infer_cycle_type_for_device, run_cycle_type_validation,
-    diagnose_qc_feasibility_reopening,
+    diagnose_qc_feasibility_reopening, run_calibrated_gd_system_level_comparison,
 )
 from core.mce_material import GADOLINIUM
 
@@ -52,7 +52,7 @@ def test_device_groups_with_multiple_rows_share_static_params():
 
 
 def test_run_system_validation_still_returns_four_point_results():
-    """The original point-wise validation (Phase 2/6) must be unaffected by
+    """The original point-wise validation must be unaffected by
     adding the device_group column: of the original 5 devices, DTU and
     Okamura calibrate successfully; Risoe reports a "no calibration found"
     status dict rather than a numeric result, as before.
@@ -68,7 +68,7 @@ def test_run_system_validation_still_returns_four_point_results():
     results/tusek_ate2013_figs_notes.md), not a bug in this validation
     code. with_cop count therefore drops from 7 to 6.
 
-    Astronautics_rotary_2014 (Phase 9) is now a "no calibration found" row
+    Astronautics_rotary_2014 is now a "no calibration found" row
     too, NOT a regression: it used to "calibrate" only because it was run
     against GADOLINIUM as an explicitly-flagged stand-in. Now that it uses
     the real LAFESIH_FIRST_ORDER material (core/first_order_mce.py,
@@ -82,8 +82,8 @@ def test_run_system_validation_still_returns_four_point_results():
     304-316K, see first_order_mce.py's LAFESIH_FIRST_ORDER comment) with a
     single Tc=287K material. This is a genuine finding about the
     single-layer approximation's limits, not something to paper over by
-    retuning Tc to force a fit -- see ROADMAP.md Phase 9.
-    Phase 7 added 8 real (span>0, Qc, COP) Lozano POLO/UFSC (2016) rows
+    retuning Tc to force a fit -- see ROADMAP.md .
+     added 8 real (span>0, Qc, COP) Lozano POLO/UFSC (2016) rows
     (r1-r8; the zerospan/maxspan endpoint rows are filtered exactly like
     every other device's endpoint rows), of which 4 (r4, r6, r7, r8)
     successfully calibrate and 4 (r1, r2, r3, r5) report "no calibration
@@ -140,10 +140,26 @@ def test_run_system_validation_still_returns_four_point_results():
     from 7 to 6 (losing this device's contribution), while total stays at
     15 (the row is still present with a "no calibration found" status,
     like Astronautics_rotary_2014, Risoe_DTU_Gd_2011, DTU_MagQueen_2018,
-    and 4 of the 8 Lozano rows -- present, not silently dropped)."""
+    and 4 of the 8 Lozano rows -- present, not silently dropped).
+
+    Gd physics-fix pass (exact isentropic DeltaT_ad + Sommerfeld
+    electronic entropy/heat-capacity term, core/mce_material.py's
+    GADOLINIUM.sommerfeld_gamma_J_per_molK2): adding the electronic term
+    to total_heat_capacity() changes total_heat_capacity() everywhere
+    GADOLINIUM is used, including the reachable-mdot search this
+    calibration loop runs for every Gd-material row. That shift pushes
+    Lozano_POLO_UFSC_2016_r4 (span=6.1K) just outside its previously-
+    reachable mdot range -- a genuine, expected side effect of a real
+    physics correction, not a bug in the calibration search itself.
+    with_cop therefore drops again, from 6 to 5... but empirically only
+    r4 is lost (Tusek_singlebed_Gd_2010, Okamura_Hirano_2013,
+    DTU_Eriksen_rotary_Gd_2015, and Lozano r6/r7/r8 all still calibrate),
+    so with_cop lands at 6, not 5 -- see this test's own assertion below
+    for the current count; total stays at 15 either way (r4 is still
+    present with a "no calibration found" status)."""
     results = run_system_validation()
     with_cop = [r for r in results if "COP_error_pct" in r]
-    assert len(with_cop) == 7
+    assert len(with_cop) == 6
     assert len(results) == 15
 
 
@@ -245,7 +261,7 @@ def test_field_sensitivity_check_chubu_reports_honest_no_calibration():
     and Astronautics_rotary_2014, not a bug introduced by this row. Locked
     down so a future, unrelated change to amr_cycle.py that silently makes
     this calibrate doesn't go unnoticed without someone updating this test
-    (and ROADMAP.md's Phase 11 note) accordingly."""
+    (and ROADMAP.md) accordingly."""
     result = run_field_sensitivity_check(verbose=False)
     assert result.get("status") == "no calibration found at anchor field"
 
@@ -338,27 +354,38 @@ def test_tusek_multipoint_curve_validation_predicts_both_other_points():
     assert spans_predicted == {12.23, 14.75}
 
 
-def test_tusek_multipoint_curve_validation_genuine_finding_nonmonotonic_curve():
-    """Actual, documented finding (ROADMAP.md Group A completion pass):
-    unlike the real device's smoothly-decreasing "cooling line", this
-    repo's single-Tc 0-D Qc(span) model is NON-monotonic at this
-    calibrated mdot -- it drops to ~0W around span=8K, then rises again to
-    a large, spurious local maximum before finally falling back to 0 past
-    span~14K. The 2-point companion check (span=7.26K -> 19.8K) alone
-    would NOT have caught this, since both endpoints happen to look
-    reasonable; only a genuine 3+-point curve-shape check exposes it. This
-    is a real model limitation, not a bug in this validation code -- do
-    not silently retune the model to remove this without noting it here
-    and in ROADMAP.md. Locked down so a future, unrelated change to
-    amr_cycle.py that silently changes this doesn't go unnoticed."""
+def test_tusek_multipoint_curve_validation_span_reopening_now_clamped():
+    """Historical note (superseded finding, kept for context): before the
+    span-reopening clamp was wired into this function
+    (`cooling_capacity_span_sweep()`, core/amr_cycle.py), this repo's
+    single-Tc 0-D Qc(span) model was non-monotonic at this calibrated
+    mdot -- it dropped to ~0W around span=8K, then rose again to a large,
+    spurious local maximum (~20.5W, +910% vs. the literature 2.03W)
+    before finally falling back to 0 past span~14K. A 2-point
+    companion check alone would not have caught this; only a genuine
+    3+-point curve-shape check exposed it.
+
+    Current, correct behavior: the SAME underlying near-Tc discontinuity
+    is still there (qc_feasibility_reopening still reports `reopens`),
+    but the reported Qc at this span is now the CLAMPED value (0W, not
+    the spurious 20.5W reopening peak) -- physically consistent with the
+    model's own behavior at every other span in this reopened window.
+    The remaining -100% error at this point is a genuine, honestly-
+    reported model limitation (the model just can't produce ANY nonzero
+    Qc here, vs. the literature's small positive 2.03W), not the
+    reopening artifact itself. Locked down so a future, unrelated change
+    to amr_cycle.py that silently un-clamps this doesn't go unnoticed."""
     out = run_tusek_multipoint_curve_validation(verbose=False, amr="A", v_star=0.95)
     mid_span_pred = next(p for p in out["predictions"] if p["span_K"] == 12.23)
-    # literature says Qc keeps falling (2.03W); model instead predicts a
-    # large overshoot far ABOVE the anchor's own 5.27W -- a genuine,
-    # large, and non-physical disagreement in curve shape.
     assert mid_span_pred["Qc_lit_W"] == pytest.approx(2.03)
-    assert mid_span_pred["Qc_model_W"] > 10.0
-    assert mid_span_pred["Qc_error_pct"] > 500
+    # Clamped: no longer a spurious overshoot far above the anchor's 5.27W.
+    assert mid_span_pred["Qc_model_W"] == pytest.approx(0.0, abs=1e-6)
+    assert mid_span_pred["Qc_error_pct"] == pytest.approx(-100.0, abs=0.1)
+    # The clamp DID fire here (raw model would have been the spurious
+    # reopening value) -- confirms this test is actually exercising the
+    # clamp, not a case where clamping was a no-op.
+    assert mid_span_pred["span_reopening_clamped"] is True
+    assert mid_span_pred["Qc_model_raw_W"] > 10.0
 
     endpoint_pred = next(p for p in out["predictions"] if p["span_K"] == 14.75)
     assert endpoint_pred["Qc_lit_W"] == pytest.approx(0.0)
@@ -417,7 +444,7 @@ def test_tusek_fig10_and_fig11_csvs_have_matching_series():
     assert combos_10 == combos_11
     assert len(combos_10) == 9
 
-# --- Phase 17: cycle-type validation sensitivity ---
+# --- cycle-type validation sensitivity ---
 
 def test_infer_cycle_type_for_device_rotary_vs_other():
     rotary_row = {"device": "Astronautics_rotary_2014",
@@ -434,7 +461,7 @@ def test_infer_cycle_type_is_case_insensitive():
 
 
 def test_calibrate_and_check_accepts_cycle_type_kwarg():
-    """Regression guard for the Phase 17 threading of cycle_type through
+    """Regression guard for the threading of cycle_type through
     calibrate_and_check() -- a row that calibrates under brayton should
     also (independently) attempt calibration under ericsson without
     raising, and the two should not be forced to return identical numbers
@@ -483,3 +510,54 @@ def test_run_cycle_type_validation_out_path_none_skips_file_write(tmp_path):
     results = run_cycle_type_validation(verbose=False, out_path=None)
     assert len(results) > 0
     assert set(tmp_path.iterdir()) == before
+
+def test_calibrated_gd_system_level_comparison_returns_rows(tmp_path):
+    """Basic structural check: runs against real, already-calibrating Gd
+    benchmark rows, returns a comparison for each, and writes a report."""
+    out_path = tmp_path / "calibrated_gd_system_level_comparison.txt"
+    result = run_calibrated_gd_system_level_comparison(verbose=False, out_path=str(out_path))
+    assert out_path.exists()
+    assert len(result["rows"]) > 0
+    for r in result["rows"]:
+        assert r["COP_plain"] >= 0.0
+        assert r["COP_calibrated"] >= 0.0
+        assert r["Qc_plain_W"] >= 0.0
+        assert r["Qc_calibrated_W"] >= 0.0
+
+
+def test_calibrated_gd_system_level_comparison_same_mdot_both_materials():
+    """The whole comparison is only meaningful if both AMRSystem instances
+    for a given row share the SAME calibrated mdot -- otherwise a COP/Qc
+    difference could just be a flow-rate artifact, not the material
+    physics difference this function is meant to isolate. Checked
+    indirectly: re-running calibrate_and_check() for the same device
+    must reproduce the exact mdot this function used internally."""
+    from core.validation_system import load_benchmarks, calibrate_and_check
+    rows = load_benchmarks()
+    checked_devices = set()
+    for row in rows:
+        result = calibrate_and_check(row, verbose=False)
+        if result is not None and "status" not in result:
+            checked_devices.add(row["device"])
+    result = run_calibrated_gd_system_level_comparison(verbose=False)
+    compared_devices = {r["device"] for r in result["rows"]}
+    # Every device this function actually compared must be one that
+    # independently calibrates via the same mechanism -- confirms this
+    # function isn't inventing its own separate (and possibly
+    # inconsistent) calibration path.
+    assert compared_devices.issubset(checked_devices)
+
+
+def test_calibrated_gd_system_level_comparison_documents_feasibility_zeroing():
+    """Real, load-bearing finding from this comparison (see the
+    function's own docstring): at least one benchmark device goes from a
+    real, positive Qc under plain GADOLINIUM to a hard zero under
+    GADOLINIUM_CALIBRATED at the identical calibrated mdot/span/field --
+    this is not just a performance argument against wiring
+    GADOLINIUM_CALIBRATED in system-wide, it's a correctness one. Locked
+    down so a future, unrelated change to either material doesn't
+    silently make this finding disappear (or appear) unnoticed."""
+    result = run_calibrated_gd_system_level_comparison(verbose=False)
+    zeroed = [r for r in result["rows"]
+              if r["Qc_calibrated_W"] == 0.0 and r["Qc_plain_W"] > 0.0]
+    assert len(zeroed) >= 1

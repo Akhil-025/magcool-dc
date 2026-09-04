@@ -1,7 +1,7 @@
 """
 fluid_mce_analysis.py
 =======================
-Phase 20 validation/exploration deliverable for core/fluid_mce_cycle.py.
+ validation/exploration deliverable for core/fluid_mce_cycle.py.
 Same redirect-stdout-to-buffer-then-write pattern as
 core/geometry_analysis.py / core/thermal_diode_analysis.py.
 
@@ -11,7 +11,7 @@ docstring for the underlying physics and honesty flags):
 
 1. `volume_fraction_sweep()`: sweeps particle_volume_fraction (phi) at a
    fixed representative operating point, printing the viscosity-vs-phi /
-   MCE-intensity-vs-phi tradeoff the Phase 20 plan named directly, and
+   MCE-intensity-vs-phi tradeoff the plan named directly, and
    reporting whether an interior COP_electrical optimum exists (the same
    "genuinely open territory" question the plan itself posed, not
    resolved by the plan, and not force-resolved here either).
@@ -166,7 +166,7 @@ def compare_to_solid_amr_and_liquid_cooling(T_cold=T_COLD_K_REPRESENTATIVE,
     module's primary, shared-span table). Compares, at the fluid
     system's OWN favorable span (90% of its dTad_suspension at `phi`):
       * FerrofluidMCESystem (this module)
-      * a representative solid AMRSystem (Gd, same field/flow, Phase-15-
+      * a representative solid AMRSystem (Gd, same field/flow, -
         era defaults: mass_regenerator=5kg, frequency=1Hz, constant
         parasitic_fraction -- NOT the state-dependent loss_model, kept
         simple/representative rather than full-fidelity, consistent with
@@ -223,7 +223,7 @@ def run_fluid_mce_analysis(out_path="results/fluid_mce_analysis.txt", verbose=Tr
               f"(COP_electrical={sweep['best_row']['COP_electrical']:.4f})")
         if sweep["interior_optimum_found"]:
             print("FINDING: a genuine INTERIOR optimum exists in phi within the swept range "
-                  "-- the viscosity-vs-phi and MCE-intensity-vs-phi tradeoff the Phase 20 "
+                  "-- the viscosity-vs-phi and MCE-intensity-vs-phi tradeoff the "
                   "plan named DOES produce a real tradeoff in this model, not a monotonic "
                   "result at either boundary.")
         else:
@@ -239,14 +239,14 @@ def run_fluid_mce_analysis(out_path="results/fluid_mce_analysis.txt", verbose=Tr
         print(f"\nAt span={fixed['span_K']:.1f}K (fixed), phi={fixed['phi']:.2f}:")
         f_feas = "feasible" if fixed["fluid_MCE"]["feasible"] else "INFEASIBLE (Qc clipped to 0)"
         a_feas = "feasible" if fixed["solid_AMR"]["feasible"] else "INFEASIBLE (Qc clipped to 0)"
-        print(f"  Ferrofluid MCE:      Qc={fixed['fluid_MCE']['Qc_W']:.3f}W   "
+        print(f" Ferrofluid MCE:      Qc={fixed['fluid_MCE']['Qc_W']:.3f}W "
               f"COP_electrical={fixed['fluid_MCE']['COP_electrical']:.3f}   [{f_feas}]   "
               f"(own achievable dTad_suspension={fixed['fluid_MCE']['own_dTad_suspension_K']:.3f}K "
               f"vs. the {fixed['span_K']:.0f}K span asked of it)")
-        print(f"  Solid AMR (Gd):      Qc={fixed['solid_AMR']['Qc_W']:.3f}W   "
+        print(f" Solid AMR (Gd):      Qc={fixed['solid_AMR']['Qc_W']:.3f}W "
               f"COP_electrical={fixed['solid_AMR']['COP_electrical']:.3f}   [{a_feas}]")
-        print(f"  Liquid cooling:      COP={fixed['liquid_cooling']['COP']:.3f}")
-        print(f"  Vapor compression:   COP={fixed['vapor_compression']['COP']:.3f}")
+        print(f" Liquid cooling:      COP={fixed['liquid_cooling']['COP']:.3f}")
+        print(f" Vapor compression:   COP={fixed['vapor_compression']['COP']:.3f}")
         if not fixed["fluid_MCE"]["feasible"] and fixed["solid_AMR"]["feasible"]:
             print(f"\nFINDING: at a realistic, externally-imposed {fixed['span_K']:.0f}K span, "
                   "the ferrofluid system is infeasible (its own achievable "
@@ -262,12 +262,12 @@ def run_fluid_mce_analysis(out_path="results/fluid_mce_analysis.txt", verbose=Tr
               "vapor-compression references ---")
         comp = compare_to_solid_amr_and_liquid_cooling()
         print(f"\nAt span={comp['span_K']:.3f}K, phi={comp['phi']:.2f}:")
-        print(f"  Ferrofluid MCE (this module):  Qc={comp['fluid_MCE']['Qc_W']:.3f}W   "
+        print(f" Ferrofluid MCE (this module):  Qc={comp['fluid_MCE']['Qc_W']:.3f}W "
               f"COP_electrical={comp['fluid_MCE']['COP_electrical']:.3f}")
-        print(f"  Solid AMR (Gd, same field/flow): Qc={comp['solid_AMR']['Qc_W']:.3f}W   "
+        print(f" Solid AMR (Gd, same field/flow): Qc={comp['solid_AMR']['Qc_W']:.3f}W "
               f"COP_electrical={comp['solid_AMR']['COP_electrical']:.3f}")
-        print(f"  Liquid cooling (baseline_cooling.py): COP={comp['liquid_cooling']['COP']:.3f}")
-        print(f"  Vapor compression (baseline_cooling.py): COP={comp['vapor_compression']['COP']:.3f}")
+        print(f" Liquid cooling (baseline_cooling.py): COP={comp['liquid_cooling']['COP']:.3f}")
+        print(f" Vapor compression (baseline_cooling.py): COP={comp['vapor_compression']['COP']:.3f}")
 
         span_ratio = comp["span_K"]
         fluid_cop = comp["fluid_MCE"]["COP_electrical"]

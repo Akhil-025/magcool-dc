@@ -1,14 +1,14 @@
 """
 pareto_multiseed_stability.py
 ==============================
-Phase 30 addition (statistical rigor pass, Tier 1 item 5 of the original
+ addition (statistical rigor pass, Tier 1 item 5 of the original
 review).
 
 `core/optimize.py`'s `run_optimization()` (the main material+geometry
 NSGA-III co-optimization behind `results/pareto_front.csv`) has, until
 now, only ever been run at a single fixed `seed=1` for its PRODUCTION
 output -- unlike `core/hysteresis_sensitivity.py`'s
-`run_hysteresis_multiseed_stability_check()` (Phase 16-18 follow-up) and
+`run_hysteresis_multiseed_stability_check()` ( follow-up) and
 `core/magnet_geometry.py`'s multiseed check (Paper-Mining Pass review item
 4), which already established the pattern this module extends to the
 MAIN Pareto front itself.
@@ -20,7 +20,7 @@ cite:
   - best (max) COP_electrical on the merged front
   - the knee-point (balanced) design's COP_electrical, Qc, and cost
   - each material family's SHARE (%) of the merged non-dominated front
-    (the Phase 15/16 "100% La(Fe,Si)13Hy"-style claims this repo has
+    (the "100% La(Fe,Si)13Hy"-style claims this repo has
     made before, and the exact kind of claim `hysteresis_sensitivity.py`
     already found could reverse under different search settings)
 
@@ -120,7 +120,7 @@ def run_pareto_multiseed_stability_check(seeds=(1, 2, 3, 4, 5),
               f"range={summary['best_COP_electrical_range']}")
         print(f"knee-point COP_electrical: mean={summary['knee_COP_electrical_mean']:.3f}  "
               f"std={summary['knee_COP_electrical_std']:.3f}")
-        print(f"knee-point Qc: mean={summary['knee_Qc_W_mean']:.1f}W  "
+        print(f"knee-point Qc: mean={summary['knee_Qc_W_mean']:.1f}W "
               f"std={summary['knee_Qc_W_std']:.1f}W")
         print(f"knee-point cost: mean=${summary['knee_cost_USD_mean']:.1f}  "
               f"std=${summary['knee_cost_USD_std']:.1f}")

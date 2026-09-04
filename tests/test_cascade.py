@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from core.cascade import (  
+from core.cascade import (
     run_cascade, run_graded_cascade, GD_FAMILY, LAFESIH_FAMILY, MNFEPSI_FAMILY,
     _target_composition_for_peak, _peak_temperature,
     validate_astronautics_graded_bed, run_astronautics_cycle_type_sensitivity,
@@ -32,7 +32,7 @@ def test_run_cascade_more_stages_more_capacity():
 
 def test_peak_temperature_is_near_material_tc():
     """Sanity check for the two-pass coarse/fine _peak_temperature search
-    added in Phase 9 for speed: the located peak should be within a few K
+    added in for speed: the located peak should be within a few K
     of the material's own Tc (exact offset varies with field/model, but it
     should not be wildly off, e.g. not landing outside the search window
     or at a spurious low-T artifact)."""
@@ -42,11 +42,11 @@ def test_peak_temperature_is_near_material_tc():
 
 
 def test_target_composition_for_peak_gd_family_converges():
-    """The brentq-based root-finder (Phase 9 replacement for the original
+    """The brentq-based root-finder ( replacement for the original
     fixed-point iteration, which was found to fail for the narrower
     LAFESIH_FAMILY transition) must still correctly solve for GD_FAMILY --
     this is the regression this test guards against (an earlier version of
-    the Phase 9 change searched down to T=-20K, hit this Landau model's
+    the change searched down to T=-20K, hit this Landau model's
     low-temperature DeltaT_ad numerical artifact, and returned garbage
     Tc~568K)."""
     T_target = 293.0
@@ -58,7 +58,7 @@ def test_target_composition_for_peak_gd_family_converges():
 
 
 def test_target_composition_for_peak_lafesih_family_converges():
-    """Same check for LAFESIH_FAMILY (Phase 9 addition) -- this is the
+    """Same check for LAFESIH_FAMILY ( addition) -- this is the
     specific case the original fixed-point iteration could NOT reliably
     solve (it left dTad at ~0.6K instead of ~21K at some stages due to the
     family's much narrower transition; see _target_composition_for_peak's
@@ -69,7 +69,7 @@ def test_target_composition_for_peak_lafesih_family_converges():
     mat = lafesih_composition_tuned_material(Tc)
     mu0 = 4 * np.pi * 1e-7
     dT_at_target = mat.delta_T_adiabatic(np.array([T_target]), 1.44 / mu0)[0]
-    # this is the actual failure mode Phase 9 fixed: dT_at_target collapsing
+    # this is the actual failure mode fixed: dT_at_target collapsing
     # to ~0.6K (span_fraction clamps Qc to 0) instead of landing near the
     # true peak (~21K for this material at 1.44T)
     assert dT_at_target > 15.0
@@ -89,7 +89,7 @@ def test_target_composition_for_peak_mnfepsi_family_converges():
 
 def test_run_graded_cascade_gd_family_default_matches_explicit_family():
     """family=None must reproduce family=GD_FAMILY exactly (backward
-    compatibility with the pre-Phase-9 API, which only supported the Gd
+    compatibility with the previous API, which only supported the Gd
     family and took apply_giguere_correction directly)."""
     r_default = run_graded_cascade(291.15, 10.0, 3, mass_per_stage=5.0)
     r_explicit = run_graded_cascade(291.15, 10.0, 3, mass_per_stage=5.0, family=GD_FAMILY)
@@ -112,7 +112,7 @@ def test_run_graded_cascade_gd_family_small_span_feasible_in_range():
 
 def test_run_graded_cascade_lafesih_family_astronautics_range():
     """The 6-layer La(Fe,Si)13Hy grading used for the Astronautics device
-    (Phase 9) should be fully in-range and feasible at that device's own
+     should be fully in-range and feasible at that device's own
     operating point."""
     r = run_graded_cascade(305.0, 11.0, 6, mu0H_max=1.44, mass_per_stage=1.52 / 6,
                             frequency=4.0, family=LAFESIH_FAMILY)
@@ -145,7 +145,7 @@ def test_composition_tuned_material_out_of_range_raises():
 
 
 def test_validate_astronautics_graded_bed_reproduces_reported_qc_and_close_cop():
-    """The Phase 9 headline result: calibrating fluid_mdot to reproduce the
+    """The headline result: calibrating fluid_mdot to reproduce the
     literature Qc=2502W, the 6-layer graded La(Fe,Si)13Hy bed's predicted
     COP should be within the same order-of-magnitude error the rest of
     validation_system.py sees for other devices, NOT the "no calibration
@@ -177,7 +177,7 @@ def test_validate_astronautics_graded_bed_reproduces_reported_qc_and_close_cop()
     assert abs(r["COP_error_pct"]) < 100.0
 
 # ---------------------------------------------------------------------------
-# ROADMAP.md Phase 17 follow-up: cycle_type threaded through cascade.py
+# ROADMAP.md follow-up: cycle_type threaded through cascade.py
 # ---------------------------------------------------------------------------
 
 def test_run_graded_cascade_cycle_type_default_matches_explicit_brayton():

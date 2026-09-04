@@ -1,7 +1,7 @@
 """
 water_usage.py
 ================
-Phase 31 addition.
+ addition.
 
 emissions.py already splits GWP into refrigerant + operational terms and
 explicitly flags that AMR's refrigerant-free design "is a genuine
@@ -184,7 +184,7 @@ def write_water_usage_report(path="results/water_usage_comparison.txt",
     own historical __main__ example point) ONLY when the caller doesn't
     supply real ones. main.py's stage 16 passes the actual step-4
     baseline-sweep representative_row's COPs and a facility-scale
-    capacity (Phase 31 fix -- these were previously hardcoded
+    capacity ( fix -- these were previously hardcoded
     unconditionally, disconnecting this report from the rest of the
     pipeline's own computed operating point)."""
     is_default = (capacity_kW_IT == 100.0 and amr_cop == 4.63
@@ -203,13 +203,13 @@ def write_water_usage_report(path="results/water_usage_comparison.txt",
         lines.append("(amr_cop/vcc_cop/liquid_cop below are the actual step-4 "
                       "baseline-sweep COPs at the representative span, same basis "
                       "run_economics()/run_emissions() already use -- see main.py's "
-                      "_run_phase30_additions())")
+                      "_run_paper_strengthening_additions())")
     lines.append("")
     results = compare_water_usage(capacity_kW_IT, amr_cop, vcc_cop, liquid_cop)
     for r in results:
         lines.append(f"{r.technology:<20} rejection={r.rejection_class:<18} "
-                      f"WUE={r.WUE_L_per_kWh_IT:5.2f} L/kWh_IT  "
-                      f"annual water={r.annual_water_liters:>12,.0f} L  "
+                      f"WUE={r.WUE_L_per_kWh_IT:5.2f} L/kWh_IT "
+                      f"annual water={r.annual_water_liters:>12,.0f} L "
                       f"({r.annual_water_liters_per_kW_IT:>8,.0f} L/kW_IT/yr)")
     amr_liters = results[0].annual_water_liters
     baseline_liters = [r.annual_water_liters for r in results[1:]]

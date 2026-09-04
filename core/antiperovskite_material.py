@@ -1,7 +1,7 @@
 """
 antiperovskite_material.py
 ============================
-Phase 24 (see ROADMAP.md): adds a fourth composition-tunable candidate
+ (see ROADMAP.md): adds a fourth composition-tunable candidate
 material family -- Ga1-xCMn3+x, a Mn-based antiperovskite -- alongside
 GD_FAMILY / LAFESIH_FAMILY / MNFEPSI_FAMILY in core/cascade.py and
 core/material_family_comparison.py.
@@ -12,7 +12,7 @@ A "10 realistic materials" pitch document supplied by the user (no
 citations of its own) named "GaCMn3" as a first-order antiperovskite
 candidate with a transition "around 296K" and RCP~2.1 J/cm^3 at 2T.
 Checked directly against the literature before writing any code (per
-this repo's own no-fabricated-numbers standard -- see ROADMAP.md Phase 24
+this repo's own no-fabricated-numbers standard -- see ROADMAP.md
 entry for the full per-material verification writeup covering all 10
 claims in that document, not just this one):
 
@@ -44,7 +44,7 @@ Mn3GaC the document named, since it is the literature-grounded, genuinely
 room-temperature-tunable, hysteresis-free candidate -- reusing the SAME
 mean-field/Brillouin machinery core.mce_material.MagnetocaloricMaterial
 already implements for Gd and La0.7Ca0.3MnO3, via that class's existing
-`with_Tc()` method (added for Phase 22 item 1's inhomogeneous-broadening
+`with_Tc()` method (added for 's inhomogeneous-broadening
 ensemble; reused here unchanged, no new physics machinery needed).
 
 HONESTY FLAG -- what is and is not calibrated here
@@ -137,7 +137,7 @@ def ga1xcmn3x_composition_tuned_material(Tc_target_K, name=None):
     Tc_target_K, for use as a GradedFamily.tuned_fn (the antiperovskite
     analog of core.first_order_mce.mnfepsi_composition_tuned_material()).
 
-    Reuses MagnetocaloricMaterial.with_Tc() (Phase 22 item 1) rather than
+    Reuses MagnetocaloricMaterial.with_Tc()  rather than
     reimplementing the same "hold every other parameter fixed, vary only
     Tc (and its derived Weiss constant)" pattern -- appropriate here
     specifically because this is a SECOND-ORDER family (with_Tc() was
@@ -168,7 +168,7 @@ if __name__ == "__main__":
     print("Ga1-xCMn3+x antiperovskite family -- Tc tunability check")
     for tc in (250.0, 281.5, 296.5, 323.5):
         m = ga1xcmn3x_composition_tuned_material(tc)
-        print(f"  Tc={tc:.1f}K -> {m.name}, lambda={m.lam:.4e}")
+        print(f" Tc={tc:.1f}K -> {m.name}, lambda={m.lam:.4e}")
     print("\nNOTE: this family's Tc values reproduce Wang et al. (2009)'s own "
           "measured x=0/0.06/0.07/0.08 points exactly (by construction -- Tc is "
           "the only tuned parameter). Peak DeltaS_M/DeltaT_ad magnitude is NOT "

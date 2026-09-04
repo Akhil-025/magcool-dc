@@ -1,5 +1,5 @@
 """
-Tests for core/first_order_mce.py's Phase 25 addition: MNCUCOGE_FIRST_ORDER /
+Tests for core/first_order_mce.py's addition: MNCUCOGE_FIRST_ORDER /
 mncucoge_composition_tuned_material() (Mn1-xCuxCoGe magnetostructural family).
 """
 import numpy as np

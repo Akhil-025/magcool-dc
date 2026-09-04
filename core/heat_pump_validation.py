@@ -1,7 +1,7 @@
 """
 heat_pump_validation.py
 =========================
-Phase 34 companion to core/beverage_cooler_validation.py: a THIRD distinct
+ companion to core/beverage_cooler_validation.py: a THIRD distinct
 real-world segment (residential/commercial heat pumps, not refrigeration)
 where a real, peer-reviewed, national-laboratory device has been built and
 published -- unlike this repo's own primary data-center application, which

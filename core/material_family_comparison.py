@@ -15,13 +15,13 @@ family be tuned to a composition that works here, and if so, how does it
 actually perform against Gd and against each other".
 
 This module runs all eight candidates --
-    1. Gd                      (fixed, core.mce_material.GADOLINIUM)
+    1. Gd (fixed, core.mce_material.GADOLINIUM)
     2. Gd5Si2Ge2 (fixed comp.) (core.first_order_mce.GD5SI2GE2_FIRST_ORDER)
     3. Gd5(SixGe1-x)4(-Ga)     (GD_FAMILY, composition-tuned per span)
-    4. La(Fe,Si)13Hy           (LAFESIH_FAMILY, composition-tuned per span)
+    4. La(Fe,Si)13Hy (LAFESIH_FAMILY, composition-tuned per span)
     5. (Mn,Fe)2(P,Si)          (MNFEPSI_FAMILY, composition-tuned per span)
     6. Nanocomposite (LAFESIH 3-phase blend)
-                               (NANOCOMPOSITE_FAMILY, Phase 22 item 2 --
+                               (NANOCOMPOSITE_FAMILY,  --
                                 an engineered multi-phase blend of three
                                 LAFESIH_FAMILY compositions spread around a
                                 per-span target, rather than one single
@@ -30,7 +30,7 @@ This module runs all eight candidates --
                                 docstring for the physical motivation and
                                 its honesty flags)
     7. Ga1-xCMn3+x (antiperovskite, tuned)
-                               (GA1XCMN3X_FAMILY, Phase 24 -- a
+                               (GA1XCMN3X_FAMILY,  -- a
                                 literature-measured, second-order,
                                 hysteresis-free family; see
                                 core/antiperovskite_material.py's own
@@ -38,7 +38,7 @@ This module runs all eight candidates --
                                 Tc-tunability is literature-grounded but
                                 its DeltaS_M/DeltaT_ad magnitude is not)
     8. Mn1-xCuxCoGe (magnetostructural, tuned)
-                               (MNCUCOGE_FAMILY, Phase 25 -- a
+                               (MNCUCOGE_FAMILY,  -- a
                                 literature-measured, first-order Landau
                                 family calibrated against a directly
                                 digitized peak |DeltaS_M| target, unlike
@@ -167,8 +167,8 @@ def run_analysis(out_csv="results/material_family_comparison.csv",
 
     lines = []
     lines.append("Eight-way material family comparison at the ASHRAE operating point "
-                 "(Phase 22 item 2 adds the nanocomposite candidate; Phase 24 adds "
-                 "the Ga1-xCMn3+x antiperovskite candidate; Phase 25 adds the "
+                 "( adds the nanocomposite candidate;  adds "
+                 "the Ga1-xCMn3+x antiperovskite candidate;  adds the "
                  "Mn1-xCuxCoGe candidate)")
     lines.append(f"(T_cold={T_COLD_C:.0f}C={T_COLD_K:.2f}K, spans={list(SPANS_K)}K, "
                  f"mu0H={MU0H_MAX:.1f}T, {MASS_PER_STAGE:.0f}kg/stage, 1-4 stage cascade)")
@@ -211,8 +211,8 @@ def run_analysis(out_csv="results/material_family_comparison.csv",
         lines.append(f"  --  {r['candidate']:<26} INFEASIBLE at this span")
     if fallen_back:
         lines.append("")
-        lines.append("  Not independently ranked (Tc window doesn't cover this point -> fell back")
-        lines.append("  to plain Gd, so these are identical to the Gd row above, not a distinct result):")
+        lines.append(" Not independently ranked (Tc window doesn't cover this point -> fell back")
+        lines.append(" to plain Gd, so these are identical to the Gd row above, not a distinct result):")
         for r in fallen_back:
             lines.append(f"      {r['candidate']:<26} == Gd (fixed) at this span")
     lines.append("")

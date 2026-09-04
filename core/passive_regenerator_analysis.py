@@ -1,7 +1,7 @@
 """
 passive_regenerator_analysis.py
 ================================
-Phase 21 addition: exercises core/baseline_cooling.py's
+ addition: exercises core/baseline_cooling.py's
 `augmented_regenerator_cop()` / `passive_regenerator_augmentation()` (the
 new functions added for this phase) across this repo's existing material
 library (core/mce_material.py) at the representative ASHRAE data-center
@@ -10,14 +10,14 @@ span=10K -- see main.py's REPRESENTATIVE_SPAN_K / step 4).
 
 Scope and honesty flag
 -----------------------
-See core/baseline_cooling.py's own Phase 21 docstring block for the full
+See core/baseline_cooling.py's own docstring block for the full
 book-access honesty flag (Tishin & Spichkin (2003) remains an
 image-only, non-extractable-text PDF in this project's corpus -- same
-finding as Phase 20) and for why the effectiveness-to-COP mapping used
+finding as ) and for why the effectiveness-to-COP mapping used
 here is an illustrative, literature-range-anchored ceiling rather than a
 fitted or digitized coefficient. This module is a design-exploration /
 comparison tool, not a validated benchmark-backed result -- the same
-disposition Phase 18 (thermal diodes) and Phase 20 (magnetocaloric
+disposition (thermal diodes) and (magnetocaloric
 fluids) gave their own new modules, for the same underlying reason (no
 benchmark device for this specific configuration exists in
 data/amr_experimental_benchmarks.csv, which is solid-AMR-only).
@@ -63,7 +63,7 @@ def compare_candidate_materials(T_cold=T_COLD_K, T_hot=T_HOT_K, verbose=True):
               f"(span={T_hot - T_cold:.1f}K): {base.COP:.4f} "
               f"(Carnot={base.COP_carnot:.4f}, eta_2nd_law={base.second_law_eff:.3f})")
         for r in results:
-            print(f"  {r.material_name:32s}  Tc_material={_material_tc(r):6.1f}K  "
+            print(f"  {r.material_name:32s}  Tc_material={_material_tc(r):6.1f}K "
                   f"eps: {r.eps_baseline:.3f} -> {r.eps_augmented:.3f}  "
                   f"(delta={r.delta_eps:+.3f})   COP: {r.base_COP:.4f} -> "
                   f"{r.augmented_COP:.4f}  ({r.cop_gain_fraction:+.2%})")
@@ -94,7 +94,7 @@ def span_sweep(spans_K=(5.0, 10.0, 15.0, 20.0), T_cold=T_COLD_K, verbose=True):
             "best_cop_gain_fraction": best.cop_gain_fraction,
         })
         if verbose:
-            print(f"  span={span:5.1f}K  base_COP={base.COP:.4f}  "
+            print(f" span={span:5.1f}K base_COP={base.COP:.4f}  "
                   f"best={best.material_name:32s}  delta_eps={best.delta_eps:+.3f}  "
                   f"augmented_COP={best.augmented_COP:.4f} ({best.cop_gain_fraction:+.2%})")
     return rows
@@ -107,7 +107,7 @@ def run_passive_regenerator_analysis(out_path="results/passive_regenerator_analy
         print("=" * 90)
         print("PHASE 21: passive/hybrid magnetic regenerator augmentation of a")
         print("conventional (vapor-compression) gas cycle -- see")
-        print("core/baseline_cooling.py's own Phase 21 docstring block for the honesty")
+        print("core/baseline_cooling.py's own docstring block for the honesty")
         print("flag (Tishin Ch.11 not digitizable -- image-only PDF, no text layer)")
         print("and for why the effectiveness-to-COP mapping is an illustrative,")
         print("literature-range-anchored ceiling rather than a fitted coefficient.")

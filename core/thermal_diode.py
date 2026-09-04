@@ -1,11 +1,11 @@
 """
 thermal_diode.py
 =================
-Phase 18 (ROADMAP.md): a narrowly-scoped first pass at active thermal
+ (ROADMAP.md): a narrowly-scoped first pass at active thermal
 diodes for AMR devices (Kitanovski et al. 2015, Ch. 6, "Special Heat
 Transfer Mechanisms: Active and Passive Thermal Diodes").
 
-Scope decision (per the Phase 18 plan). Of the four active-diode
+Scope decision (per the plan). Of the four active-diode
 mechanisms Ch. 6 covers (thermoelectric Sect. 6.2.1, thermionic 6.2.2,
 spincaloritronic 6.2.3, mechanical-contact 6.2.4), this module implements
 ONLY the mechanical-contact diode, because it is the mechanism the plan
@@ -16,7 +16,7 @@ they would add new device classes with even less benchmark grounding
 than what follows.
 
 HONESTY FLAG (read before trusting anything in this module -- same tier
-as Phase 17's cycle_type caveat in core/amr_cycle.py). This project's
+as the earlier cycle_type caveat in core/amr_cycle.py). This project's
 own copy of Kitanovski et al. (2015) is a 30-page front-matter/
 Chapter-1/table-of-contents excerpt -- it does NOT include pp. 211-268
 (Chapter 6), where Sect. 6.2.4's actual mechanical-contact-diode design
@@ -31,8 +31,8 @@ Sect. 6.2.4 figures.
 
 DEFAULT_MECHANICAL_CONTACT_DIODE's `forward_conductance_W_K` and
 `reverse_conductance_W_K` are now grounded in a real, cited literature
-ANALOG rather than an unattributed round number (closing part of Phase
-18's original "did NOT do" list -- see ROADMAP.md): Bywaters & Griffin's
+ANALOG rather than an unattributed round number (closing part of the
+original "did NOT do" list -- see ROADMAP.md): Bywaters & Griffin's
 piezo-actuated mechanical heat switch (PZHS) reports on/off thermal-
 conductance ratios of roughly 100-200 at cryogenic temperatures (4-10 K)
 under a piezoelectric positioner's maximum 8 N actuation force
@@ -55,21 +55,21 @@ ceiling) rather than reproducing that ceiling directly. `actuation_
 energy_J_per_cycle` has NO literature source at all -- none of the
 sources found report per-actuation energy for a device cycling at
 AMR-relevant frequencies (~0.1-10 Hz) -- and remains a round-number
-placeholder, flagged as such, at the same weakest-link tier as Phase
-16's `hysteresis_loss_J_per_kg` literature analogs. If a fuller copy of
+placeholder, flagged as such, at the same weakest-link tier as the
+`hysteresis_loss_J_per_kg` literature analogs. If a fuller copy of
 Kitanovski becomes available, or an AMR-specific (room-temperature,
 Hz-scale) mechanical-diode source is found, this module's defaults
 should be replaced and this honesty flag revisited -- same "what to do
-if better data arrives" framing Phase 17 used for CYCLE_TYPE_FACTORS.
+if better data arrives" framing used for CYCLE_TYPE_FACTORS.
 
 Validation status: NONE of this project's 16 benchmarked AMR devices
 (data/amr_experimental_benchmarks.csv) use thermal diodes of any kind --
 every one is a conventional valve-switched or continuous-rotary design.
 There is therefore no benchmark row this module's numbers can be checked
-against, and `core/thermal_diode_analysis.py` (the Phase 18 validation
+against, and `core/thermal_diode_analysis.py` (the validation
 deliverable) says so explicitly rather than forcing a fit. Treat this
 module as a design-exploration tool, not a validated feature -- exactly
-the disposition the Phase 18 plan itself recommended for this item.
+the disposition the plan itself recommended for this item.
 """
 
 from dataclasses import dataclass
@@ -93,7 +93,7 @@ class MechanicalContactDiode:
     (Sect. 6.2.4's mechanical-contact mechanism) is a discrete actuator
     -- a solenoid, cam or piezo stack pressing two plates together --
     whose actuation cost does not scale with the mass of regenerator
-    material on the other side of the joint, unlike (e.g.) Phase 16's
+    material on the other side of the joint, unlike (e.g.) the earlier
     hysteresis loss, which is intrinsic to every kg of first-order
     material in the bed.
     """

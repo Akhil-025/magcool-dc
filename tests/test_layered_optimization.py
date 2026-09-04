@@ -1,5 +1,5 @@
 """
-Tests for the Phase 29 addition: core.cascade.run_graded_cascade()'s new
+Tests for the addition: core.cascade.run_graded_cascade()'s new
 particle_diameter/blow_fraction/pump_motor_efficiency parameters, and
 core.optimize.LayeredAMRDesignProblem / run_layered_optimization_for_n_layers /
 run_layered_optimization / _layered_pareto_filter.
@@ -24,7 +24,7 @@ from core.optimize import (
 
 def test_run_graded_cascade_default_unaffected_by_new_params():
     """Omitting particle_diameter/blow_fraction/pump_motor_efficiency must
-    reproduce the exact pre-Phase-29 result."""
+    reproduce the exact previous result."""
     r_default = run_graded_cascade(291.0, 10.0, 2, family=GD_FAMILY)
     r_explicit = run_graded_cascade(291.0, 10.0, 2, family=GD_FAMILY,
                                      particle_diameter=None, blow_fraction=0.5,
@@ -120,7 +120,7 @@ def test_run_layered_optimization_for_n_layers_smoke(tmp_path):
 
 
 def test_run_layered_optimization_out_csv_none_does_not_write_or_crash(tmp_path):
-    """Phase 31 regression test: run_layered_optimization() used to call
+    """ regression test: run_layered_optimization() used to call
     _write_csv() unconditionally, so out_csv=None crashed with a TypeError
     from os.path.dirname(None) instead of simply skipping the write (an
     asymmetry with per_n_layers_out_dir, which already guarded None
@@ -135,7 +135,7 @@ def test_run_layered_optimization_out_csv_none_does_not_write_or_crash(tmp_path)
 
 
 def test_run_layered_optimization_material_family_cross_product_smoke(tmp_path):
-    """Phase 31 addition: the material x n_layers cross-product explicitly
+    """ addition: the material x n_layers cross-product explicitly
     left as a documented follow-up by run_layered_optimization()'s own
     docstring. Small-scale (2 families x 2 n_layers values, pop_size=6,
     n_gen=2) purely to keep this test fast -- not representative of

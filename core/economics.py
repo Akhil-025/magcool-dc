@@ -21,7 +21,7 @@ with magnetic field strength. This behaviour is approximated here as
 which provides a rough fit to the published examples but should not be
 interpreted as a validated scaling law.
 
-Phase 35 addition: this project's own `Papers/Economics/` corpus (present
+ addition: this project's own `Papers/Economics/` corpus (present
 in the repo as of this phase; several of the citations below were
 previously made without local PDF access -- see LIMITATIONS.md Section 5
 for the full list of what was newly verified this phase) was used to
@@ -50,9 +50,9 @@ just repeating them:
       controls), same order of magnitude, and the repo's existing 2200
       figure is, if anything, the more conservative (lower) of the two.
 
-Phase 31 note (see the dedicated section near the end of this file): three
+ note (see the dedicated section near the end of this file): three
 further, genuinely new, literature-sourced additions close specific parts
-of the BOM/economics gap this module has flagged since Phase 7/15/30 --
+of the BOM/economics gap this module has flagged since  --
 (1) a low/mid/high SENSITIVITY BAND for `NON_MATERIALS_COST_MULTIPLIER`
 instead of a single point value, using the same Russek & Zimm (2006) range
 this module's docstring already describes but had not previously exposed
@@ -68,23 +68,23 @@ pricing is roughly 20-50x this module's $20/kg Gd figure -- Gd's $20/kg
 (Bjørk et al. 2011) is left unchanged as the module's own working number
 (it is still the only literature figure with a matching, load-bearing
 mass-scaling law in this codebase), but the gap is now surfaced
-explicitly rather than left implicit. Phase 32 then closes the remaining
+explicitly rather than left implicit. then closes the remaining
 part of that gap with a genuine bottom-up, market-catalog-priced non-
-materials BOM; Phase 33 cross-checks `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA`
-against 11 real reported AMR devices; and Phase 34 acts on that finding
+materials BOM;  cross-checks `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA`
+against 11 real reported AMR devices; and acts on that finding
 by updating this module's working default while preserving the original
-value for reproducibility. See the Phase 31-34 section near the end of
+value for reproducibility. See the section near the end of
 this file for full detail on all four.
 
 Sources:
     - Bjørk, Bahl & Smith, Int. J. Refrig. 34 (2011) 1805-1816 — magnet and
       magnetocaloric material costs and worked mass examples
     - Tura & Rowe, "Concentric Halbach Cylinder Magnetic Refrigerator Cost
-      Optimization", Int. J. Refrig. 37 (2014) 106-116 -- Phase 35: magnet
+      Optimization", Int. J. Refrig. 37 (2014) 106-116 -- magnet
       cost ($42/kg NdFeB) and MCM cost range ($10-20/kg bulk Gd)
       triangulation, see paragraph above
     - Bjørk, Bahl & Nielsen, "The lifetime cost of a magnetic refrigerator",
-      Int. J. Refrig. 63 (2016) 48-62 -- Phase 7 addition: this follow-up
+      Int. J. Refrig. 63 (2016) 48-62 --  addition: this follow-up
       study by the same group adds device OPERATING cost (electricity over
       the device lifetime) to the same materials-only building cost. It
       explicitly assumes $0.10/kWh electricity (US/China/India-representative;
@@ -92,7 +92,7 @@ Sources:
       paper, "actual manufacturing, transportation, maintenance and
       auxiliary systems are ignored" -- so it does NOT resolve the
       HX/pump/motor/controls capital-cost gap either; that remains open
-      (see `lifetime_cost()` docstring). Phase 35 addition: also supplies
+      (see `lifetime_cost()` docstring). addition: also supplies
       the specific $100 magnet + $40 MCM / 50 W_c worked example cited
       above, used as an AMR_MAGNETIC capex cross-check.
     - Bahl, Engelbrecht et al., Int. J. Refrig. 37 (2014) 78-83 — AMR
@@ -101,7 +101,7 @@ Sources:
       Refrigeration", J. Ind. Ecol. 21(5) (2016) 1291-1300 -- phase 15
       addition: raw-material supply-criticality assessment for Gd-,
       La-, and Mn-based magnetocaloric alloys plus the Nd2Fe14B magnet
-      material; see `resource_criticality_note()` below. Phase 35
+      material; see `resource_criticality_note()` below.
       re-check: this paper discusses La(Fe,Si)13 and (Mn,Fe)2P/Mn-Fe-P-Si
       alloys only in terms of resource criticality/supply risk, NOT unit
       cost in $/kg -- confirms (Mn,Fe)2(P,Si)'s missing $/kg figure in
@@ -113,21 +113,21 @@ Sources:
 """
 from dataclasses import dataclass
 
-COST_MCM_PER_KG = 20.0          # $/kg, Bjork et al. 2011 (Phase 35: verified
+COST_MCM_PER_KG = 20.0          # $/kg, Bjork et al. 2011 (verified
                                    # verbatim against the primary-source PDF)
-COST_MAGNET_PER_KG = 40.0        # $/kg, Bjork et al. 2011 (NdFeB N42) (Phase 35:
+COST_MAGNET_PER_KG = 40.0        # $/kg, Bjork et al. 2011 (NdFeB N42) (
                                    # verified verbatim; independently triangulated
                                    # by Tura & Rowe 2013's $42/kg, see module docstring)
-# --- magnet-to-MCM mass ratio: Phase 34 update -----------------------------
-# Originally a single point value (3.0), described honestly since Phase 1
+# --- magnet-to-MCM mass ratio:  update -----------------------------
+# Originally a single point value (3.0), described honestly since
 # as "a rough fit to Bjork et al.'s two worked examples...not a validated
-# scaling law." Phase 33 cross-checked that value against 11 REAL reported
+# scaling law." cross-checked that value against 11 REAL reported
 # AMR devices (Rowe 2011, Table 1 -- see `ROWE2011_DEVICE_MAGNET_MCM_DATA`
 # and `rowe2011_magnet_mass_ratio_cross_check()` below) and found the old
 # 3.0 sat at the LOW END of the real-device range (3.98-22.65), not the
 # middle -- the real-device MEDIAN is 13.47.
 #
-# Phase 34 acts on that finding by BOTH updating the module's working
+#  acts on that finding by BOTH updating the module's working
 # default AND keeping the old value directly usable, rather than picking
 # one and discarding the other:
 #   - `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA` (no suffix) is now the module's
@@ -136,14 +136,14 @@ COST_MAGNET_PER_KG = 40.0        # $/kg, Bjork et al. 2011 (NdFeB N42) (Phase 35
 #     UNLESS a caller explicitly overrides it.
 #   - `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY` preserves the
 #     original point value UNCHANGED, so every number this module
-#     produced before Phase 34 remains exactly reproducible by passing it
+#     produced before remains exactly reproducible by passing it
 #     explicitly (`material_cost(..., mass_ratio_per_tesla=
 #     MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY)`,
 #     `bom_cost(..., mass_ratio_per_tesla=...)`, etc.) -- see
 #     `compare_legacy_and_updated_magnet_ratio()` below, which reports
 #     both side by side at a given design point.
 #
-# HONEST CAVEAT carried over from Phase 33, unchanged: the Rowe (2011)
+# HONEST CAVEAT carried over from , unchanged: the Rowe (2011)
 # median rests on reading that paper's "V_B[L]" column as V_MCM (matching
 # the paper's own prose, not independently confirmed against the
 # underlying Bjork et al. 2010 source table) and on a PM/MCM density
@@ -164,14 +164,14 @@ def material_cost(mu0H_max, mass_regenerator, mass_ratio_per_tesla=None):
     """Bottom-up magnet + MCM material cost, $ (Bjork et al. 2011 unit
     $/kg costs; magnet mass via `mass_ratio_per_tesla`, which defaults to
     this module's working `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA` -- the
-    Rowe (2011) 11-device median as of Phase 34, see that constant's own
+    Rowe (2011) 11-device median as of , see that constant's own
     comment above for the full history and caveat). Pass
     `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY` explicitly to
-    reproduce this module's pre-Phase-34 numbers exactly. This is a
+    reproduce this module's previous numbers exactly. This is a
     materials-only FLOOR, not full system cost (excludes heat exchangers,
     pumps, motor/drive, controls, enclosure -- Bahl et al. 2014 note these
     dominate total AMR system cost, materials are a minority share; see
-    Phase 32's `bottom_up_non_materials_bom()` for a genuine bottom-up
+    the earlier `bottom_up_non_materials_bom()` for a genuine bottom-up
     estimate of that gap)."""
     if mass_ratio_per_tesla is None:
         mass_ratio_per_tesla = MAGNET_TO_MCM_MASS_RATIO_PER_TESLA
@@ -188,7 +188,7 @@ ELECTRICITY_PRICE_PER_KWH = 0.10  # $/kWh, Bjørk, Bahl & Nielsen (2016), US/
 def lifetime_cost(mu0H_max, mass_regenerator, Qc_avg_W, COP_electrical,
                    device_lifetime_years=15.0, capacity_factor=1.0,
                    electricity_price_per_kwh=ELECTRICITY_PRICE_PER_KWH):
-    """Phase 7 addition, complementing (not replacing) `material_cost()`.
+    """ addition, complementing (not replacing) `material_cost()`.
 
     Combines the materials-only building-cost floor with the device's
     lifetime OPERATING cost (electricity), following the methodology of
@@ -205,7 +205,7 @@ def lifetime_cost(mu0H_max, mass_regenerator, Qc_avg_W, COP_electrical,
     published $ breakdown for that hardware was found for this codebase
     (searched; nothing beyond materials-cost and now electricity-cost
     studies was located) -- so a full bottom-up BOM model for that
-    remaining hardware stays a genuinely open Phase 7 item, not resolved
+    remaining hardware stays a genuinely open item, not resolved
     by this function.
 
     Returns a dict with the materials floor, lifetime electricity cost,
@@ -246,7 +246,7 @@ AMR_MAGNETIC = TCOResult(
         "exchangers, pumps, motor/drive, controls and enclosure, which "
         "Bahl et al. (2014) identify as major contributors to total AMR "
         "system cost. A detailed bottom-up cost model is left for future work. "
-        "Phase 35 cross-check: Bjork, Bahl & Nielsen (2016)'s own lowest-cost "
+        " cross-check: Bjork, Bahl & Nielsen (2016)'s own lowest-cost "
         "50 W device design has a materials-only capital cost of $140 "
         "($100 magnet + $40 MCM), i.e. $2800/kW_c -- same order of magnitude "
         "as, and somewhat higher than, this row's 2200 figure, at a smaller "
@@ -280,11 +280,11 @@ def simple_tco(tco: TCOResult, capacity_kW: float, annual_hours: float,
 
 
 # =============================================================================
-# Phase 15 addition: full-system BOM cost model
+#  addition: full-system BOM cost model
 # =============================================================================
 #
 # `material_cost()`/`lifetime_cost()` above are explicitly documented as a
-# MATERIALS-ONLY floor (magnet + MCM), not a full-system cost -- Phase 14's
+# MATERIALS-ONLY floor (magnet + MCM), not a full-system cost -- the earlier
 # item B6 re-confirmed this gap was already correctly stated, not closed.
 # This section closes it partially, using three newly-added papers in
 # Papers/Economics/ that were not available for the earlier passes:
@@ -321,7 +321,7 @@ def simple_tco(tco: TCOResult, capacity_kW: float, annual_hours: float,
 #      `MCM_COST_PER_KG_BY_FAMILY` below so `bom_cost()`/`cost_index()`
 #      can price a design that uses a different composition-tunable
 #      giant-MCE family (see core/cascade.py's GD_FAMILY/LAFESIH_FAMILY/
-#      MNFEPSI_FAMILY and core/optimize.py's Phase 15 material-family
+#      MNFEPSI_FAMILY and core/optimize.py's material-family
 #      co-optimization) rather than assuming Gd for every candidate.
 #
 # Honesty note: none of this closes the ROADMAP's full bottom-up BOM gap
@@ -334,7 +334,7 @@ def simple_tco(tco: TCOResult, capacity_kW: float, annual_hours: float,
 # operating cost methodology (CRF-based levelized cost of cooling) that
 # can be cross-checked against `lifetime_cost()`'s simpler
 # materials-floor-plus-electricity approach. A specific, AMR-native BOM
-# remains future work (see ROADMAP.md Phase 15).
+# remains future work (see ROADMAP.md).
 
 COST_SMM_PER_KG = 5.0   # $/kg, 1018 soft-magnetic (flux-return) steel,
                           # Silva et al., J. Magn. Magn. Mater. 442 (2017) 87-96
@@ -371,7 +371,7 @@ MCM_COST_PER_KG_BY_FAMILY = {
     "(Mn,Fe)2(P,Si)": COST_MCM_PER_KG,           # proxy: no $/kg source found
                                                    # (qualitatively "low cost"
                                                    # in the literature only)
-    # Phase 24: Ga1-xCMn3+x antiperovskite (core/antiperovskite_material.py).
+    # Ga1-xCMn3+x antiperovskite (core/antiperovskite_material.py).
     # Wang et al. (2009) describe the raw materials (Ga, C, Mn) only
     # qualitatively as "inexpensive and innoxious" -- no $/kg digit is given,
     # same situation as (Mn,Fe)2(P,Si) above. Left at the Gd price as the
@@ -379,7 +379,7 @@ MCM_COST_PER_KG_BY_FAMILY = {
     # for (Mn,Fe)2(P,Si), rather than inventing a number the qualitative
     # literature only implies should be lower.
     "Ga1-xCMn3+x": COST_MCM_PER_KG,
-    # Phase 25: Mn1-xCuxCoGe (core/first_order_mce.py's MNCUCOGE_FIRST_ORDER).
+    # Mn1-xCuxCoGe (core/first_order_mce.py's MNCUCOGE_FIRST_ORDER).
     # No $/kg digit located for this exact composition either. Mn/Co/Ge (and
     # a small Cu fraction) are all non-precious, non-rare-earth elements --
     # qualitatively cheap, like (Mn,Fe)2(P,Si) above -- so the SAME
@@ -417,7 +417,7 @@ def bom_cost(mu0H_max, mass_regenerator, family_name="Gd",
     with the SMM line item from Silva et al. (2017) (see section
     docstring). `mass_ratio_per_tesla` defaults to this module's working
     `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA` (see that constant's own comment
-    for the Phase 34 update and how to reproduce pre-Phase-34 numbers via
+    for the update and how to reproduce previous numbers via
     `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY`).
     `smm_mass_fraction` is the assumed SMM mass as a fraction
     of the magnet mass (soft-iron flux-return yokes are typically a
@@ -446,7 +446,7 @@ def bom_cost(mu0H_max, mass_regenerator, family_name="Gd",
 
 
 # =============================================================================
-# Phase 30 addition: AMR-NATIVE bottom-up lifetime-cost model
+#  addition: AMR-NATIVE bottom-up lifetime-cost model
 # =============================================================================
 #
 # Everything above this point either (a) prices magnet+MCM+SMM materials
@@ -530,22 +530,22 @@ def amr_native_lifetime_cost_reference(verbose=True):
     if verbose:
         print("AMR-native lifetime-cost reference (Bjork, Bahl & Nielsen, "
               "Int. J. Refrig. 63 (2016) 48-62):")
-        print(f"  device class: {d['average_cooling_power_W']:.0f}W-average "
+        print(f" device class: {d['average_cooling_power_W']:.0f}W-average "
               f"appliance-scale AMR (NOT this repo's kW-scale data-center "
               f"design points -- reference structure only, not rescaled)")
-        print(f"  capital cost: ${d['capital_cost_magnet_usd']:.0f} magnet + "
+        print(f" capital cost: ${d['capital_cost_magnet_usd']:.0f} magnet + "
               f"${d['capital_cost_mcm_usd']:.0f} MCM = ${capital:.0f} "
               f"(magnet is {magnet_share_of_capital*100:.0f}% of capital cost)")
-        print(f"  operating cost: ${d['operating_cost_usd_per_hour']:.3f}/hour")
-        print(f"  15-year lifetime cost range: "
+        print(f" operating cost: ${d['operating_cost_usd_per_hour']:.3f}/hour")
+        print(f" 15-year lifetime cost range: "
               f"${d['lifetime_cost_range_usd'][0]:.0f}-"
               f"${d['lifetime_cost_range_usd'][1]:.0f}, depending on "
               f"magnet/MCM unit price")
-        print(f"  their own rough VCC comparison (A+++ appliance): "
+        print(f" their own rough VCC comparison (A+++ appliance): "
               f"~${v['total_lifetime_cost_usd']:.0f} total lifetime cost "
               f"(${v['lifetime_electricity_cost_usd']:.0f} electricity + "
               f"${v['compressor_capital_cost_usd']:.0f} compressor)")
-        print("  HONEST FRAMING FOR THE PAPER: this is a genuine AMR-native "
+        print(" HONEST FRAMING FOR THE PAPER: this is a genuine AMR-native "
               "bottom-up cost study (magnet + MCM capital + electricity "
               "OPEX, numerically optimized), unlike full_system_cost_"
               "estimate()'s borrowed VCC-manufactured-cost multiplier -- "
@@ -704,25 +704,25 @@ def resource_criticality_note(family_name="Gd"):
 
 
 # =============================================================================
-# Phase 22 item 3: amorphous-material cost/performance note (qualitative
+# : amorphous-material cost/performance note (qualitative
 # only, per phase_plan.md's own scoping -- "worth a one-line cost/
 # performance note in economics.py rather than a full model")
 # =============================================================================
 #
-# HONESTY FLAG (book access, same tier as Phases 17-22's own flags): Tishin
+# HONESTY FLAG (book access, same tier as this module's other flags): Tishin
 # & Spichkin (2003) Ch. 9 (amorphous magnetic materials) is this item's
 # named source. Re-confirmed directly for this pass: pdfplumber extracts
 # zero characters from every page of this project's copy sampled (0, 1, 2,
 # 50, 51) -- the same image-only-PDF finding already recorded for Tishin
-# Ch. 11 (Phase 21), Sect. 2.8 (Phase 22 item 1), and Sect. 2.9/Ch. 10
-# (Phase 22 item 2). Ch. 9's specific reported materials/numbers could not
+# Ch. 11 , Sect. 2.8 , and Sect. 2.9/Ch. 10
+# . Ch. 9's specific reported materials/numbers could not
 # be read or digitized here. What follows is a general, qualitative,
 # well-established materials-science characterization of amorphous
 # (melt-spun ribbon / metallic-glass) magnetic alloys relative to their
 # crystalline counterparts -- not a reproduction of Ch. 9's own content --
 # kept deliberately to a short qualitative note rather than a cost model,
 # per phase_plan.md's own explicit scoping of this as the lowest-priority
-# item in Phase 22 with "no clear near-term payoff for the data-center
+# item in with "no clear near-term payoff for the data-center
 # application specifically."
 #
 # The general trade-off: amorphous (melt-spun / rapidly-quenched)
@@ -737,8 +737,8 @@ def resource_criticality_note(family_name="Gd"):
 # magnetic phase transition, so amorphous MCM candidates generally show a
 # LOWER peak DeltaS_M / DeltaT_ad than a well-ordered crystalline sample
 # of a comparable composition (this is the same broadening-vs-peak-height
-# trade-off core/inhomogeneous_broadening.py, Phase 22 item 1, and
-# core/nanocomposite_material.py, Phase 22 item 2, already quantify for
+# trade-off core/inhomogeneous_broadening.py, , and
+# core/nanocomposite_material.py, , already quantify for
 # OTHER broadening mechanisms in this repo -- amorphous structural
 # disorder is a third, distinct source of the same qualitative trade-off,
 # not a new mechanism this repo models separately).
@@ -749,7 +749,7 @@ AMORPHOUS_MATERIAL_COST_PERFORMANCE_NOTE = (
     "crystalline families need) for LOWER peak DeltaS_M/DeltaT_ad -- "
     "structural disorder that makes them cheap to produce also broadens "
     "and shallows the magnetic transition, the same qualitative peak-vs-"
-    "width trade-off Phase 22 items 1-2 already quantify for random "
+    "width trade-off items 1-2 already quantify for random "
     "grain-to-grain Tc inhomogeneity and deliberate multi-phase blending "
     "respectively. No amorphous-MCM $/kg figure or DeltaS_M value is "
     "digitized anywhere in this repo's corpus (Tishin Ch. 9, the natural "
@@ -766,7 +766,7 @@ AMORPHOUS_MATERIAL_COST_PERFORMANCE_NOTE = (
 
 
 def amorphous_material_cost_performance_note():
-    """Phase 22 item 3: returns AMORPHOUS_MATERIAL_COST_PERFORMANCE_NOTE
+    """: returns AMORPHOUS_MATERIAL_COST_PERFORMANCE_NOTE
     (see the section docstring above for scope, sourcing, and why this is
     a qualitative note rather than a cost model or a new
     MCM_COST_PER_KG_BY_FAMILY entry)."""
@@ -774,14 +774,14 @@ def amorphous_material_cost_performance_note():
 
 
 # =============================================================================
-# Phase 19 addition: geometric (Halbach-cylinder) magnet-mass term
+#  addition: geometric (Halbach-cylinder) magnet-mass term
 # =============================================================================
 #
 # `material_cost()`/`bom_cost()` above scale magnet mass LINEARLY with
 # mu0H_max via MAGNET_TO_MCM_MASS_RATIO_PER_TESLA -- a flat per-Tesla
 # proxy, not a physical model (see that constant's own comment for its
-# Phase 34 update to the Rowe (2011) 11-device median). ROADMAP.md's
-# Phase 19 plan named the resulting gap directly:
+#  update to the Rowe (2011) 11-device median). ROADMAP.md's
+#  plan named the resulting gap directly:
 # "achieving high mu0H should cost nonlinearly more magnet mass for a
 # fixed air-gap geometry, which is physically real and currently absent."
 #
@@ -791,14 +791,14 @@ def amorphous_material_cost_performance_note():
 # specific gap. The functions below are NEW, ADDITIVE entry points
 # (`*_geometric` suffix) rather than in-place replacements of
 # `material_cost()`/`bom_cost()`/`full_system_cost_estimate()` -- unlike
-# the original Phase 19 plan's literal wording ("Replace economics.py's
+# the original plan's literal wording ("Replace economics.py's
 # current flat $/kg-with-a-ratio-fudge-factor..."), keeping the existing
 # functions' exact numeric behavior unchanged avoids silently changing
 # every existing caller's $ figures (main.py steps 5/5b, economics.py's
 # own `lifetime_cost()`/`levelized_cost_of_cooling()`, and every existing
 # test) with no explicit opt-in -- the same "new parameter/function,
 # old default preserved" backward-compatibility discipline this repo has
-# used consistently since Phase 15 (`pumping_power_override`,
+# used consistently since (`pumping_power_override`,
 # `cycle_type="brayton"`, `thermal_diode=None`). `core/optimize.py`'s
 # `cost_index()` gained its own explicit `use_geometric_magnet_mass`
 # opt-in flag for the same reason -- see that module's docstring.
@@ -886,17 +886,17 @@ def full_system_cost_estimate_geometric(
     }
 
 # =============================================================================
-# Phase 31 addition: non-materials cost SENSITIVITY BAND, a second
+#  addition: non-materials cost SENSITIVITY BAND, a second
 # independent VCC compressor-cost cross-check, and a current (2024)
 # commercial MCM price reality check
 # =============================================================================
 #
 # Three separate, additive closures of specific parts of the still-open
-# "full bottom-up AMR BOM" gap this module has documented since Phase 7
+# "full bottom-up AMR BOM" gap this module has documented since
 # (`full_system_cost_estimate()`'s own docstring, `lifetime_cost()`'s
-# docstring, and the Phase 15 section docstring above). None of these
+# docstring, and the section docstring above). None of these
 # fabricates the missing HX/pump/motor/controls/enclosure parts-and-labor
-# quote itself -- that specific gap searches in Phase 7, 15, and again in
+# quote itself -- that specific gap searches in , 15, and again in
 # this pass (web search: "active magnetic regenerator refrigerator bill of
 # materials manufacturing cost breakdown heat exchanger pump motor",
 # "techno-economic analysis magnetocaloric refrigeration system cost 2023
@@ -1102,11 +1102,11 @@ def commercial_mcm_price_reality_check(family_name="Gd"):
 
 
 # =============================================================================
-# Phase 32 addition: a genuine BOTTOM-UP non-materials BOM, priced from real
+#  addition: a genuine BOTTOM-UP non-materials BOM, priced from real
 # commercial component/market data (not a borrowed multiplier)
 # =============================================================================
 #
-# Every prior pass (Phase 7, Phase 15, Phase 30, Phase 31) searched for a
+# Every prior pass (, , ) searched for a
 # published, AMR-SPECIFIC bottom-up cost breakdown of the heat exchangers,
 # pump, drive motor, motor controller, and enclosure a real AMR system
 # needs, and found none: Bjørk et al. (2011) states plainly that motor and
@@ -1122,7 +1122,7 @@ def commercial_mcm_price_reality_check(family_name="Gd"):
 #
 # Rather than leave that gap as a single borrowed 10x multiplier
 # (`full_system_cost_estimate()`) or a wider but still-borrowed band
-# (`full_system_cost_estimate_range()`, Phase 31), THIS section builds a
+# (`full_system_cost_estimate_range()`), THIS section builds a
 # genuine, ADDITIVE bottom-up estimate by pricing the actual component
 # CATEGORIES a real AMR system needs -- cold+hot-side heat exchangers, a
 # circulation pump, a drive motor, a motor controller/VFD, and a
@@ -1140,7 +1140,7 @@ def commercial_mcm_price_reality_check(family_name="Gd"):
 # for a lab/pilot-scale AMR device, not to an AMR-specific design study.
 # Each range below is cross-checked against at least two independent
 # retail/industry sources, and each is a LOW/MID/HIGH range, not a single
-# point, to keep the same honest-uncertainty discipline as Phase 31.
+# point, to keep the same honest-uncertainty discipline as .
 #
 # Sources (all located via this phase's own web search, checked 2026):
 #   - Heat exchangers: IndexBox market-pricing benchmark ("Plate Heat
@@ -1217,7 +1217,7 @@ def exact_hx_duty_multiplier(COP_electrical):
     so the multiplier is (2 + 1/COP_electrical). This equals the
     previous flat 2.0x approximation only in the COP_electrical -> infinity
     limit; at this repo's own representative COP_electrical ~ 5.26
-    (Phase 32's cross-check point), the exact multiplier is ~2.19x, about
+    (the earlier cross-check point), the exact multiplier is ~2.19x, about
     9-10% more heat-exchanger duty (and therefore cost) than the old flat
     2.0x approximation implied. At a lower, more conservative COP of 2,
     it is 2.5x -- 25% more than the flat approximation."""
@@ -1375,11 +1375,11 @@ def cross_check_full_system_cost_methods(mu0H_max, mass_regenerator, Qc_avg_W,
 
 
 # =============================================================================
-# Phase 33 addition: MAGNET_TO_MCM_MASS_RATIO_PER_TESLA cross-checked
+#  addition: MAGNET_TO_MCM_MASS_RATIO_PER_TESLA cross-checked
 # against 11 REAL reported AMR devices (Rowe, Int. J. Refrig. 34 (2011)
 # 168-177, Table 1) -- historical account of the finding that led to
-# Phase 34's update below. `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA` no longer
-# equals 3.0 as of Phase 34 (see that constant's own comment); this
+# the earlier update below. `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA` no longer
+# equals 3.0 as of (see that constant's own comment); this
 # section's "3.0" references below describe the value AS IT STOOD WHEN
 # THIS CROSS-CHECK WAS FIRST RUN, not the module's current default.
 # =============================================================================
@@ -1425,11 +1425,11 @@ def cross_check_full_system_cost_methods(mu0H_max, mass_regenerator, Qc_avg_W,
 # cost estimate this module computed from it) was a substantial
 # UNDERESTIMATE relative to real reported devices, not merely "rough."
 #
-# Following this repo's own established discipline through Phase 32 --
+# Following this repo's own established discipline through  --
 # don't silently overwrite a load-bearing constant on the strength of a
-# single new cross-check -- Phase 33 initially left
+# single new cross-check --  initially left
 # `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA` unchanged and reported this finding
-# as a standalone cross-check only. Phase 34 (explicit user instruction:
+# as a standalone cross-check only. (explicit user instruction:
 # act on the finding, keeping both the old and new values available)
 # updates the module's WORKING DEFAULT to the Rowe (2011) 11-device
 # median -- see `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA`'s own comment near
@@ -1437,7 +1437,7 @@ def cross_check_full_system_cost_methods(mu0H_max, mass_regenerator, Qc_avg_W,
 # value as `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY` and
 # adding `compare_legacy_and_updated_magnet_ratio()` immediately below
 # this function to report both side by side at any design point, so nothing
-# from before Phase 34 is lost, only superseded as the default.
+# from before is lost, only superseded as the default.
 
 ROWE2011_DEVICE_MAGNET_MCM_DATA = [
     # (device_name, V_mag_L, V_MCM_L, B0_T)
@@ -1458,7 +1458,7 @@ ROWE2011_DEVICE_MAGNET_MCM_DATA = [
 # (read from a rendered page image, not raw PDF text extraction).
 
 ROWE2011_PM_DENSITY_G_CM3 = 7.45   # Tura & Rowe (2013), same companion paper
-ROWE2011_MCM_DENSITY_G_CM3 = 7.9   # already used for Phase 31's cross-check
+ROWE2011_MCM_DENSITY_G_CM3 = 7.9   # already used for the earlier cross-check
 
 
 def rowe2011_magnet_mass_ratio_cross_check():
@@ -1466,7 +1466,7 @@ def rowe2011_magnet_mass_ratio_cross_check():
     for each of the 11 real devices in `ROWE2011_DEVICE_MAGNET_MCM_DATA`
     and compares the resulting range to this module's own
     `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA`. See section docstring for the
-    full finding, the density-bridge assumption, and Phase 34's update to
+    full finding, the density-bridge assumption, and the earlier update to
     this module's working default in response to it."""
     density_ratio = ROWE2011_PM_DENSITY_G_CM3 / ROWE2011_MCM_DENSITY_G_CM3
     per_device = []
@@ -1495,11 +1495,11 @@ def rowe2011_magnet_mass_ratio_cross_check():
         "mean_mass_ratio_per_tesla": round(sum(ratios) / n, 2),
         "current_module_value": MAGNET_TO_MCM_MASS_RATIO_PER_TESLA,
         "legacy_value": MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY,
-        "note": f"As of Phase 34, this module's working "
+        "note": f"As of , this module's working "
                 f"MAGNET_TO_MCM_MASS_RATIO_PER_TESLA="
                 f"{MAGNET_TO_MCM_MASS_RATIO_PER_TESLA} IS this 11-device "
                 f"median (range {min(ratios):.1f}-{max(ratios):.1f}) -- the "
-                f"pre-Phase-34 legacy value "
+                f"previous legacy value "
                 f"({MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY}, "
                 "a fit to Bjork et al.'s two worked examples) sat at or "
                 "below the minimum of this real-device range and is "
@@ -1515,13 +1515,13 @@ def compare_legacy_and_updated_magnet_ratio(mu0H_max, mass_regenerator,
                                               smm_mass_fraction=0.5):
     """Runs `bom_cost()` at the SAME design point with BOTH
     `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY` (this module's
-    pre-Phase-34 point value, a fit to Bjork et al.'s two worked
+    previous point value, a fit to Bjork et al.'s two worked
     examples) and `MAGNET_TO_MCM_MASS_RATIO_PER_TESLA` (the current
     working default, the Rowe 2011 11-device median -- see
     `rowe2011_magnet_mass_ratio_cross_check()`), and reports both side by
     side. This is the direct answer to "keep both": every function in
     this module now uses the updated (median) value by default, but nothing
-    from before Phase 34 is unreproducible -- this function runs both at
+    from before is unreproducible -- this function runs both at
     once, and any other function's `mass_ratio_per_tesla` parameter can
     be set to the legacy constant directly for the same effect."""
     legacy = bom_cost(mu0H_max, mass_regenerator, family_name, smm_mass_fraction,
@@ -1550,8 +1550,8 @@ def compare_legacy_and_updated_magnet_ratio(mu0H_max, mass_regenerator,
         "note": "The updated (Rowe 2011 median) magnet ratio is now this "
                 "module's default everywhere -- material_cost(), bom_cost(), "
                 "full_system_cost_estimate(), lifetime_cost(), and every "
-                "Phase 15-33 function built on them. Pass "
+                " function built on them. Pass "
                 "mass_ratio_per_tesla=MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY "
                 "explicitly to any of them to reproduce this module's "
-                "pre-Phase-34 numbers instead.",
+                "previous numbers instead.",
     }

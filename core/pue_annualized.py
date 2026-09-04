@@ -1,7 +1,7 @@
 """
 pue_annualized.py
 ==================
-Phase 24 addition.
+ addition.
 
 Two additions data-center-engineering reviewers consistently ask for and
 `comparison_table.csv` (a single design-point-at-a-time COP comparison)
@@ -218,15 +218,15 @@ def annualized_energy_comparison(T_it_setpoint_C=27.0,
         print()
         print(f"Annual (bin-weighted, power-averaged) effective COP:")
         if amr_hours_excluded > 1e-9:
-            print(f"  AMR:              {amr_effective_annual_cop:.2f}  "
+            print(f" AMR:              {amr_effective_annual_cop:.2f}  "
                   f"(computed over {amr_hours_covered*100:.0f}% of annual hours; "
                   f"{amr_hours_excluded*100:.0f}% excluded -- span exceeds this "
                   f"repo's validated 20K AMR envelope / hits the documented "
                   f"0-D structural span cap, see regenerator_1d.py)")
         else:
-            print(f"  AMR:              {amr_effective_annual_cop:.2f}")
-        print(f"  Vapor-compression:{vcc_effective_annual_cop:.2f}")
-        print(f"  Liquid cooling:   {liq_effective_annual_cop:.2f} "
+            print(f" AMR:              {amr_effective_annual_cop:.2f}")
+        print(f" Vapor-compression:{vcc_effective_annual_cop:.2f}")
+        print(f" Liquid cooling:   {liq_effective_annual_cop:.2f} "
               f"(includes economizer-mode credit below {economizer_below_C}C)")
         print()
         print("HONEST FRAMING FOR THE PAPER: this is a coarse 6-bin "
@@ -264,7 +264,7 @@ def write_pue_annualized_report(path="results/pue_annualized_analysis.txt",
     actual step-4 baseline-sweep representative_row (main.py does) should
     pass its AMR_COP_electrical/VaporCompression_COP/LiquidCooling_COP
     values instead -- using the placeholders unconditionally was flagged
-    (Phase 31 follow-up) as reporting a PUE comparison disconnected from
+    ( follow-up) as reporting a PUE comparison disconnected from
     this repo's own computed operating point. The annualized/part-load
     section below is unaffected -- it has always computed its own COPs
     directly via AMRSystem/vapor_compression_cop/liquid_cooling_cop, not
@@ -278,7 +278,7 @@ def write_pue_annualized_report(path="results/pue_annualized_analysis.txt",
                            ("LiquidCooling", liquid_cop)]:
             r = cop_to_pue(name, cop)
             print(f"  {name:<18} COP={cop:.2f}  PUE_cooling_only={r.PUE_cooling_only:.3f}"
-                  f"  PUE_total_estimate={r.PUE_total_estimate:.3f}")
+                  f" PUE_total_estimate={r.PUE_total_estimate:.3f}")
         print()
         print("Annualized / part-load climate-weighted comparison")
         print("-" * 55)

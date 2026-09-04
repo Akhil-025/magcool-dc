@@ -1,4 +1,4 @@
-"""Phase 31 addition: core/water_usage.py had no dedicated test file even
+""" addition: core/water_usage.py had no dedicated test file even
 though it is wired into main.py's pipeline (see README's Tier-1 test-
 coverage gap). These tests mirror the style and level of test_emissions.py
 and test_economics.py -- direct function calls, plain asserts, no fixtures."""

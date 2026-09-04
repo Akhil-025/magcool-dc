@@ -1,7 +1,7 @@
 """
 hypereg_analysis.py
 ====================
-Phase 15 addition: demonstrates the pumping-power effect of a Klinar et
+ addition: demonstrates the pumping-power effect of a Klinar et
 al. (2024) "Hypereg"-style parallel-hydraulic regenerator split (see
 `results/hypereg_findings.md` for the full literature findings note this
 module implements the code side of, and `core.thermal.
@@ -59,7 +59,7 @@ def sweep_n_parallel(n_values=(1, 2, 4, 8, 16), frequency=1.0, verbose=True):
         res = _run(n, frequency=frequency)
         rows.append((n, res.Qc, res.COP_electrical, res.W_parasitic))
         if verbose:
-            print(f"  n_parallel={n:3d}   Qc={res.Qc:8.2f}W   "
+            print(f" n_parallel={n:3d}   Qc={res.Qc:8.2f}W "
                   f"COP_electrical={res.COP_electrical:7.4f}   "
                   f"W_parasitic={res.W_parasitic:7.2f}W")
     return rows
@@ -85,7 +85,7 @@ def sweep_frequency_at_fixed_n(frequencies=(0.5, 1.0, 2.0, 4.0, 8.0), n_parallel
         saving_pct = 100 * (1 - hyp.W_parasitic / conv.W_parasitic) if conv.W_parasitic > 0 else 0.0
         rows.append((f, conv.COP_electrical, hyp.COP_electrical, saving_pct))
         if verbose:
-            print(f"  f={f:5.2f}Hz   COP_conventional={conv.COP_electrical:7.4f}   "
+            print(f" f={f:5.2f}Hz COP_conventional={conv.COP_electrical:7.4f}   "
                   f"COP_hypereg(n={n_parallel})={hyp.COP_electrical:7.4f}   "
                   f"W_parasitic saving={saving_pct:5.1f}%")
     return rows
@@ -93,7 +93,7 @@ def sweep_frequency_at_fixed_n(frequencies=(0.5, 1.0, 2.0, 4.0, 8.0), n_parallel
 
 def sweep_n_parallel_at_higher_mdot(n_values=(1, 2, 4, 8, 16), frequency=1.0,
                                       mdot=0.3, verbose=True):
-    """Closes the open ROADMAP.md Phase 16 candidate: "should Hypereg's
+    """Closes the open ROADMAP.md: "should Hypereg's
     benefit turn out non-negligible at a different (e.g. higher-frequency,
     higher-mdot) operating point than the one checked [at the module
     default MDOT_KG_S=0.08 kg/s], extend that sweep." This module's own
@@ -120,7 +120,7 @@ def sweep_n_parallel_at_higher_mdot(n_values=(1, 2, 4, 8, 16), frequency=1.0,
         res = sys_.run(T_COLD_K, SPAN_K)
         rows.append((n, res.Qc, res.COP_electrical, res.W_parasitic))
         if verbose:
-            print(f"  n_parallel={n:3d}   Qc={res.Qc:8.2f}W   "
+            print(f" n_parallel={n:3d}   Qc={res.Qc:8.2f}W "
                   f"COP_electrical={res.COP_electrical:7.4f}   "
                   f"W_parasitic={res.W_parasitic:7.2f}W")
     return rows
@@ -149,7 +149,7 @@ def run_hypereg_analysis(out_path="results/hypereg_analysis.txt"):
         mdot_high = 0.3
         print(f"\n--- Step 3: does the benefit become non-negligible at a higher mdot "
               f"({mdot_high}kg/s vs. the {MDOT_KG_S}kg/s baseline above)? "
-              f"(ROADMAP.md Phase 16 open candidate) ---")
+              f"(ROADMAP.md open candidate) ---")
         n_rows_high_mdot = sweep_n_parallel_at_higher_mdot(mdot=mdot_high)
 
         print("\n--- Conclusion ---")
@@ -187,7 +187,7 @@ def run_hypereg_analysis(out_path="results/hypereg_analysis.txt"):
                  "saturating benefit in Step 1 is not an artifact of the particular "
                  f"{MDOT_KG_S}kg/s operating point chosen; base_frac*Qc and k_eddy*f^2*H^2 "
                  "still dominate W_parasitic even at this higher flow rate in this repo's "
-                 "own calibrated loss model, so the ROADMAP.md Phase 16 candidate asking "
+                 "own calibrated loss model, so the ROADMAP.md asking "
                  "whether a higher-mdot point changes this conclusion is answered here: "
                  "it does not, at least not at this mdot.") )
 

@@ -25,22 +25,22 @@ Design variables (7, continuous):
                                 docstring for the calibration's honesty
                                 flags. 0.5 reproduces the model's original
                                 symmetric-blow behavior.)
-    particle_diameter_mm      [0.05, 2.0]  mm  (Phase 15 addition -- see
+    particle_diameter_mm      [0.05, 2.0]  mm ( addition -- see
                                 below)
 
 Note on regenerator_effectiveness vs. the NTU thermal model: this module
-runs with USE_NTU_THERMAL_MODEL=True (as it always has, pre-Phase-15
+runs with USE_NTU_THERMAL_MODEL=True (as it always has, previous
 included), which means AMRSystem._effective_eps() computes effectiveness
 from geometry/mass/frequency/mdot via core.thermal.regenerator_
 effectiveness() and IGNORES the regenerator_effectiveness design
 variable entirely (see AMRSystem._effective_eps()). This was already true
-before Phase 15 -- the variable has always been a passed-through-but-
+before  -- the variable has always been a passed-through-but-
 unused 6th search dimension in NTU mode -- and is called out explicitly
 here (previously only implicit) rather than removed, since removing a
 design variable changes the CSV schema and downstream plots.py column
 expectations; flagged as a good phase 15 cleanup candidate instead.
 
-Phase 15 additions
+ additions
 -------------------
 1. **Geometry as a design variable** (`particle_diameter_mm`): wired
    through to `AMRSystem`'s new `particle_diameter` parameter
@@ -58,10 +58,10 @@ Phase 15 additions
    beyond what's been checked against the Tusek et al. correlation's
    validity range).
 2. **Material as a design variable**: implemented as OPTION (b) from the
-   Phase 15 plan -- NSGA-III is run SEPARATELY per material family
+    plan -- NSGA-III is run SEPARATELY per material family
    (`MATERIAL_CANDIDATES` below: Gd, plus each of `core.cascade`'s
    composition-tunable GD_FAMILY/LAFESIH_FAMILY/MNFEPSI_FAMILY/
-   GA1XCMN3X_FAMILY (Phase 24)/MNCUCOGE_FAMILY (Phase 25), each
+   GA1XCMN3X_FAMILY /MNCUCOGE_FAMILY , each
    tuned so its OWN peak lands at this module's fixed operating point's
    midpoint temperature -- same `_target_composition_for_peak` machinery
    `material_family_comparison.py` already uses, so no new numerics are
@@ -85,13 +85,13 @@ Phase 15 additions
    choosing (b) over (a).
 3. **Cost objective upgraded**: `cost_index()` now uses
    `economics.bom_cost()` (magnet + MCM + soft-magnetic-material yoke,
-   Phase 15's economics.py addition) instead of the older `material_cost()`
+   the earlier economics.py addition) instead of the older `material_cost()`
    (magnet + MCM only), and looks the MCM unit cost up per material family
    via `economics.MCM_COST_PER_KG_BY_FAMILY` rather than always assuming
    Gd's $20/kg -- material choice now has a genuine, family-specific cost
    consequence in the optimization, not just a performance one.
 
-Phase 19 addition
+ addition
 -------------------
 `cost_index()` (and hence `AMRDesignProblem`/`run_optimization_for_
 material()`/`run_optimization()`) gained an opt-in
@@ -101,9 +101,9 @@ comes from `economics.bom_cost_geometric()` -- itself built on
 `core.magnet_geometry`'s closed-form idealized-Halbach-cylinder relation
 -- instead of `economics.bom_cost()`'s flat per-Tesla mass ratio. The
 geometric relation is NONLINEAR (super-linear) in mu0H, closing the gap
-ROADMAP.md's Phase 19 plan named ("achieving high mu0H should cost
+ROADMAP.md's plan named ("achieving high mu0H should cost
 nonlinearly more magnet mass ... which is physically real and currently
-absent"). Default is unchanged (flat ratio) so every pre-Phase-19 caller,
+absent"). Default is unchanged (flat ratio) so every previous caller,
 including this module's own `if __name__ == "__main__"` production run
 and main.py's step 11, is completely unaffected unless
 `use_geometric_magnet_mass=True` is passed explicitly. See
@@ -112,12 +112,12 @@ the A/B (flat vs. geometric) Pareto-front comparison this enables, and
 that module's own docstring for the underlying physics and honesty flags.
 
 Objectives (all converted to minimization for pymoo):
-    f1 = -COP_electrical        (maximize electrical COP; uses the
+    f1 = -COP_electrical (maximize electrical COP; uses the
                                  state-dependent loss model so the
                                  field/frequency/mdot/geometry choices
                                  carry a genuine efficiency cost)
-    f2 = -Qc                    (maximize cooling capacity)
-    f3 = cost_index             (minimize the materials-BOM cost proxy,
+    f2 = -Qc (maximize cooling capacity)
+    f3 = cost_index (minimize the materials-BOM cost proxy,
                                 economics.bom_cost(), family-specific)
 
 Fixed operating point: T_cold = 291 K, span = 10 K.
@@ -129,8 +129,8 @@ Output:
                                                     candidates
     results/pareto_front_by_material/<name>.csv  -- each material's own
                                                     per-material front,
-                                                    before merging (Phase
-                                                    15 addition, for
+                                                    before merging (added
+                                                    for
                                                     transparency/debugging)
 """
 
@@ -174,7 +174,7 @@ _XU = np.array([3.0, 5.0, 0.5, 15.0, 0.95, 0.6, 2.0])
 
 def cost_index(mu0H, mass_regenerator, family_name="Gd",
                 use_geometric_magnet_mass=False):
-    """Materials-BOM cost proxy (Phase 15: now includes the soft-magnetic
+    """Materials-BOM cost proxy (now includes the soft-magnetic
     -material yoke term and looks the MCM cost up per material family --
     see module docstring item 3). `family_name` defaults to "Gd" so
     existing callers passing only (mu0H, mass_regenerator) get the same
@@ -182,9 +182,9 @@ def cost_index(mu0H, mass_regenerator, family_name="Gd",
     the old `material_cost()`-based `cost_index()` for the same (mu0H,
     mass) because it now also includes the SMM yoke term -- this is an
     intentional, documented improvement (a more complete materials-cost
-    proxy), not a bug; see economics.py's Phase 15 section.
+    proxy), not a bug; see economics.py's section.
 
-    Phase 19 addition: `use_geometric_magnet_mass=False` (default,
+     addition: `use_geometric_magnet_mass=False` (default,
     fully backward-compatible) keeps using `economics.bom_cost()`'s flat
     per-Tesla magnet-mass ratio; passing `True` switches the magnet-mass
     term to `economics.bom_cost_geometric()`'s closed-form idealized-
@@ -199,7 +199,7 @@ def cost_index(mu0H, mass_regenerator, family_name="Gd",
 
 
 def _material_candidates(T_mid_K=T_MID_K, mu0H_max_for_tuning=2.0):
-    """Builds the set of material candidates for the Phase 15 per-family
+    """Builds the set of material candidates for the per-family
     NSGA-III co-optimization: plain Gd, plus each of core.cascade's three
     composition-tunable giant-MCE families, each tuned so its own peak
     DeltaT_ad lands at T_mid_K (this module's fixed operating point's
@@ -275,11 +275,11 @@ def _row_from_xf(x, f, material_label):
     }
 
 
-# --- Phase 29: layered/graded beds exposed to NSGA-III (document item #4) ---
+# --- layered/graded beds exposed to NSGA-III (document item #4) ---
 #
 # `AMRDesignProblem` above only ever searches a SINGLE material at a SINGLE
 # uniform Tc -- Curie-graded multi-layer beds exist in this repo
-# (core/cascade.py's run_graded_cascade(), Phase 7/9) but were never wired
+# (core/cascade.py's run_graded_cascade()) but were never wired
 # into the NSGA-III co-optimizer at all; this closes that gap.
 #
 # n_layers is NOT a 6th continuous design variable rounded to an integer
@@ -302,7 +302,7 @@ def _row_from_xf(x, f, material_label):
 # on run_optimization()) not meaningfully slower in aggregate than one
 # larger mixed-variable run would be.
 LAYERED_N_LAYERS_RANGE = (1, 2, 3, 4, 5, 6)
-# Phase 29: matches this repo's own existing single-stage-vs-Curie-graded
+# matches this repo's own existing single-stage-vs-Curie-graded
 # comparisons (core/cascade.py's compare_graded_cascade() sweeps
 # stage_counts=(1,2,3,4) by default; this repo's own Astronautics
 # reproduction uses 6 layers) -- 1-6 is not an arbitrary new choice, it is
@@ -311,7 +311,7 @@ LAYERED_N_LAYERS_RANGE = (1, 2, 3, 4, 5, 6)
 
 
 class LayeredAMRDesignProblem(ElementwiseProblem):
-    """Phase 29: the Curie-graded-cascade analog of AMRDesignProblem above.
+    """the Curie-graded-cascade analog of AMRDesignProblem above.
     Same 7 continuous design variables (mu0H, frequency, mdot,
     mass_per_stage, regen_effectiveness, blow_fraction,
     particle_diameter_mm) and same 3 objectives (-COP, -Qc, cost), but
@@ -479,8 +479,8 @@ def run_layered_optimization_material_family_cross_product(
         seed=1, out_csv="results/layered_pareto_front_material_cross_product.csv",
         per_combo_out_dir="results/layered_pareto_front_by_material_and_n",
         use_geometric_magnet_mass=False, n_processes=1):
-    """Phase 31: the material x n_layers cross-product this repo's own
-    Phase 29 docstring (run_layered_optimization(), above) explicitly
+    """the material x n_layers cross-product this repo's own
+     docstring (run_layered_optimization(), above) explicitly
     left as "a documented, concretely-scoped follow-up, not attempted
     here to keep this phase's own runtime and scope bounded". Runs
     run_layered_optimization() once per family candidate (each already
@@ -519,7 +519,7 @@ def run_layered_optimization_material_family_cross_product(
     40/25/(1..6) -- this function multiplies total NSGA-III wall time by
     len(family_candidates) on top of that, so the smaller of the two
     "reduced settings" conventions already established in this module
-    (Phase 15's material loop vs. Phase 29's n_layers loop) is used here,
+    (the earlier material loop vs. the earlier n_layers loop) is used here,
     not both compounded at full scale. Increase deliberately, and budget
     runtime accordingly, before using this for a final report figure."""
     if family_candidates is None:
@@ -533,7 +533,7 @@ def run_layered_optimization_material_family_cross_product(
 
     all_rows = []
     per_combo_rows = {}
-    print(f"Phase 31 material x n_layers cross-product: "
+    print(f" material x n_layers cross-product: "
           f"{len(family_candidates)} family candidate(s) x "
           f"{len(n_layers_range)} n_layers value(s) = "
           f"{len(family_candidates) * len(n_layers_range)} total NSGA-III run(s)")
@@ -576,7 +576,7 @@ def run_layered_optimization(n_layers_range=LAYERED_N_LAYERS_RANGE, family=None,
                               out_csv="results/layered_pareto_front.csv",
                               per_n_layers_out_dir="results/layered_pareto_front_by_n",
                               use_geometric_magnet_mass=False, n_processes=1):
-    """Phase 29: runs NSGA-III separately for each n_layers in
+    """runs NSGA-III separately for each n_layers in
     n_layers_range (default LAYERED_N_LAYERS_RANGE=1..6), writes each
     layer-count's own Pareto front to
     `per_n_layers_out_dir/n_layers_<n>.csv`, then merges all rows and
@@ -597,7 +597,7 @@ def run_layered_optimization(n_layers_range=LAYERED_N_LAYERS_RANGE, family=None,
     bounded)."""
     all_rows = []
     per_n_rows = {}
-    print(f"Phase 29 layered-bed co-optimization: {len(n_layers_range)} n_layers "
+    print(f" layered-bed co-optimization: {len(n_layers_range)} n_layers "
           f"value(s) -- {', '.join(str(n) for n in n_layers_range)}")
     for n_layers in n_layers_range:
         out_path = os.path.join(per_n_layers_out_dir, f"n_layers_{n_layers}.csv") \
@@ -609,12 +609,12 @@ def run_layered_optimization(n_layers_range=LAYERED_N_LAYERS_RANGE, family=None,
             n_processes=n_processes)
         per_n_rows[n_layers] = rows
         all_rows.extend(rows)
-        print(f"  n_layers={n_layers}  {len(rows)} Pareto-optimal design(s) found"
+        print(f" n_layers={n_layers}  {len(rows)} Pareto-optimal design(s) found"
               + (f" -> {out_path}" if out_path else ""))
 
     merged = _layered_pareto_filter(all_rows)
     if out_csv:
-        # Phase 31: guarded, matching per_n_layers_out_dir's existing
+        # guarded, matching per_n_layers_out_dir's existing
         # None-skips-the-write convention just above -- previously this
         # call was unconditional, so out_csv=None (a natural ask for a
         # caller that only wants the returned rows, e.g. this module's own
@@ -636,7 +636,7 @@ def run_layered_optimization(n_layers_range=LAYERED_N_LAYERS_RANGE, family=None,
             n_layers_counts[r["n_layers"]] = n_layers_counts.get(r["n_layers"], 0) + 1
         print("n_layers representation in the merged, globally non-dominated front:")
         for n_layers, count in sorted(n_layers_counts.items()):
-            print(f"  n_layers={n_layers}  {count} design(s) ({100*count/len(rows):.0f}%)")
+            print(f" n_layers={n_layers}  {count} design(s) ({100*count/len(rows):.0f}%)")
     return rows
 
 
@@ -657,14 +657,14 @@ def run_optimization_for_material(material, family_name, material_label,
                                     pop_size=40, n_gen=25, seed=1,
                                     out_csv=None, use_geometric_magnet_mass=False):
     """Runs NSGA-III for a single material candidate. This is the
-    per-family sub-search of the Phase 15 "option (b)" material
+    per-family sub-search of the "option (b)" material
     co-optimization (see module docstring item 2). `pop_size`/`n_gen` are
-    reduced from the pre-Phase-15 single-material defaults (60/40) since
-    Phase 15's `run_optimization()` now runs this once per material
+    reduced from the previous single-material defaults (60/40) since
+    the earlier `run_optimization()` now runs this once per material
     candidate (typically 3-4) -- see that function's docstring for the
     total-runtime accounting.
 
-    `use_geometric_magnet_mass` (Phase 19, default False = old behavior)
+    `use_geometric_magnet_mass` (, default False = old behavior)
     is passed straight through to `AMRDesignProblem`/`cost_index()` --
     see `cost_index()`'s own docstring."""
     ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=6)
@@ -707,7 +707,7 @@ def run_optimization(pop_size=40, n_gen=25, seed=1,
                       out_csv="results/pareto_front.csv",
                       per_material_out_dir="results/pareto_front_by_material",
                       use_geometric_magnet_mass=False):
-    """Phase 15: runs NSGA-III separately for each material candidate
+    """runs NSGA-III separately for each material candidate
     (`_material_candidates()`), writes each material's own Pareto front to
     `per_material_out_dir/<label>.csv`, then merges all candidate rows and
     applies a global non-dominance filter (`_pareto_filter()`) to produce
@@ -716,15 +716,15 @@ def run_optimization(pop_size=40, n_gen=25, seed=1,
     native mixed-variable pymoo formulation (option (a)).
 
     Runtime note: with `pop_size`/`n_gen` reduced to 40/25 (from the
-    pre-Phase-15 single-material 60/40) and ~4 material candidates, total
-    NSGA-III wall time is comparable to the pre-Phase-15 single 60/40 run
+    previous single-material 60/40) and ~4 material candidates, total
+    NSGA-III wall time is comparable to the previous single 60/40 run
     (roughly proportional to pop_size*n_gen*n_materials); see main.py's
     own runtime-estimate docstring for the current end-to-end figure.
     Tests (`tests/test_optimize.py`,
     `tests/test_optimize_material_geometry.py`) pass much smaller
     `pop_size`/`n_gen` explicitly and run in ~1s total.
 
-    Phase 19 addition: `use_geometric_magnet_mass=False` (default, fully
+     addition: `use_geometric_magnet_mass=False` (default, fully
     backward-compatible) is threaded through to every per-material
     `run_optimization_for_material()` call -- see `cost_index()`'s own
     docstring for what passing `True` changes (a nonlinear, closed-form
@@ -732,12 +732,12 @@ def run_optimization(pop_size=40, n_gen=25, seed=1,
     ratio). `core/magnet_geometry.py`'s
     `run_geometric_cost_pareto_sensitivity()` runs this function twice
     (flat vs. geometric) as an A/B comparison, the same pattern
-    `core/hysteresis_sensitivity.py` established for Phase 16.
+    `core/hysteresis_sensitivity.py` established for .
     """
     candidates = _material_candidates()
     all_rows = []
     per_material_rows = {}
-    print(f"Phase 15 material co-optimization: {len(candidates)} candidate(s) -- "
+    print(f" material co-optimization: {len(candidates)} candidate(s) -- "
           f"{', '.join(label for label, _, _ in candidates)}")
     for label, material, family_name in candidates:
         safe_label = "".join(c if c.isalnum() else "_" for c in label)
@@ -777,9 +777,9 @@ def run_optimization(pop_size=40, n_gen=25, seed=1,
                         ("Lowest cost", best_cost_idx),
                         ("Knee point (balanced)", knee_idx)]:
         r = rows[idx]
-        print(f"{label:<24} material={r['material']:<28} H={r['mu0H_max_T']}T  "
-              f"f={r['frequency_Hz']}Hz  mdot={r['fluid_mdot_kgs']}kg/s  "
-              f"mass={r['mass_regenerator_kg']}kg  d_p={r['particle_diameter_mm']}mm  "
+        print(f"{label:<24} material={r['material']:<28} H={r['mu0H_max_T']}T "
+              f"f={r['frequency_Hz']}Hz mdot={r['fluid_mdot_kgs']}kg/s "
+              f"mass={r['mass_regenerator_kg']}kg d_p={r['particle_diameter_mm']}mm "
               f"bf={r['blow_fraction']}  -> COP_elec={r['COP_electrical']}, "
               f"Qc={r['Qc_W']}W, cost=${r['cost_index_USD']}")
 
@@ -793,7 +793,7 @@ def run_optimization(pop_size=40, n_gen=25, seed=1,
     diam = [r["particle_diameter_mm"] for r in rows]
     print(f"\nparticle_diameter spans {min(diam):.3f}-{max(diam):.3f} mm across the merged "
           "front -- the geometry-explicit pumping-power/effectiveness trade-off "
-          "(see core/geometry_analysis.py, core/amr_cycle.py's Phase 15 wiring) is a "
+          "(see core/geometry_analysis.py, core/amr_cycle.py's wiring) is a "
           "real, active dimension of this search, not degenerate at either bound.")
 
     masses = [r["mass_regenerator_kg"] for r in rows]

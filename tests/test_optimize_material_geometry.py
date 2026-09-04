@@ -1,5 +1,5 @@
 """
-Tests for core/optimize.py's Phase 15 material + geometry co-optimization
+Tests for core/optimize.py's material + geometry co-optimization
 (particle_diameter_mm as a 7th design variable; material as a per-family
 NSGA-III search merged post-hoc into one Pareto front).
 """
@@ -65,12 +65,12 @@ def test_run_optimization_merges_multiple_materials_and_writes_per_material_csvs
     assert len(refiltered) == len(rows), "run_optimization()'s own merged output should already be non-dominated"
 
 # =============================================================================
-# Phase 19: opt-in geometric magnet-mass cost term
+# opt-in geometric magnet-mass cost term
 # =============================================================================
 
 def test_cost_index_geometric_flag_default_is_unchanged():
     """use_geometric_magnet_mass defaults to False -- omitting it must
-    reproduce the exact pre-Phase-19 cost_index() value."""
+    reproduce the exact previous cost_index() value."""
     default = cost_index(1.5, 5.0, "Gd")
     explicit_false = cost_index(1.5, 5.0, "Gd", use_geometric_magnet_mass=False)
     assert default == explicit_false

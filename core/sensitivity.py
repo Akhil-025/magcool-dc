@@ -144,7 +144,7 @@ if __name__ == "__main__":
     print("=" * 100)
     print("Constant parasitic-loss model")
     print("=" * 100)
-    run_sobol(out_path="results/sobol_results_phase2_constant.txt",
+    run_sobol(out_path="results/sobol_results_constant_losses.txt",
               use_state_dependent_losses=False)
     print("\n" + "=" * 100)
     print("State-dependent loss model")

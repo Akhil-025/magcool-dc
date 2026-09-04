@@ -65,7 +65,7 @@ References
 ----------
 Geometry and packed-bed concepts:
     • Tusek, Kitanovski, Poredos (2013), Int. J. Refrig. 36, 1456-1464
-      (geometry-dependent effectiveness and pumping power, Phase 7)
+      (geometry-dependent effectiveness and pumping power)
     • Trevizoli & Barbosa (2017)
 
 Heat-transfer correlation:
@@ -88,7 +88,7 @@ reduction in effectiveness observed at higher utilization. The coefficient
 experimental effectiveness curves and should therefore be regarded as an
 engineering approximation rather than a validated empirical fit.
 
-Phase 7 addition -- geometry-dependent pumping power (packed-bed AND
+ addition -- geometry-dependent pumping power (packed-bed AND
 parallel-plate)
 -----------------------------------------------------------------------
 Tusek, Kitanovski, Poredos, "Geometrical optimization of packed-bed and
@@ -97,20 +97,20 @@ parallel-plate active magnetic regenerators", Int. J. Refrig. 36 (2013)
 and parallel-plate active magnetic regenerators.pdf`) reports optimum
 packed-bed sphere diameters of 0.07-0.17 mm and optimum parallel-plate
 spacings of 0.035-0.075 mm -- both far smaller than this module's
-pre-Phase-7 default `particle_diameter=0.0005 m` (0.5 mm) -- because
+previous default `particle_diameter=0.0005 m` (0.5 mm) -- because
 smaller particles/gaps raise the heat-transfer coefficient (more
 recoverable effectiveness) but ALSO raise the viscous pressure drop for a
 given mass-flow rate, so the paper's Figs. 3-5 show a genuine trade-off
 optimum in specific cooling load and COP vs. geometry.
 
-Sweeping the pre-Phase-7 `regenerator_effectiveness()`'s
+Sweeping the previous `regenerator_effectiveness()`'s
 `particle_diameter` alone (see `core/geometry_analysis.py`) shows `eps`
 rising monotonically as particle_diameter shrinks, with no optimum --
 because this module only ever computed the heat-transfer (NTU) side of
 the trade-off; the pumping-power side was handled separately in
 `loss_model.py` as `W_pump = k_pump * mdot**2`, a device-calibrated term
 with NO particle-diameter or plate-geometry dependence at all. So the
-pre-Phase-7 model structure could not, even in principle, reproduce the
+previous model structure could not, even in principle, reproduce the
 paper's Fig. 3-5 trade-off shape. `pressure_drop_packed_bed()`,
 `pumping_power_packed_bed()`, and the parallel-plate equivalents below
 close that gap using the paper's own friction-factor correlations
@@ -167,10 +167,10 @@ def regenerator_effectiveness(mass_regenerator, frequency, mdot,
     mdot; default 0.002 m^2 (~ a 5x4 cm bed face) is representative of the
     lab-scale devices in data/amr_experimental_benchmarks.csv.
 
-    cp_solid (Phase 21 addition, core/baseline_cooling.py's
+    cp_solid ( addition, core/baseline_cooling.py's
     passive_regenerator_augmentation()): optional override for the solid
     regenerator specific heat used in the utilization term U, J/(kg K).
-    Default None reproduces the exact pre-Phase-21 behavior (module-level
+    Default None reproduces the exact previous behavior (module-level
     CP_SOLID_GD, a fixed Gd-near-room-temperature value) for every existing
     caller. Passing a temperature-averaged *total* (lattice + magnetic-
     anomaly) heat capacity from core/mce_material.py's own
@@ -178,7 +178,7 @@ def regenerator_effectiveness(mass_regenerator, frequency, mdot,
     Curie-point heat-capacity peak reduce U (raise buffering capacity per
     cycle) relative to a conventional non-magnetic regenerator material at
     the same mass/frequency/flow -- same additive-override discipline as
-    Phase 15's pumping_power_override and Phase 18's thermal_diode=None."""
+    the earlier pumping_power_override and the earlier thermal_diode=None."""
     fluid = water_properties(T_K)
     cp_solid_eff = CP_SOLID_GD if cp_solid is None else cp_solid
     V_bed = mass_regenerator / (RHO_GD * (1 - porosity))
@@ -208,7 +208,7 @@ def pressure_drop_packed_bed(mdot, particle_diameter=0.0005, porosity=0.365,
     friction-factor correlation Eq. (5) of Tusek, Kitanovski, Poredos
     (2013), Int. J. Refrig. 36, 1456-1464:
 
-        f = 23.462 * Re^-0.6716,   10 < Re < 5e5
+        f = 23.462 * Re^-0.6716, 10 < Re < 5e5
 
     and the standard Darcy-Weisbach relation dP = f (L/d_h) (rho u_s^2/2)
     with the hydraulic diameter from the paper's Eq. (7),
@@ -250,7 +250,7 @@ def pumping_power_packed_bed(mdot, particle_diameter=0.0005, porosity=0.365,
 
 def intragranular_eddy_power(frequency, mu0H, particle_diameter=0.0005,
                               mass_regenerator=2.0, sigma_e=GD_SIGMA_E_S_PER_M):
-    """Phase 27: geometry-explicit eddy-current power dissipated WITHIN the
+    """geometry-explicit eddy-current power dissipated WITHIN the
     MCM particles/plates themselves (W), as a function of particle_diameter
     (or, for a parallel-plate bed, plate_thickness passed through this same
     argument -- see honesty flag below).
@@ -382,7 +382,7 @@ def pumping_power_parallel_plate(mdot, plate_thickness=0.0005, plate_spacing=0.0
 
 
 # =============================================================================
-# Phase 15 addition: Hypereg parallel-hydraulic pressure-drop reduction
+#  addition: Hypereg parallel-hydraulic pressure-drop reduction
 # =============================================================================
 #
 # Source: Klinar, K. et al., "Perspectives and Energy Applications of
@@ -390,7 +390,7 @@ def pumping_power_parallel_plate(mdot, plate_thickness=0.0005, plate_spacing=0.0
 # Adv. Energy Mater. 14, 2401739 (2024), Section "Future Heat Transfer and
 # Regenerator Principles" (Figs. 18-20). Read directly from the PDF for
 # this pass (Papers/Reviews/... Klinar ... .pdf) rather than relying on
-# search-snippet-level knowledge, per the Phase 15 plan for this item.
+# search-snippet-level knowledge, per the plan for this item.
 #
 # What the paper actually claims (paraphrased, not quoted -- see
 # results/hypereg_findings.md for the full findings note): "Hypereg" is a
@@ -405,7 +405,7 @@ def pumping_power_parallel_plate(mdot, plate_thickness=0.0005, plate_spacing=0.0
 # PRESSURE-DROP / PUMPING-POWER effect (this module's domain: Darcy-flow
 # pressure drop, pumping_power_packed_bed()), NOT an eddy-current effect
 # (core.loss_model.StateDependentLossModel.k_eddy's domain) -- answering
-# the Phase 15 plan's research question directly: it is a thermal.py-style
+# the plan's research question directly: it is a thermal.py-style
 # hydraulic-geometry change, not a loss_model.py electromagnetic-
 # calibration change.
 #
@@ -470,8 +470,8 @@ if __name__ == "__main__":
     print("Regenerator effectiveness sweep vs. mass_regenerator (f=1Hz, mdot=0.08kg/s)")
     for m in [0.5, 1, 2, 5, 10, 15]:
         r = regenerator_effectiveness(m, frequency=1.0, mdot=0.08)
-        print(f"  mass={m:5.1f}kg  NTU={r['NTU']:6.2f}  U={r['U']:6.3f}  eps={r['eps']:.3f}")
+        print(f" mass={m:5.1f}kg NTU={r['NTU']:6.2f}  U={r['U']:6.3f}  eps={r['eps']:.3f}")
     print("\nRegenerator effectiveness sweep vs. frequency (mass=2kg, mdot=0.08kg/s)")
     for f in [0.25, 0.5, 1, 2, 4]:
         r = regenerator_effectiveness(2.0, frequency=f, mdot=0.08)
-        print(f"  f={f:5.2f}Hz  NTU={r['NTU']:6.2f}  U={r['U']:6.3f}  eps={r['eps']:.3f}")
+        print(f" f={f:5.2f}Hz NTU={r['NTU']:6.2f}  U={r['U']:6.3f}  eps={r['eps']:.3f}")

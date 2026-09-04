@@ -1,0 +1,25 @@
+==========================================================================================
+PHASE 17: AMR cycle-topology (Ericsson-like vs. Brayton-like) validation
+sensitivity -- see core/amr_cycle.py's CYCLE_TYPE_FACTORS docstring for
+the honesty flag on these multipliers, and this function's own docstring
+for the rotary-device-name heuristic used to infer cycle_type per row.
+==========================================================================================
+Astronautics_rotary_2014     cycle_type=ericsson  not comparable (one or both did not calibrate)
+DTU_Eriksen_MAGGIE_2016      cycle_type=brayton (unchanged, not rotary)  COP_err=n/a
+Tusek_singlebed_Gd_2010      cycle_type=brayton (unchanged, not rotary)  COP_err= -76.6%
+Risoe_DTU_Gd_2011            cycle_type=brayton (unchanged, not rotary)  COP_err=n/a
+Okamura_Hirano_2013          cycle_type=brayton (unchanged, not rotary)  COP_err= +53.2%
+Lozano_POLO_UFSC_2016_r1     cycle_type=brayton (unchanged, not rotary)  COP_err=n/a
+Lozano_POLO_UFSC_2016_r2     cycle_type=brayton (unchanged, not rotary)  COP_err=n/a
+Lozano_POLO_UFSC_2016_r3     cycle_type=brayton (unchanged, not rotary)  COP_err=n/a
+Lozano_POLO_UFSC_2016_r4     cycle_type=brayton (unchanged, not rotary)  COP_err=n/a
+Lozano_POLO_UFSC_2016_r5     cycle_type=brayton (unchanged, not rotary)  COP_err=n/a
+Lozano_POLO_UFSC_2016_r6     cycle_type=brayton (unchanged, not rotary)  COP_err=  -3.2%
+Lozano_POLO_UFSC_2016_r7     cycle_type=brayton (unchanged, not rotary)  COP_err= +12.4%
+Lozano_POLO_UFSC_2016_r8     cycle_type=brayton (unchanged, not rotary)  COP_err= +10.8%
+DTU_MagQueen_2018            cycle_type=brayton (unchanged, not rotary)  COP_err=n/a
+DTU_Eriksen_rotary_Gd_2015   cycle_type=ericsson  COP_err(brayton/inferred)=  -0.7%/  +2.1%  [worsened]
+
+Summary (rotary-device rows re-checked as 'ericsson', comparable subset only): 0 improved, 1 worsened, 0 unchanged, 1 not comparable (did not calibrate under one or both cycle types). Non-rotary rows are left on 'brayton' by construction and are not counted as a 'cycle_type' finding here.
+
+CONCLUSION: this is a directional sensitivity check against a small (2-device) rotary subset of the 16-device benchmark set, using a naming-convention proxy for cycle topology rather than a literature- confirmed classification -- see infer_cycle_type_for_device()'s docstring. It should NOT be read as validating the specific CYCLE_TYPE_FACTORS multiplier values themselves (those remain illustrative -- see amr_cycle.py), only as a check that inferring a less-Brayton-like cycle for rotary devices does not make this repo's existing COP predictions worse, and in one case (DTU_Eriksen_rotary_Gd_2015) makes it measurably better.

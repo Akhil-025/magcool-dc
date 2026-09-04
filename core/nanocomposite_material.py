@@ -1,7 +1,7 @@
 """
 nanocomposite_material.py
 ===========================
-Phase 22 item 2 (see phase_plan.md and ROADMAP.md): adds a genuinely new
+ (see phase_plan.md and ROADMAP.md): adds a genuinely new
 CANDIDATE MATERIAL FAMILY -- an engineered multi-phase nanocomposite blend
 -- alongside Gd / Gd5Si2Ge2 / La(Fe,Si)13Hy / (Mn,Fe)2(P,Si) in
 core/material_family_comparison.py.
@@ -13,7 +13,7 @@ nanocomposite / molecular-cluster systems) are this item's own named
 sources per phase_plan.md. Re-confirmed directly for this pass: pdfplumber
 extracts zero characters from every page of this project's copy sampled
 (0, 1, 2, 50, 51) -- the same image-only-PDF finding already recorded for
-Tishin Ch. 11 (Phase 21) and Sect. 2.8 (Phase 22 item 1). Those sections'
+Tishin Ch. 11 and Sect. 2.8 . Those sections'
 specific content -- whatever superparamagnetic/nanocomposite model or
 material data they report -- could not be read or digitized here.
 
@@ -42,14 +42,13 @@ sharp-Tc material per physically separate stage). This module implements
 that specific, narrower reading: a `WeightedMaterialEnsemble` of 3
 composition-tuned La(Fe,Si)13Hy phases (core/cascade.py's own already-
 validated, already-tunable LAFESIH_FAMILY -- chosen because
-material_family_comparison.py's own Phase-Track-A2 ranking already found
+material_family_comparison.py's own Track A2 ranking already found
 it the best-performing tunable family at the ASHRAE point), spread
 +/- NANOCOMPOSITE_SPREAD_K around a target composition, blended with a
 fixed triangular weighting -- rather than any new, undigitized material
 data.
 
-This deliberately reuses core/inhomogeneous_broadening.py's (Phase 22
-item 1) core insight -- multiple Tc-shifted phases combined into one
+This deliberately reuses core/inhomogeneous_broadening.py's core insight -- multiple Tc-shifted phases combined into one
 effective response -- but for a DIFFERENT physical situation (a few
 discrete, deliberately-engineered phases spread over a design-chosen
 range, vs. item 1's many random grains distributed by manufacturing
@@ -130,7 +129,7 @@ class WeightedMaterialEnsemble:
             f"Tc={[round(m.Tc, 1) for m in materials]}K)"
         )
         # Weighted-average hysteresis loss, so a nanocomposite built from
-        # phases that DO carry Phase-16 hysteresis_loss_J_per_kg values
+        # phases that DO carry hysteresis_loss_J_per_kg values
         # keeps that cost visible to AMRSystem's _hysteresis_power_W()
         # (which uses getattr(..., 0.0), so this attribute is optional but
         # honored automatically if present -- see core/amr_cycle.py).

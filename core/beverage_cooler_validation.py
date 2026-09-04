@@ -1,7 +1,7 @@
 """
 beverage_cooler_validation.py
 ==============================
-Phase 34: does this repo's own AMR model, run at REAL commercial/published
+does this repo's own AMR model, run at REAL commercial/published
 beverage-refrigeration operating points, land anywhere near those
 deployments' own reported real-world results? Unlike data-center cooling
 (this repo's primary application, where AMR trails vapor-compression/liquid

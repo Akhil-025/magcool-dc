@@ -1,21 +1,21 @@
 """
 hysteresis_sensitivity.py
 ==========================
-Phase 16 validation deliverable.
+ validation deliverable.
 
-Phase 15's merged, globally non-dominated Pareto front
+the earlier merged, globally non-dominated Pareto front
 (`core.optimize.run_optimization()`, `results/pareto_front.csv`) came out
 100% La(Fe,Si)13Hy. At the time, thermal-hysteresis loss was a documented
 but entirely UNQUANTIFIED honesty flag (prose caveats only, in
 `core.cascade` and `core.giguere_validation`) -- invisible to every
-objective the optimizer actually sees. Phase 16
+objective the optimizer actually sees.
 (`core.first_order_mce.FirstOrderMCEMaterial.hysteresis_loss_J_per_kg`,
 `core.amr_cycle.AMRSystem._hysteresis_power_W()`) made it a real number
 that increases `W_parasitic` (hence lowers `COP_electrical`) for every
 first-order material, while leaving GADOLINIUM (mce_material.py,
 second-order/mean-field, genuinely hysteresis-free) untouched.
 
-This module asks the question that motivated Phase 16 in the first place:
+This module asks the question that motivated in the first place:
 does the "100% La(Fe,Si)13Hy" result survive once that loss term is
 switched on?
 
@@ -23,15 +23,15 @@ Method
 ------
 Runs `core.optimize.run_optimization()` twice, at IDENTICAL pop_size,
 n_gen, and seed -- differing ONLY in whether each first-order material
-candidate's `hysteresis_loss_J_per_kg` is left at its Phase-16
+candidate's `hysteresis_loss_J_per_kg` is left at its
 literature-placeholder value ("hysteresis ON", the module's new default
-behavior after Phase 16) or forced to 0.0 ("hysteresis OFF", i.e. exactly
-reproducing pre-Phase-16 behavior) -- by temporarily mutating the three
+behavior after ) or forced to 0.0 ("hysteresis OFF", i.e. exactly
+reproducing previous behavior) -- by temporarily mutating the three
 module-level `*_FIRST_ORDER` constants in `core.first_order_mce` in place
 (they are plain, non-frozen dataclass instances, and
 `composition_tuned_material()`/`lafesih_composition_tuned_material()`/
 `mnfepsi_composition_tuned_material()` all read `hysteresis_loss_J_per_kg`
-off these constants at CALL time -- see first_order_mce.py's Phase 16
+off these constants at CALL time -- see first_order_mce.py's
 edits -- so mutating the constants before calling
 `core.optimize.run_optimization()` correctly propagates into every tuned
 material `_material_candidates()` builds fresh on each call), then
@@ -59,7 +59,7 @@ Honesty flags (read before trusting this diagnostic's numbers)
    at this reduced setting has NOT been separately characterized here.
 2. The `hysteresis_loss_J_per_kg` VALUES this comparison depends on are
    themselves the least-validated numbers in the whole codebase as of
-   Phase 16 -- literature analogs for DIFFERENT exact compositions than
+    -- literature analogs for DIFFERENT exact compositions than
    the ones calibrated here, in one case (MNFEPSI) from a different
    composition axis entirely. See each `*_FIRST_ORDER` constant's own
    block comment in `core/first_order_mce.py` for the full provenance and
@@ -71,11 +71,11 @@ Honesty flags (read before trusting this diagnostic's numbers)
    hysteresis loops.
 3. This diagnostic changes NOTHING about `core.cascade`'s graded-bed
    analyses (Astronautics reproduction, etc.) -- those already run
-   through `AMRSystem.run()` and therefore already pick up the Phase 16
+   through `AMRSystem.run()` and therefore already pick up the
    hysteresis term automatically (via `_single_stage()`'s no-loss_model
-   path, which Phase 16 deliberately made hysteresis-aware -- see
-   `AMRSystem.run()`'s Phase 16 comment). This module only isolates and
-   quantifies the effect on the Phase 15 material-selection question
+   path, which deliberately made hysteresis-aware -- see
+   `AMRSystem.run()`'s comment). This module only isolates and
+   quantifies the effect on the material-selection question
    specifically.
 """
 import os
@@ -117,7 +117,7 @@ def run_hysteresis_sensitivity(pop_size=32, n_gen=15, seed=1,
     with the raw merged-front rows and material counts from both runs,
     for programmatic use (e.g. by tests).
 
-    `out_csv_on`/`out_csv_off` default to the original Phase 16 fixed
+    `out_csv_on`/`out_csv_off` default to the original fixed
     filenames (fully backward compatible). Pass a seed-specific or
     scratch path to avoid N seeds clobbering the same two files (used by
     `run_hysteresis_multiseed_stability_check()` below). Note:
@@ -134,7 +134,7 @@ def run_hysteresis_sensitivity(pop_size=32, n_gen=15, seed=1,
 
     try:
         _p("=" * 70)
-        _p(f"Phase 16 hysteresis sensitivity: run 1/2 -- hysteresis ON "
+        _p(f" hysteresis sensitivity: run 1/2 -- hysteresis ON "
            f"(current literature-placeholder values) [seed={seed}]")
         _p("=" * 70)
         _set_all_hysteresis_from(original_values)
@@ -145,8 +145,8 @@ def run_hysteresis_sensitivity(pop_size=32, n_gen=15, seed=1,
 
         _p()
         _p("=" * 70)
-        _p(f"Phase 16 hysteresis sensitivity: run 2/2 -- hysteresis OFF "
-           f"(forced to 0.0, reproducing pre-Phase-16 behavior) [seed={seed}]")
+        _p(f" hysteresis sensitivity: run 2/2 -- hysteresis OFF "
+           f"(forced to 0.0, reproducing previous behavior) [seed={seed}]")
         _p("=" * 70)
         _set_all_hysteresis(0.0)
         rows_off = optimize.run_optimization(
@@ -161,7 +161,7 @@ def run_hysteresis_sensitivity(pop_size=32, n_gen=15, seed=1,
     all_materials = sorted(set(counts_on) | set(counts_off))
 
     lines = []
-    lines.append("Phase 16 hysteresis sensitivity: material composition of the merged,")
+    lines.append(" hysteresis sensitivity: material composition of the merged,")
     lines.append("globally non-dominated Pareto front, hysteresis ON vs OFF.")
     lines.append(f"(pop_size={pop_size}, n_gen={n_gen}, seed={seed} -- see module")
     lines.append(" docstring honesty flag #1 on why this is smaller than")
@@ -169,7 +169,7 @@ def run_hysteresis_sensitivity(pop_size=32, n_gen=15, seed=1,
     lines.append("")
     lines.append("Hysteresis literature-placeholder values used in the ON run:")
     for label, _mat in _HYSTERETIC_CONSTANTS.items():
-        lines.append(f"  {label:<16} {original_values[label]:.1f} J/kg  "
+        lines.append(f"  {label:<16} {original_values[label]:.1f} J/kg "
                       f"(see core/first_order_mce.py for provenance/caveats)")
     lines.append("")
     lines.append(f"{'Material':<40} {'OFF (pre-Ph16)':>16} {'ON (Ph16)':>12} {'Delta':>8}")
@@ -230,7 +230,7 @@ def run_hysteresis_multiseed_stability_check(
         seeds=(1, 2, 3), pop_size=40, n_gen=25,
         out_path="results/hysteresis_multiseed_stability.txt"):
     """Closes the open item this module's own docstring (honesty flag #1)
-    and ROADMAP.md's Phase 16 entry both flagged: does the ON/OFF La(Fe,
+    and ROADMAP.md both flagged: does the ON/OFF La(Fe,
     Si)13Hy-share reversal found at the reduced pop_size=32/n_gen=15/
     seed=1 setting (88% OFF -> 100% ON) hold at `run_optimization()`'s
     own production pop_size=40/n_gen=25 default, and is it stable across
@@ -270,7 +270,7 @@ def run_hysteresis_multiseed_stability_check(
             "front_size_off": len(result["rows_off"]),
             "front_size_on": len(result["rows_on"]),
         })
-        print(f"  seed={seed}: La(Fe,Si)13Hy share OFF={result['lafesih_frac_off']:.0%} "
+        print(f" seed={seed}: La(Fe,Si)13Hy share OFF={result['lafesih_frac_off']:.0%} "
               f"-> ON={result['lafesih_frac_on']:.0%}  "
               f"(front size OFF={len(result['rows_off'])}, ON={len(result['rows_on'])})")
 
@@ -283,7 +283,7 @@ def run_hysteresis_multiseed_stability_check(
     stable = all(s["lafesih_frac_on"] >= s["lafesih_frac_off"] - 1e-9 for s in per_seed)
 
     lines = []
-    lines.append("Phase 16 open item (see ROADMAP.md, and this module's own honesty flag #1):")
+    lines.append(" open item (see ROADMAP.md, and this module's own honesty flag #1):")
     lines.append("does the ON/OFF La(Fe,Si)13Hy-share reversal found at pop_size=32/n_gen=15/")
     lines.append("seed=1 (88% OFF -> 100% ON) hold at production pop_size/n_gen settings and")
     lines.append("across multiple seeds, or was it search noise at the smaller setting?")
@@ -343,7 +343,7 @@ def run_hysteresis_paired_significance_test(
     statistic will occasionally fail even with zero true effect), but "is
     the La(Fe,Si)13Hy front-share shift between ON and OFF, averaged across
     seeds, distinguishable from zero at all" -- exactly the null-result
-    possibility this repo's own Phase-32 diagnostic writeup flagged as the
+    possibility this repo's own diagnostic writeup flagged as the
     honest thing to report if the ON/OFF distributions turn out to
     substantially overlap.
 
@@ -356,7 +356,7 @@ def run_hysteresis_paired_significance_test(
     hysteresis effect). Reported at n=20 seeds by default -- standard
     practice in the multi-objective EA literature (e.g. Deb et al.'s own
     NSGA-II/III validation studies) is 15-30 seeds minimum for a
-    distributional claim; this repo's PRE-Phase-32 diagnostic
+    distributional claim; this repo's PRE- diagnostic
     (run_hysteresis_multiseed_stability_check(), 3 seeds by default) was
     never intended to support one on its own.
 
@@ -417,7 +417,7 @@ def run_hysteresis_paired_significance_test(
     significant = (p_ttest < 0.05) and (p_wilcoxon < 0.05) and not (ci_lo <= 0.0 <= ci_hi)
 
     lines = []
-    lines.append("Phase 32: does hysteresis ON vs OFF produce a La(Fe,Si)13Hy front-share")
+    lines.append("does hysteresis ON vs OFF produce a La(Fe,Si)13Hy front-share")
     lines.append("shift distinguishable from zero, averaged across seeds -- or is the")
     lines.append(f"per-seed direction-flipping already seen at n={n} (see")
     lines.append("hysteresis_multiseed_stability.txt) evidence of a genuine null effect,")
@@ -435,8 +435,8 @@ def run_hysteresis_paired_significance_test(
     # (fractions of a percentage point) would otherwise silently render
     # as e.g. "0.01pp" instead of the intended "+1.0pp".
     lines.append(f"OFF share: mean={100*off.mean():.1f}%  median={100*np.median(off):.1f}%")
-    lines.append(f"ON  share: mean={100*on.mean():.1f}%  median={100*np.median(on):.1f}%")
-    lines.append(f"delta (ON-OFF): mean={100*delta.mean():+.2f}pp  median={100*np.median(delta):+.1f}pp  "
+    lines.append(f"ON share: mean={100*on.mean():.1f}%  median={100*np.median(on):.1f}%")
+    lines.append(f"delta (ON-OFF): mean={100*delta.mean():+.2f}pp median={100*np.median(delta):+.1f}pp "
                  f"std={100*delta.std(ddof=1):.2f}pp")
     lines.append(f"seeds with ON>OFF: {int((delta > 0).sum())}/{n}   "
                  f"ON==OFF: {int((delta == 0).sum())}/{n}   ON<OFF: {int((delta < 0).sum())}/{n}")
@@ -457,7 +457,7 @@ def run_hysteresis_paired_significance_test(
         lines.append(f"(n={n}). Both the paired t-test and the Wilcoxon signed-rank test fail")
         lines.append("to reject the null of zero average shift (p>0.05), and the bootstrap 95%")
         lines.append("CI on the mean delta straddles zero. Per this repo's own stated")
-        lines.append("standard (see this function's own docstring and the Phase-32 diagnostic")
+        lines.append("standard (see this function's own docstring and the diagnostic")
         lines.append("writeup that motivated it): this should be reported as 'no statistically")
         lines.append("distinguishable effect of hysteresis on material selection at current")
         lines.append("sample size', NOT as a hedged directional claim in either direction. The")

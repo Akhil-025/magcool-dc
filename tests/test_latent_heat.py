@@ -1,5 +1,5 @@
 """
-Tests for core/first_order_mce.py's Phase 26 addition: latent_heat_J_per_kg /
+Tests for core/first_order_mce.py's addition: latent_heat_J_per_kg /
 latent_heat_width_K / latent_heat_capacity() / _field_dependent_transition_T() /
 GD5SI2GE2_FIRST_ORDER_LATENT_HEAT, and the corresponding
 core/giguere_validation.py::run_latent_heat_validation().

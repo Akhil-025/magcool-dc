@@ -3,7 +3,7 @@ giguere_validation.py
 ======================
 Cross-checks the first-order Landau model (`first_order_mce.py`) against an
 INDEPENDENT experimental dataset, as required by that module's honesty flag
-#2 and by ROADMAP.md Phase 7's open item on the Curie-graded cascade.
+#2 and by ROADMAP.md the earlier open item on the Curie-graded cascade.
 
 Reference data
 --------------
@@ -63,8 +63,8 @@ single-field, single-composition check -- exactly the kind of thing
 honesty flag #2 asked for, not a full re-validation across field and
 composition (no such multi-field direct dataset exists in this repo).
 
-Phase 35 verification note: this module's docstring already said "PDF
-present in this repo" before Phase 35 -- re-confirmed directly again this
+ verification note: this module's docstring already said "PDF
+present in this repo" before  -- re-confirmed directly again this
 phase (Papers/ is now actually included in the delivered project, closing
 a gap where these citations referenced a Papers/ folder that had been
 omitted from earlier deliveries of this codebase). All four numbers above
@@ -243,7 +243,7 @@ def run_pecharsky_ratio_check(verbose=True):
             "ratio_raw": round(ratio_raw, 2), "ratio_corrected": round(ratio_corrected, 2),
         })
         if verbose:
-            print(f"{B:.0f}T: Gd5Si2Ge2 peak dTad raw={dT_gd5_raw:5.2f}K  "
+            print(f"{B:.0f}T: Gd5Si2Ge2 peak dTad raw={dT_gd5_raw:5.2f}K "
                   f"corrected={dT_gd5_corrected:5.2f}K  |  Gd peak dTad={dT_gd_peak:5.2f}K  |  "
                   f"ratio raw={ratio_raw:.2f}  corrected={ratio_corrected:.2f}  "
                   f"(Pecharsky & Gschneidner 1997: ~{PECHARSKY_1997_PEAK_RATIO:.2f})")
@@ -257,7 +257,7 @@ def run_pecharsky_ratio_check(verbose=True):
 
 
 def run_latent_heat_validation(verbose=True):
-    """Phase 26: checks GD5SI2GE2_FIRST_ORDER_LATENT_HEAT (the
+    """checks GD5SI2GE2_FIRST_ORDER_LATENT_HEAT (the
     field-tracked-latent-heat-Cp-spike variant, see that instance's own
     block comment in first_order_mce.py for full derivation/citations)
     against BOTH cross-checks already in this module -- Giguere et al.'s
@@ -292,7 +292,7 @@ def run_latent_heat_validation(verbose=True):
     read GD5SI2GE2_FIRST_ORDER_LATENT_HEAT as a validated replacement for
     GD5SI2GE2_FIRST_ORDER or for the DTAD_CORRECTION_FACTOR path --
     downstream code should keep using whichever of those two the calling
-    context already used (see ROADMAP.md Phase 26 for the decision not to
+    context already used (see ROADMAP.md for the decision not to
     swap either default in this pass)."""
     from core.mce_material import GADOLINIUM
     from core.first_order_mce import GD5SI2GE2_FIRST_ORDER, GD5SI2GE2_FIRST_ORDER_LATENT_HEAT
@@ -308,7 +308,7 @@ def run_latent_heat_validation(verbose=True):
     peak_lh = float(np.max(dT_lh))
     gap_closed_pct = 100 * (peak_raw - peak_lh) / (peak_raw - GIGUERE_DIRECT_DTAD_7T)
 
-    lines.append(f"7T peak DeltaT_ad: raw={peak_raw:.2f}K  latent-heat={peak_lh:.2f}K  "
+    lines.append(f"7T peak DeltaT_ad: raw={peak_raw:.2f}K latent-heat={peak_lh:.2f}K "
                  f"Giguere direct target={GIGUERE_DIRECT_DTAD_7T:.1f}K")
     lines.append(f"Gap to direct target closed by latent heat: {gap_closed_pct:.1f}% "
                  f"(NOT a full fix)")
@@ -324,8 +324,8 @@ def run_latent_heat_validation(verbose=True):
         ratio_lh = peak_gd5_lh / peak_gd
         rows.append({"field_T": B, "gd5si2ge2_latent_heat_peak_K": round(peak_gd5_lh, 2),
                      "gd_peak_K": round(peak_gd, 2), "ratio_latent_heat": round(ratio_lh, 2)})
-        lines.append(f"{B:.0f}T: Gd5Si2Ge2(latent-heat) peak={peak_gd5_lh:5.2f}K  "
-                     f"Gd peak={peak_gd:5.2f}K  ratio={ratio_lh:.2f}  "
+        lines.append(f"{B:.0f}T: Gd5Si2Ge2(latent-heat) peak={peak_gd5_lh:5.2f}K "
+                     f"Gd peak={peak_gd:5.2f}K ratio={ratio_lh:.2f}  "
                      f"(Pecharsky & Gschneidner 1997: ~{PECHARSKY_1997_PEAK_RATIO:.2f}; "
                      f"still <1.0 -- see this function's docstring)")
 
@@ -348,6 +348,6 @@ if __name__ == "__main__":
     print("=" * 78)
     run_pecharsky_ratio_check()
     print("\n" + "=" * 78)
-    print("Phase 26: latent-heat C_p spike (GD5SI2GE2_FIRST_ORDER_LATENT_HEAT)")
+    print("latent-heat C_p spike (GD5SI2GE2_FIRST_ORDER_LATENT_HEAT)")
     print("=" * 78)
     run_latent_heat_validation()

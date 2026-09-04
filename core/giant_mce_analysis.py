@@ -42,7 +42,7 @@ def landau_peak_offset_K(material, mu0H, T_range=(260, 330), n=701):
          Phys. Rev. Lett. 78, 4494 (1997)) has its dTad(T) peak at
          ~286.4K at 2T -- an offset of ~+10.4K.
       2. cascade.py's Astronautics graded-bed reproduction (see
-         run_astronautics_graded_bed_check() and ROADMAP.md Phase 9
+         run_astronautics_graded_bed_check() and ROADMAP.md
          addendum) back-solves the composition Tc needed, PER STAGE, for
          the model's peak effect to land on each stage's actual operating
          temperature (T_mid). Compared against Jacobs et al. (2014,
@@ -107,8 +107,8 @@ def run_analysis(out_path="results/giant_mce_analysis.txt"):
     lines.append(f"Test 1: BOTH materials at the ASHRAE operating point (T_cold=291K, span={span}K)")
     r_gd_ashrae = eval_at(GADOLINIUM, 291.0, span)
     r_giant_ashrae = eval_at(GD5SI2GE2_FIRST_ORDER, 291.0, span)
-    lines.append(f"  Gd:         Qc={r_gd_ashrae.Qc:8.1f} W   COP_elec={r_gd_ashrae.COP_electrical:.2f}")
-    lines.append(f"  Gd5Si2Ge2:  Qc={r_giant_ashrae.Qc:8.1f} W   COP_elec={r_giant_ashrae.COP_electrical:.2f}"
+    lines.append(f" Gd:         Qc={r_gd_ashrae.Qc:8.1f} W COP_elec={r_gd_ashrae.COP_electrical:.2f}")
+    lines.append(f" Gd5Si2Ge2:  Qc={r_giant_ashrae.Qc:8.1f} W COP_elec={r_giant_ashrae.COP_electrical:.2f}"
                  f"   <- collapses to ~0: {span}K span is centered "
                  f"~{291.0+span/2-peak_T_giant:.1f}K from its own peak")
     lines.append("")
@@ -119,9 +119,9 @@ def run_analysis(out_path="results/giant_mce_analysis.txt"):
                  f"span={span}K, straddling its {peak_T_giant:.1f}K peak)")
     r_giant_own = eval_at(GD5SI2GE2_FIRST_ORDER, T_cold_giant_favorable, span)
     r_gd_same_point = eval_at(GADOLINIUM, T_cold_giant_favorable, span)
-    lines.append(f"  Gd5Si2Ge2:  Qc={r_giant_own.Qc:8.1f} W   COP_elec={r_giant_own.COP_electrical:.2f}"
+    lines.append(f" Gd5Si2Ge2:  Qc={r_giant_own.Qc:8.1f} W COP_elec={r_giant_own.COP_electrical:.2f}"
                  f"   <- strong performance when correctly targeted")
-    lines.append(f"  Gd (same point): Qc={r_gd_same_point.Qc:8.1f} W   "
+    lines.append(f" Gd (same point): Qc={r_gd_same_point.Qc:8.1f} W "
                  f"COP_elec={r_gd_same_point.COP_electrical:.2f}   <- Gd fails here "
                  f"(point is far from Gd's own {peak_T_gd:.1f}K)")
     lines.append("")

@@ -55,7 +55,7 @@ A more rigorous validation would compare against experimental datasets that
 report complete operating conditions, including directly measured flow rates
 or utilization values that are consistent across devices.
 
-Curve-level (Phase 7) addition
+Curve-level addition
 -------------------------------
 `amr_cycle.AMRSystem.cooling_capacity()` predicts a specific characteristic-
 curve *shape*: Qc falls off roughly linearly from a maximum at zero span to
@@ -77,7 +77,7 @@ fabricated here. This is a smaller, honest step: a genuine 2-point curve
 check using data already in `amr_experimental_benchmarks.csv`, for the
 device groups that have a second point at a fixed operating condition.
 
-Phase 7 continued: a genuinely independent multi-point device was located
+ continued: a genuinely independent multi-point device was located
 and added -- Lozano et al. (2016), "Development of a novel rotary magnetic
 refrigerator" (POLO/UFSC), whose Table 3 reports 8 real (frequency, flow
 rate, span, Qc, COP) operating points directly as clean numbers (no
@@ -239,7 +239,7 @@ def calibrate_and_check(row, verbose=True, cycle_type="brayton"):
         mdot_cal = brentq(qc_residual, 1e-6, 5.0, xtol=1e-6)
     except ValueError:
         if verbose:
-            print(f"{row['device']:<28} span={span:5.1f}K  Qc_lit={Qc_lit:7.1f}W  "
+            print(f"{row['device']:<28} span={span:5.1f}K Qc_lit={Qc_lit:7.1f}W "
                   f"NO CALIBRATION FOUND (reported Qc unreachable within "
                   f"mdot in [1e-6,5] kg/s at this field/mass/frequency)  "
                   f"[{material_note}]")
@@ -262,10 +262,10 @@ def calibrate_and_check(row, verbose=True, cycle_type="brayton"):
            "implied_parasitic_fraction": round(implied_parasitic_frac, 3),
            "mdot_calibrated_kg_s": round(mdot_cal, 4), "material_note": material_note}
     if verbose:
-        print(f"{row['device']:<28} span={span:5.1f}K  Qc(lit/model)="
-              f"{Qc_lit:7.1f}/{result.Qc:7.1f} W  COP(lit/ideal/elec)="
+        print(f"{row['device']:<28} span={span:5.1f}K Qc(lit/model)="
+              f"{Qc_lit:7.1f}/{result.Qc:7.1f} W COP(lit/ideal/elec)="
               f"{cop_lit:5.2f}/{result.COP:5.2f}/{result.COP_electrical:5.2f}"
-              f"  err={cop_err_pct:+6.1f}%  implied_parasitic={implied_parasitic_frac:.3f}"
+              f" err={cop_err_pct:+6.1f}%  implied_parasitic={implied_parasitic_frac:.3f}"
               f"  [{material_note}]")
     return out
 
@@ -300,7 +300,7 @@ def run_capacity_only_calibration_check(verbose=True):
             out = {"device": row["device"], "span_K": span, "Qc_lit_W": Qc_lit,
                    "status": "no calibration found", "material_note": material_note}
             if verbose:
-                print(f"{row['device']:<28} span={span:5.1f}K  Qc_lit={Qc_lit:7.1f}W  "
+                print(f"{row['device']:<28} span={span:5.1f}K Qc_lit={Qc_lit:7.1f}W "
                       f"NO CALIBRATION FOUND (capacity-only row, no COP to compare -- "
                       f"reports whether the span/Qc pair alone is achievable)  "
                       f"[{material_note}]")
@@ -310,7 +310,7 @@ def run_capacity_only_calibration_check(verbose=True):
                    "status": "calibrated", "mdot_calibrated_kg_s": round(mdot_cal, 4),
                    "material_note": material_note}
             if verbose:
-                print(f"{row['device']:<28} span={span:5.1f}K  Qc_lit={Qc_lit:7.1f}W  "
+                print(f"{row['device']:<28} span={span:5.1f}K Qc_lit={Qc_lit:7.1f}W "
                       f"calibrated at mdot={mdot_cal:.4f}kg/s (no COP reported -- "
                       f"capacity-only check)  [{material_note}]")
         results.append(out)
@@ -451,8 +451,8 @@ def run_calibration_failure_diagnostics(verbose=True,
               f"[1e-6,5] kg/s. Checking directly whether raising that upper bound would "
               f"have helped, per row:"]
     for d in diagnostics:
-        lines.append(f"  {d['device']:<32} span={d['span_K']:6.1f}K  "
-                      f"dTad_noload={d['dTad_noload_K']:7.2f}K  "
+        lines.append(f"  {d['device']:<32} span={d['span_K']:6.1f}K "
+                      f"dTad_noload={d['dTad_noload_K']:7.2f}K "
                       f"margin(2*dTad-span)={d['margin_K']:+8.2f}K  -> {d['classification']}")
     lines.append("-" * 92)
     conclusion = (
@@ -581,14 +581,14 @@ def analyze_regenerative_amplification_gap(verbose=True,
              "amplification effect the model is missing.", ""]
     for e in entries:
         if e["near_zero"]:
-            lines.append(f"  {e['device']:<38} span={e['span_K']:6.1f}K  "
+            lines.append(f"  {e['device']:<38} span={e['span_K']:6.1f}K "
                           f"dTad_noload={e['dTad_noload_K']:6.3f}K (~0)  -> ratio undefined "
                           "(material/T_mid mismatch, see docstring)")
         else:
             flag = "  <-- EXCEEDS MODEL'S STRUCTURAL CAP" if e["amplification_ratio"] > 1.0 else ""
-            lines.append(f"  {e['device']:<38} span={e['span_K']:6.1f}K  "
-                          f"dTad_noload={e['dTad_noload_K']:6.2f}K  "
-                          f"cap={e['structural_cap_K']:6.2f}K  "
+            lines.append(f"  {e['device']:<38} span={e['span_K']:6.1f}K "
+                          f"dTad_noload={e['dTad_noload_K']:6.2f}K "
+                          f"cap={e['structural_cap_K']:6.2f}K "
                           f"ratio={e['amplification_ratio']:5.2f}x{flag}")
     lines.append("-" * 100)
     if ratios:
@@ -699,8 +699,23 @@ def run_regenerative_amplification_override_check(
         cop_lit = float(row["COP"])
         old_cap = round(2 * dTad, 2)
 
+        # Device-specific geometry (Paper-Mining Pass, Item 1.7 in
+        # LIMITATIONS.md): Tusek_singlebed_Gd_2010 (both its main and
+        # _spanceiling rows share this device_group) is a real parallel-
+        # plate AMR, not a packed bed of spheres (Tusek et al., Appl.
+        # Therm. Eng. 53 (2013) 57-66, Table 1) -- every other benchmark
+        # row keeps the packed_bed default (regenerative_span_cap()'s own
+        # default, unchanged), since this repo has no equivalent verified
+        # parallel-plate geometry data for them.
+        span_cap_kwargs = {}
+        if row["device_group"] == "Tusek_singlebed_Gd_2010":
+            span_cap_kwargs = {"geometry": "parallel_plate",
+                               "plate_thickness": 0.00025, "plate_spacing": 0.0001,
+                               "bed_cross_section_area": 3.9e-4}
+
         span_cap = regenerator_1d.regenerative_span_cap(material, mu0H, mass, freq,
-                                                          T_K_for_ntu=t_cold + span / 2.0)
+                                                          T_K_for_ntu=t_cold + span / 2.0,
+                                                          **span_cap_kwargs)
 
         # Old cap: cooling_capacity() at this span is a hard 0.0 by
         # construction (span >= old_cap). With the override, find the mdot
@@ -710,7 +725,7 @@ def run_regenerative_amplification_override_check(
             results.append({"device": row["device"], "span_K": span, "old_cap_K": old_cap,
                              "span_cap_K": round(span_cap, 2), "recovers_nonzero": False,
                              "COP_lit": cop_lit, "COP_pred": None, "err_pct": None})
-            lines.append(f"  {row['device']:<38} span={span:6.1f}K  old_cap={old_cap:6.1f}K  "
+            lines.append(f"  {row['device']:<38} span={span:6.1f}K old_cap={old_cap:6.1f}K "
                           f"1D_span_cap={span_cap:6.2f}K  -> STILL infeasible (override doesn't reach "
                           f"this span either)")
             continue
@@ -731,7 +746,7 @@ def run_regenerative_amplification_override_check(
             results.append({"device": row["device"], "span_K": span, "old_cap_K": old_cap,
                              "span_cap_K": round(span_cap, 2), "recovers_nonzero": True,
                              "COP_lit": cop_lit, "COP_pred": None, "err_pct": None})
-            lines.append(f"  {row['device']:<38} span={span:6.1f}K  old_cap={old_cap:6.1f}K  "
+            lines.append(f"  {row['device']:<38} span={span:6.1f}K old_cap={old_cap:6.1f}K "
                           f"1D_span_cap={span_cap:6.2f}K  -> reaches span, but no mdot in [1e-5,5] "
                           f"kg/s reproduces the reported Qc={Qc_lit}W")
             continue
@@ -746,8 +761,8 @@ def run_regenerative_amplification_override_check(
                          "span_cap_K": round(span_cap, 2), "recovers_nonzero": True,
                          "COP_lit": cop_lit, "COP_pred": round(result.COP_electrical, 3),
                          "err_pct": round(err_pct, 1) if err_pct is not None else None})
-        lines.append(f"  {row['device']:<38} span={span:6.1f}K  old_cap={old_cap:6.1f}K  "
-                      f"1D_span_cap={span_cap:6.2f}K  COP_lit={cop_lit:5.2f}  "
+        lines.append(f"  {row['device']:<38} span={span:6.1f}K old_cap={old_cap:6.1f}K "
+                      f"1D_span_cap={span_cap:6.2f}K COP_lit={cop_lit:5.2f}  "
                       f"COP_pred={result.COP_electrical:6.3f} (err={err_pct:+6.1f}%)")
 
     lines.append("-" * 100)
@@ -779,8 +794,149 @@ def run_system_validation():
     return [r for r in results if r is not None]
 
 
+def run_calibrated_gd_system_level_comparison(
+        verbose=True, out_path="results/calibrated_gd_system_level_comparison.txt"):
+    """Paper-Mining Pass wiring check: does core/mce_material.py's Gd
+    physics fix (exact isentropic DeltaT_ad + Sommerfeld electronic term +
+    fitted grain-Tc broadening -- see LIMITATIONS.md Item 1.1,
+    core/inhomogeneous_broadening.py's GADOLINIUM_CALIBRATED) actually
+    change this repo's SYSTEM-level (COP/Qc) numbers, not just the
+    material-level Dan'kov comparison in run_validation()?
+
+    Answer, stated up front: core/amr_cycle.py, core/optimize.py, and
+    core/cascade.py all import plain GADOLINIUM (unbroadened, linear
+    delta_T_adiabatic()), not GADOLINIUM_CALIBRATED, and this function
+    does NOT change that -- see the docstring below for why. What this
+    function DOES do is quantify the gap that decision leaves on the
+    table, on a handful of real, already-calibrating benchmark devices,
+    so that gap is a measured number, not an unquantified assumption.
+
+    WHY GADOLINIUM_CALIBRATED IS NOT THE SYSTEM-WIDE DEFAULT: its
+    delta_T_adiabatic() ensemble-averages over
+    inhomogeneous_broadening.N_QUAD_DEFAULT=15 broadened-Tc clones per
+    call (see BroadenedMagnetocaloricMaterial). Benchmarked directly:
+    ~6-19x slower per call than plain GADOLINIUM (19x for a 50-point
+    array, ~6x for a single scalar T -- overhead is dominated by the
+    15x repeated evaluation, not by array size). core/optimize.py's
+    NSGA-III runs (pop_size=40, n_gen=25 = 1000 evaluations, several
+    such runs per full main.py pipeline execution, each evaluation
+    calling cooling_capacity() multiple times) would see a
+    multi-generation performance cost from this pass alone if
+    GADOLINIUM_CALIBRATED replaced GADOLINIUM there -- a real, measured
+    engineering trade-off, not a hypothetical one, and not something to
+    silently absorb into every pipeline run without the person running
+    it being able to see the cost/benefit trade explicitly (this
+    function is that explicit accounting).
+
+    Method: for a handful of ALREADY-CALIBRATING Gd benchmark rows (cheap
+    -- a few dozen extra AMRSystem.run() calls total, not thousands),
+    build the SAME AMRSystem twice -- once with GADOLINIUM (today's
+    system-level default), once with GADOLINIUM_CALIBRATED substituted in
+    as the material -- at the SAME calibrated mdot (calibrated against
+    GADOLINIUM, so both runs share an apples-to-apples flow rate; only
+    the material's DeltaT_ad/heat-capacity physics differs between the
+    two), and reports both models' COP/Qc side by side."""
+    from core.mce_material import GADOLINIUM
+    from core.inhomogeneous_broadening import GADOLINIUM_CALIBRATED
+
+    rows = load_benchmarks()
+    checked = []
+    for row in rows:
+        if "Gd" not in row["material"] and "packed bed" not in row["material"].lower():
+            continue
+        result = calibrate_and_check(row, verbose=False)
+        if result is None or "status" in result:
+            continue  # skip rows with no reported COP or that don't calibrate
+        checked.append((row, result))
+
+    lines = ["=" * 100,
+             "SYSTEM-LEVEL IMPACT OF THE GD PHYSICS FIX (GADOLINIUM vs. GADOLINIUM_CALIBRATED)",
+             "Same calibrated mdot (fit against plain GADOLINIUM) fed into both materials --",
+             "isolates the DIFFERENCE the physics fix makes at the system (COP/Qc) level.",
+             "=" * 100, ""]
+    out_rows = []
+    for row, result in checked:
+        mu0H = float(row["mu0H_T"])
+        mass = float(row["mass_MCM_kg"]) if row["mass_MCM_kg"] else 1.0
+        freq = float(row["frequency_Hz"]) if row["frequency_Hz"] else 1.0
+        t_cold = _t_cold_for_row(row)
+        span = float(row["span_K"])
+        mdot_cal = result["mdot_calibrated_kg_s"]
+        loss_model = _loss_model_for_row(row)
+
+        sys_plain = AMRSystem(material=GADOLINIUM, mu0H_max=mu0H, mass_regenerator=mass,
+                               frequency=freq, fluid_mdot=mdot_cal, loss_model=loss_model)
+        sys_calibrated = AMRSystem(material=GADOLINIUM_CALIBRATED, mu0H_max=mu0H,
+                                    mass_regenerator=mass, frequency=freq,
+                                    fluid_mdot=mdot_cal, loss_model=loss_model)
+
+        result_plain = sys_plain.run(t_cold, span)
+        result_calibrated = sys_calibrated.run(t_cold, span)
+
+        cop_shift_pct = (100 * (result_calibrated.COP_electrical - result_plain.COP_electrical)
+                          / result_plain.COP_electrical) if result_plain.COP_electrical else None
+        qc_shift_pct = (100 * (result_calibrated.Qc - result_plain.Qc) / result_plain.Qc
+                         if result_plain.Qc else None)
+
+        out_rows.append({"device": row["device"], "COP_plain": result_plain.COP_electrical,
+                          "COP_calibrated": result_calibrated.COP_electrical,
+                          "COP_shift_pct": cop_shift_pct, "Qc_plain_W": result_plain.Qc,
+                          "Qc_calibrated_W": result_calibrated.Qc, "Qc_shift_pct": qc_shift_pct})
+        lines.append(f"  {row['device']:<32} COP: {result_plain.COP_electrical:6.3f} -> "
+                     f"{result_calibrated.COP_electrical:6.3f} "
+                     f"({cop_shift_pct:+5.1f}%)   Qc: {result_plain.Qc:7.2f}W -> "
+                     f"{result_calibrated.Qc:7.2f}W ({qc_shift_pct:+5.1f}%)")
+
+    if out_rows:
+        cop_shifts = [r["COP_shift_pct"] for r in out_rows if r["COP_shift_pct"] is not None]
+        mean_abs_cop_shift = np.mean([abs(s) for s in cop_shifts])
+        n_zeroed = sum(1 for r in out_rows if r["Qc_calibrated_W"] == 0.0 and r["Qc_plain_W"] > 0)
+        lines.append("-" * 100)
+        lines.append(f"Mean |COP shift| across {len(out_rows)} checked device(s): "
+                     f"{mean_abs_cop_shift:.1f}% (this average is dominated by outliers --"
+                     f" see next line).")
+        if n_zeroed:
+            zeroed_devices = [r["device"] for r in out_rows
+                               if r["Qc_calibrated_W"] == 0.0 and r["Qc_plain_W"] > 0]
+            lines.append(
+                f"IMPORTANT, NOT JUST A SMALL ACCURACY SHIFT: {n_zeroed}/{len(out_rows)} "
+                f"device(s) ({', '.join(zeroed_devices)}) go from a real, positive Qc under "
+                f"plain GADOLINIUM to a HARD ZERO under GADOLINIUM_CALIBRATED at the SAME "
+                f"mdot/span/field -- the grain-Tc broadening pushes the structural "
+                f"feasibility margin (2*dTad_noload - span, core/amr_cycle.py's "
+                f"cooling_capacity()) negative at these operating points, where plain "
+                f"GADOLINIUM's sharper (unbroadened) peak kept it just barely positive. "
+                f"This is real, concrete evidence -- not just the performance-cost argument "
+                f"above -- for why GADOLINIUM_CALIBRATED is NOT swapped in as the system-wide "
+                f"default: doing so would silently turn currently-working design points into "
+                f"'infeasible', for reasons unrelated to any actual physical infeasibility of "
+                f"those devices (they demonstrably work -- that's why they're in this "
+                f"benchmark set).")
+        lines.append(
+            "CONCLUSION: this is the measured cost of NOT wiring GADOLINIUM_CALIBRATED "
+            "into core/amr_cycle.py's system-level default -- read it before deciding "
+            "whether the ~6-19x per-call performance cost AND the feasibility-zeroing "
+            "risk above (see this function's own docstring) are worth accepting for your "
+            "use case. The current default (plain GADOLINIUM system-wide, "
+            "GADOLINIUM_CALIBRATED only in run_validation()'s material-level report) is "
+            "deliberate, not an oversight.")
+    else:
+        lines.append("No already-calibrating Gd benchmark rows found to compare.")
+
+    if verbose:
+        for line in lines:
+            print(line)
+
+    import os
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    with open(out_path, "w") as f:
+        f.write("\n".join(lines) + "\n")
+
+    return {"rows": out_rows}
+
+
 def infer_cycle_type_for_device(row):
-    """Phase 17 addition. Infers an AMRSystem cycle_type for a benchmark
+    """ addition. Infers an AMRSystem cycle_type for a benchmark
     row from its drive mechanism, per this phase's own planning note:
     rotary (continuous-field) devices are treated as closer to
     Ericsson-like, reciprocating/other (stepped-field) devices are left on
@@ -800,7 +956,7 @@ def infer_cycle_type_for_device(row):
 
 
 def run_cycle_type_validation(verbose=True, out_path="results/cycle_type_validation.txt"):
-    """Phase 17 deliverable: does re-running the existing system-level COP
+    """ deliverable: does re-running the existing system-level COP
     validation (calibrate_and_check()) with each rotary device's
     cycle_type inferred as "ericsson" (see infer_cycle_type_for_device())
     instead of this model's flat "brayton" default change, and ideally
@@ -963,7 +1119,7 @@ def run_curve_validation(verbose=True):
     companion row's span, and compare against the companion's reported Qc.
 
     This checks the model's predicted Qc(span) *shape*, not just a single
-    point -- see module docstring's "Curve-level (Phase 7) addition"."""
+    point -- see module docstring's "Curve-level addition"."""
     rows = load_benchmarks()
     groups = {}
     for r in rows:
@@ -1004,7 +1160,7 @@ def run_curve_validation(verbose=True):
         if cal is None:
             if verbose:
                 print(f"{group_name:<28} no calibration found at anchor point "
-                      f"(span={anchor['span_K']}K) -- consistent with the Phase 2/6 "
+                      f"(span={anchor['span_K']}K) -- consistent with the "
                       f"finding that this device doesn't calibrate; skipped, not "
                       f"silently dropped")
             results.append({"device_group": group_name,
@@ -1034,7 +1190,7 @@ def run_curve_validation(verbose=True):
         if verbose:
             print(f"{group_name:<28} anchor span={out['anchor_span_K']:5.1f}K -> "
                   f"predict Qc at companion span={companion_span:5.1f}K: "
-                  f"model={Qc_companion_model:7.1f}W  lit={Qc_companion_lit:7.1f}W  "
+                  f"model={Qc_companion_model:7.1f}W lit={Qc_companion_lit:7.1f}W "
                   f"err={err_str}")
         results.append(out)
     return results
@@ -1111,8 +1267,8 @@ def run_field_sensitivity_check(verbose=True, device_group="ChubuToshiba_Gd_2016
     if verbose:
         print(f"{device_group:<28} anchor field={out['anchor_field_T']:.1f}T "
               f"(Qc={out['anchor_Qc_W']:.0f}W, calibrated) -> predict Qc at "
-              f"companion field={companion_field:.1f}T: model={Qc_companion_model:7.1f}W  "
-              f"lit={Qc_companion_lit:7.1f}W  err={err_pct:+.1f}%")
+              f"companion field={companion_field:.1f}T: model={Qc_companion_model:7.1f}W "
+              f"lit={Qc_companion_lit:7.1f}W err={err_pct:+.1f}%")
         print(f"{'':<28} literature Qc({out['anchor_field_T']:.0f}T)/Qc({companion_field:.0f}T) "
               f"ratio={lit_field_ratio:.2f}  vs. model ratio={model_field_ratio:.2f}")
     return out
@@ -1256,21 +1412,33 @@ def run_tusek_multipoint_curve_validation(verbose=True, amr="A", v_star=0.95):
               f"Qc={anchor_Qc:5.2f}W -> calibrated mdot={mdot_cal:.4f}kg/s")
 
     predictions = []
+    pred_spans = [span for span, Qc_lit, role in pts[1:]]
+    sweep_rows = sys_.cooling_capacity_span_sweep(t_cold, pred_spans) if pred_spans else []
+    sweep_by_span = {r["span_K"]: r for r in sweep_rows}
+
     for span, Qc_lit, role in pts[1:]:
-        Qc_model, _ = sys_.cooling_capacity(t_cold, span)
+        Qc_model_raw = sweep_by_span[span]["Qc_raw_W"]
+        Qc_model = sweep_by_span[span]["Qc_W"]  # clamped (see cooling_capacity_span_sweep()
+                                                 # docstring, core/amr_cycle.py); this, not the
+                                                 # raw value, is what's actually reported below
         if Qc_lit > 0:
             err_pct = 100 * (Qc_model - Qc_lit) / Qc_lit
             err_str = f"{err_pct:+.1f}%"
         else:
             err_pct = None
             err_str = f"{Qc_model:+.2f}W (lit=0, undefined %)"
+        clamped = abs(Qc_model - Qc_model_raw) > 1e-9
         predictions.append({"span_K": span, "Qc_lit_W": Qc_lit,
                              "Qc_model_W": round(Qc_model, 2),
+                             "Qc_model_raw_W": round(Qc_model_raw, 2),
+                             "span_reopening_clamped": clamped,
                              "Qc_error_pct": round(err_pct, 1) if err_pct is not None else None,
                              "point_role": role})
         if verbose:
-            print(f"{'':<10} predict span={span:5.2f}K ({role}): model={Qc_model:6.2f}W  "
-                  f"lit={Qc_lit:6.2f}W  err={err_str}")
+            clamp_note = (f"  [span-reopening clamp applied: raw model was "
+                           f"{Qc_model_raw:.2f}W]" if clamped else "")
+            print(f"{'':<10} predict span={span:5.2f}K ({role}): model={Qc_model:6.2f}W "
+                  f"lit={Qc_lit:6.2f}W err={err_str}{clamp_note}")
 
     # Diagnose whether any large per-point miss above is attributable to the
     # near-Tc feasibility-margin reopening documented in
@@ -1291,12 +1459,12 @@ def run_tusek_multipoint_curve_validation(verbose=True, amr="A", v_star=0.95):
                   f"{reopen['first_reopen_T_mid_K']:.2f}K) before closing for good at "
                   f"span={reclose_str}. This is the known near-Tc mean-field heat-"
                   "capacity discontinuity (see core/mce_material.py's "
-                  "magnetic_heat_capacity() docstring), not a flow-rate/mdot-basis "
-                  "error in this curve's calibration -- it makes cooling_capacity()'s "
-                  "predicted Qc(span) fall to zero and then rise again at a larger "
-                  "span, which is unphysical and is the likely cause of any large-"
-                  f"magnitude error at a predicted point whose span sits at or beyond "
-                  f"{reopen_span:.2f}K on this curve.")
+                  "magnetic_heat_capacity() docstring). The predictions above are "
+                  "already reported post-clamp (cooling_capacity_span_sweep(), "
+                  "core/amr_cycle.py) for any point at or beyond this span, so any "
+                  "remaining error there reflects genuine model-vs-data disagreement, "
+                  "not the reopening artifact itself -- see each prediction's own "
+                  "span_reopening_clamped flag for exactly which points were affected.")
         for p in predictions:
             if p["span_K"] >= reopen_span:
                 p["flagged_near_Tc_nonmonotonicity"] = True

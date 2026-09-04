@@ -107,14 +107,14 @@ def test_amr_run_is_reasonably_fast():
     assert elapsed < 2.0, f"AMR evaluations took {elapsed:.2f}s for 100 calls (expected <2s)"
 
 
-# --- Phase 16: hysteresis loss wiring ----------------------------------
+# --- hysteresis loss wiring ----------------------------------
 
 def test_hysteresis_power_is_zero_for_gadolinium():
     """GADOLINIUM (core.mce_material.MagnetocaloricMaterial) has no
     hysteresis_loss_J_per_kg attribute at all -- getattr's default must
-    make _hysteresis_power_W() return exactly 0.0, so every pre-Phase-16
+    make _hysteresis_power_W() return exactly 0.0, so every previous
     Gd-based result in this test file (make_system()'s own default
-    material) is completely unaffected by the Phase 16 addition."""
+    material) is completely unaffected by the addition."""
     sys_ = make_system(mass_regenerator=8.0, frequency=2.0)
     assert sys_._hysteresis_power_W() == 0.0
 
@@ -178,7 +178,7 @@ def test_hysteresis_increases_w_parasitic_and_reduces_cop_electrical():
 def test_hysteresis_power_included_in_no_loss_model_path_too():
     """core.cascade.py's _single_stage() baseline helper builds an
     AMRSystem WITHOUT a loss_model (using the constant parasitic_fraction
-    fallback). Phase 16 deliberately adds hysteresis power in run()
+    fallback). deliberately adds hysteresis power in run()
     UNCONDITIONALLY (outside the `if self.loss_model is not None` branch)
     so this path is not silently missed -- regression guard for that
     specific wiring choice."""
@@ -193,13 +193,13 @@ def test_hysteresis_power_included_in_no_loss_model_path_too():
     expected_base = sys_.parasitic_fraction * result.Qc
     assert result.W_parasitic == pytest.approx(expected_base + expected_hyst)
 
-# --- Phase 17: AMR cycle topology (cycle_type) ---
+# --- AMR cycle topology (cycle_type) ---
 
 def test_cycle_type_defaults_to_brayton_and_is_backward_compatible():
     """Omitting cycle_type must give byte-for-byte the same result as
     explicitly passing cycle_type='brayton' -- the required backward-
-    compatibility guarantee for this Phase 17 addition (same pattern as
-    particle_diameter=None in Phase 15 and blow_fraction=0.5 earlier)."""
+    compatibility guarantee for this addition (same pattern as
+    particle_diameter=None in and blow_fraction=0.5 earlier)."""
     default_sys = make_system()
     assert default_sys.cycle_type == "brayton"
     explicit_sys = make_system(cycle_type="brayton")
@@ -218,10 +218,10 @@ def test_cycle_type_factors_brayton_is_identity():
 
 
 def test_cycle_type_ordering_carnot_ge_ericsson_ge_brayton():
-    """Per the qualitative ranking this Phase 17 addition targets (see
+    """Per the qualitative ranking this addition targets (see
     CYCLE_TYPE_FACTORS's docstring): at fixed span/eps/field/frequency,
     Carnot-like should show the highest cooling capacity AND second-law
-    (exergy) efficiency, Brayton-like (this model's pre-Phase-17 default)
+    (exergy) efficiency, Brayton-like (this model's previous default)
     the lowest, Ericsson-like in between."""
     results = {}
     for ct in ("brayton", "ericsson", "carnot"):
@@ -260,13 +260,13 @@ def test_cycle_type_qc_multiplier_applied_directly():
 
 
 # ---------------------------------------------------------------------------
-# Phase 18: thermal-diode-assisted AMRSystem (core/thermal_diode.py)
+# thermal-diode-assisted AMRSystem (core/thermal_diode.py)
 # ---------------------------------------------------------------------------
 
 def test_thermal_diode_default_none_reproduces_pre_phase18_numbers():
     """thermal_diode=None (the default) must give IDENTICAL results to a
     system built without the parameter at all -- the same backward-
-    compatibility guarantee Phase 15-17 gave particle_diameter/cycle_type."""
+    compatibility guarantee gave particle_diameter/cycle_type."""
     sys_with_default = make_system()
     sys_explicit_none = make_system(thermal_diode=None)
     r1 = sys_with_default.run(291.0, 10.0)
@@ -289,7 +289,7 @@ def test_thermal_diode_adds_switching_power_to_parasitic():
 
 
 def test_thermal_diode_never_changes_Qc_or_W_mag():
-    """Phase 18 deliberately adds a cost-only term -- Qc and W_mag must be
+    """ deliberately adds a cost-only term -- Qc and W_mag must be
     bit-for-bit unaffected by thermal_diode (see core/thermal_diode.py's
     honesty flag: no heat-transfer benefit is modeled)."""
     diode = MechanicalContactDiode(forward_conductance_W_K=5.0,
@@ -315,7 +315,7 @@ def test_thermal_diode_zero_actuation_energy_is_a_noop():
 
 
 def test_thermal_diode_stacks_additively_with_hysteresis():
-    """Phase 16 (hysteresis) and Phase 18 (diode switching) must combine
+    """ (hysteresis) and (diode switching) must combine
     additively in W_parasitic, each independent of the other -- both are
     added unconditionally in run() via the same accounting pattern."""
     from core.first_order_mce import LAFESIH_FIRST_ORDER
@@ -341,3 +341,84 @@ def test_thermal_diode_stacks_additively_with_hysteresis():
     diode_extra = sys_diode_only.run(291.0, 10.0).W_parasitic - base
     both = sys_both.run(291.0, 10.0).W_parasitic
     assert both == pytest.approx(base + hyst_extra + diode_extra)
+
+def test_cooling_capacity_span_sweep_is_monotonically_nonincreasing():
+    """The whole point of the clamp: Qc_W must never increase as span
+    increases, across the requested spans, even where raw Qc (unclamped)
+    is not monotonic."""
+    sys_ = make_system()
+    spans = [2.0, 5.0, 8.0, 11.0, 14.0, 17.0]
+    rows = sys_.cooling_capacity_span_sweep(291.0, spans)
+    Qc_values = [r["Qc_W"] for r in rows]
+    assert all(Qc_values[i] >= Qc_values[i + 1] - 1e-9 for i in range(len(Qc_values) - 1))
+
+
+def test_cooling_capacity_span_sweep_clamp_never_exceeds_raw():
+    sys_ = make_system()
+    rows = sys_.cooling_capacity_span_sweep(291.0, [3.0, 6.0, 9.0, 12.0])
+    for r in rows:
+        assert r["Qc_W"] <= r["Qc_raw_W"] + 1e-9
+
+
+def test_cooling_capacity_span_sweep_matches_raw_call_when_already_monotonic():
+    """At small spans, well below any near-Tc discontinuity, raw
+    cooling_capacity() should already be monotonic, so the clamp should
+    be a no-op (Qc_W == Qc_raw_W) there."""
+    sys_ = make_system()
+    rows = sys_.cooling_capacity_span_sweep(291.0, [1.0, 2.0, 3.0])
+    for r in rows:
+        assert r["Qc_W"] == pytest.approx(r["Qc_raw_W"], rel=1e-6)
+
+
+def test_cooling_capacity_span_sweep_dense_grid_catches_gap_between_sparse_spans():
+    """If the reopening excursion sits entirely between two widely-spaced
+    requested spans, the clamp must still catch it via the internal dense
+    grid -- a running-min over only the sparse points would miss it."""
+    sys_ = make_system()
+    # Only two requested spans, straddling a wide gap -- if the internal
+    # dense grid weren't used, a naive running-min over just these two
+    # points could under-clamp relative to the same case scanned densely.
+    sparse_rows = sys_.cooling_capacity_span_sweep(291.0, [2.0, 18.0])
+    dense_rows = sys_.cooling_capacity_span_sweep(291.0, list(range(2, 19)))
+    sparse_at_18 = next(r for r in sparse_rows if r["span_K"] == 18.0)
+    dense_at_18 = next(r for r in dense_rows if r["span_K"] == 18.0)
+    # The densely-scanned clamp can only be <= the sparse one (more points
+    # seen along the way can only lower the running minimum further).
+    assert dense_at_18["Qc_W"] <= sparse_at_18["Qc_W"] + 1e-9
+
+
+def test_cooling_capacity_span_sweep_reproduces_tusek_reopening_clamp():
+    """Direct reproduction of the exact Tusek AMR(A) V*=0.95 case
+    documented in LIMITATIONS.md and diagnosed by
+    core/validation_system.py's diagnose_qc_feasibility_reopening(): raw
+    Qc at span=12.23K reopens to a large positive value (physically
+    backwards, since Qc must not increase relative to smaller spans
+    already evaluated); cooling_capacity_span_sweep() must clamp it to
+    0W, matching what the model already reports at the neighboring
+    spans in this same reopened window."""
+    from core.validation_system import _calibrate_mdot, _t_cold_for_row
+    row = {"device_group": "Tusek_fig10_AMRA_Vstar0.95",
+           "span_K": "7.26", "Qc_W": "5.27",
+           "mu0H_T": "1.15", "mass_MCM_kg": "0.1763", "frequency_Hz": "0.3",
+           "material": "Gd (packed bed - AMR A, 0.1mm parallel plates)"}
+    mdot_cal, sys_ = _calibrate_mdot(row)
+    t_cold = _t_cold_for_row(row)
+
+    Qc_raw, _ = sys_.cooling_capacity(t_cold, 12.23)
+    assert Qc_raw > 5.0  # confirms the raw reopening artifact is still present
+
+    rows = sys_.cooling_capacity_span_sweep(t_cold, [7.26, 12.23, 14.75])
+    row_1223 = next(r for r in rows if r["span_K"] == 12.23)
+    assert row_1223["Qc_raw_W"] == pytest.approx(Qc_raw, rel=1e-9)
+    assert row_1223["Qc_W"] == pytest.approx(0.0, abs=1e-6)
+
+
+def test_cooling_capacity_span_sweep_does_not_change_plain_cooling_capacity():
+    """Additive-only guarantee: cooling_capacity() itself must be
+    byte-for-byte unaffected by cooling_capacity_span_sweep() existing or
+    having been called."""
+    sys_ = make_system()
+    before = sys_.cooling_capacity(291.0, 10.0)
+    sys_.cooling_capacity_span_sweep(291.0, [2.0, 6.0, 10.0, 14.0])
+    after = sys_.cooling_capacity(291.0, 10.0)
+    assert before == after

@@ -1,5 +1,5 @@
 """
-Tests for core/nanocomposite_material.py (Phase 22 item 2).
+Tests for core/nanocomposite_material.py .
 """
 import numpy as np
 import pytest
