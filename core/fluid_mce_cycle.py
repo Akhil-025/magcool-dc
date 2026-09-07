@@ -156,12 +156,18 @@ def suspension_effective_properties(phi, rho_particle=5180.0, cp_particle=670.0,
     reference values (5180 kg/m^3, ~670 J/(kg K)) -- the most common
     ferrofluid particle material -- not a claim about any specific
     magnetocaloric particle composition; a caller modeling a different
-    particle material should pass its own values."""
-    from core.thermal import water_properties
-    if carrier == "water":
-        fluid = water_properties(T_K)
-    else:
-        raise ValueError(f"unknown carrier {carrier!r}; only 'water' is implemented")
+    particle material should pass its own values.
+
+    carrier ( addition): previously only "water" was implemented.
+    Now accepts any of core.fluids.FLUID_NAMES ("water", "water_eg10",
+    "water_eg20", "water_pg30", "ethanol") -- see core/fluids.py's
+    module docstring for why a glycol-water mixture (used to inhibit
+    corrosion of the suspended MCM particles, same rationale as the
+    packed-bed AMR case) is the more literature-realistic carrier fluid.
+    Default remains "water", so every existing caller's exact previous
+    numeric output is unchanged."""
+    from core.fluids import fluid_properties
+    fluid = fluid_properties(carrier, T_K)
     rho_c, cp_c, mu_c = fluid["rho"], fluid["cp"], fluid["mu"]
 
     rho_susp = phi * rho_particle + (1 - phi) * rho_c
@@ -282,9 +288,13 @@ class FerrofluidMCESystem:
                                       one.
         phi_max, intrinsic_viscosity : Krieger-Dougherty parameters, see
                                       `krieger_dougherty_viscosity()`
-        carrier                     : carrier fluid, only "water"
-                                      implemented (reuses
-                                      core.thermal.water_properties())
+        carrier                     : carrier fluid name, one of
+                                      core.fluids.FLUID_NAMES ("water",
+                                      "water_eg10", "water_eg20",
+                                      "water_pg30", "ethanol"). Default
+                                      "water" unchanged; see
+                                      core/fluids.py for why a glycol
+                                      mixture is more realistic.
         T_K                         : carrier fluid property evaluation
                                       temperature
         """

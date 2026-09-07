@@ -10,7 +10,7 @@ from core.mce_material import GADOLINIUM
 
 def test_material_candidates_include_gd_and_are_in_range():
     candidates = _material_candidates()
-    labels = [label for label, _, _ in candidates]
+    labels = [label for label, _, _, _, _ in candidates]
     assert any(label == "Gd" for label in labels), "plain Gd must always be a candidate"
     # every candidate's tuned Tc (if not Gd) should be inside its own family's window --
     # _material_candidates() itself is responsible for filtering, so this is a

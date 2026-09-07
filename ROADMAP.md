@@ -2966,3 +2966,228 @@ improvements -- consistent with this repo's standing practice of
 verifying a claim against the actual code before writing anything, and
 reporting what was and was not achieved rather than treating "implement
 this" as a mandate to force a claimed number to match.
+---
+
+## Phase 35 — Follow-up on the regime-crossover null result: verified item #1, literature scan for item #2, honest reframing doc for item #3 — done
+
+**Context.** After Phase 34's independent material+field+cascade crossover
+search (`core/regime_crossover_analysis.py`'s `run_material_and_field_crossover_search()`)
+still found no span where MCE beats VCC in this repo's own model, three
+follow-up directions were offered: (1) formalize/finish that search
+in-repo, (2) look for genuinely unexplored materials/geometry, (3) write
+up the "refrigerant elimination, not COP superiority" framing this
+repo's own real-device comparisons (Eclipse, Polaris, Ames Lab) already
+support. This phase does all three.
+
+**Item #1 — verified, not redone.** `run_material_and_field_crossover_search()`,
+`MATERIAL_FIELD_SEARCH_STAGES=(1,2)`, and the module docstring documenting
+"1-stage always wins, search never picks high fields" were already fully
+implemented and consistent with each other on inspection. Live re-run
+reproduces the documented table exactly (best AMR COP 9.70/7.05/5.43/4.32
+at 5/10/15/20K, all `n_stages=1, mu0H=2.0T`, none beating VCC). Targeted
+tests (`test_electrocaloric_cycle.py`, `test_alternative_caloric_comparison.py`,
+`test_regime_crossover_analysis.py`) all pass, 24/24. No code changes made
+here — nothing was actually broken or incomplete.
+
+**Item #2 — literature scan, two genuine gaps found, neither modeled (by design).**
+Searched specifically for (a) any first-order MCE material with a
+fundamentally better ΔS-vs-hysteresis tradeoff than what's already
+calibrated, and (b) any regenerator/device geometry not already covered
+by `geometry_analysis.py`'s packed-bed/parallel-plate optimum or
+`loss_model.py`'s intragranular-eddy treatment. Most obvious candidates
+(elastocaloric, barocaloric, electrocaloric, 8 magnetocaloric material
+families, packed-bed vs. parallel-plate geometry, particle-coating eddy
+mitigation) turned out to already be in this repo, in some cases with a
+dedicated sensitivity module (`hysteresis_sensitivity.py`). Two genuine,
+not-yet-reflected findings:
+
+1. V- and B-doped variants of the (Mn,Fe)₂(P,Si) family
+   (`MNFEPSI_FIRST_ORDER`) report thermal hysteresis down to 0.6-0.7 K,
+   even 0.0 K, roughly an order of magnitude below the un-doped
+   compositions the current 25.0 J/kg placeholder is proxied from —
+   while keeping the giant MCE. See docs/Literature_Review.md's new
+   "hysteresis-reducing dopant routes" entry and the updated honesty
+   flags in `core/first_order_mce.py` (MNFEPSI_FIRST_ORDER) and
+   `core/hysteresis_sensitivity.py` (honesty flag #2).
+2. Gottschall et al. (Nat. Mater. 2018) / TU Darmstadt (2025)'s
+   hysteresis-EXPLOITING dual-stimulus multicaloric cycle (magnetic field
+   + uniaxial stress, Ni-Mn-In / FeRh) is a genuinely different device
+   architecture — not held-field AMR — that reduces required magnet
+   mass/volume rather than improving COP directly. See
+   docs/Literature_Review.md's new section under Permanent Magnet Design.
+
+**Deliberately NOT implemented as new physics modules**, in both cases,
+for the same reason: neither source reports the specific number this
+repo's models would need (hysteresis LOSS in J/kg for the doped
+compositions; an end-to-end device COP or actuator-work model for the
+dual-stimulus cycle) to plug in without fabricating a conversion or a
+loss model from scratch — exactly the trap this codebase's own honesty
+conventions (and the earlier electrocaloric-module pass this session)
+exist to avoid. Both are recorded as concrete, scoped-but-unstarted
+follow-ups rather than left as an implicit gap.
+
+**Item #3 — honest reframing document.** `docs/MCE_Value_Proposition.md`
+(new) makes the case, using ONLY this repo's own already-computed,
+already-cited numbers (no new modeling), that magnetocaloric cooling's
+defensible pitch for a data-center-scale deployment is refrigerant
+elimination and environmental/regulatory parity, not COP superiority —
+since `regime_crossover_analysis.py` (Phase 34, re-verified this phase)
+and `alternative_caloric_comparison.py` both independently find no
+caloric technology of any kind beating VCC's COP in a real, non-trivial
+system in this repo's own model or in the literature claims surveyed.
+
+**Tests.** No physics/behavior changes were made (documentation and
+honesty-flag text only) — `test_first_order_mce.py` (29 passed) and
+`test_hysteresis_sensitivity.py` + `test_material_family_comparison.py`
+(17 passed) re-run to confirm the doc-adjacent code edits parse and
+change nothing numerically.
+
+## Phase 36 — Modeling the two Phase 35 gaps as explicitly speculative estimates, without fabricating either input
+
+Phase 35 documented two literature findings but deliberately did not
+model either one as new physics, on the grounds that doing so would mean
+inventing a number (a K-to-J/kg hysteresis conversion; an actuator-cost
+model with no COP to calibrate against) not actually present in the
+source papers. Asked directly to "model this if you can," this phase
+takes a different route for each: fit or derive the needed number from
+*other* real data already in this repo's corpus, rather than inventing it
+from nothing — and if no such route exists, say so and stop, rather than
+backsolve to look confident.
+
+**Doped-hysteresis loss estimate — `core/mnfepsi_doped_hysteresis_speculative.py` (new).**
+Rather than converting the V-doped compositions' K-valued hysteresis
+width to J/kg directly (impossible without a digitized M-H loop, per
+Phase 35's own honesty flag), this module fits a dimensionless proxy
+k = W_hys / (ΔS · T_hys) against Zhang et al.'s own five measured,
+already-cited x=0.8–1.2 data points (mean k=0.151, std 18.6% relative;
+least-squares-through-origin k=0.162, residuals -44%/+10%) — checking the
+proxy against real paired data before using it, the same discipline
+`core/giguere_validation.py`'s own `DTAD_CORRECTION_FACTOR` uses. Applied
+to the two V-doped compositions, both estimates land well under 1 J/kg
+(0.6–0.9 J/kg), consistent with but not more precise than Phase 35's
+qualitative "order of magnitude below the 25.0 J/kg placeholder" claim.
+Three honesty flags are carried explicitly: this is a >20x extrapolation
+below the fitted T_hys range, across a different composition axis
+(V-doping adds a third element with a separately-cited mechanism), using
+1 T literature data against the model's own 2 T reference field.
+`MNFEPSI_FIRST_ORDER.hysteresis_loss_J_per_kg` is unchanged — this
+module is not wired into `first_order_mce.py`, `amr_cycle.py`, or any
+optimizer/cascade pipeline.
+
+**Hysteresis-exploiting actuator work — `core/hysteresis_exploiting_actuator_estimate.py` (new).**
+Still does NOT compute a device COP (no source paper reports one to
+calibrate against — that conclusion is unchanged from Phase 35). What it
+does compute: the specific mechanical work (J/kg) to cyclically strain
+the material through the field-and-stress-induced transformation, using
+Pfeuffer et al. (2021)'s own real, measured 55 MPa stress figure and the
+standard sigma·epsilon specific-work construction. The transformation
+strain itself (epsilon) is NOT reported at exactly 55 MPa in the source
+paper — this module uses an explicitly ASSUMED 0.3–1.0% range bracketing
+the paper's separately-reported 0.75% *permanent* strain at the adjacent,
+higher 75 MPa point, treated as the estimate's single largest uncertainty
+by design (varied, not fixed to a decimal) rather than backsolved to a
+single confident-looking number. Result: 19–69 J/kg per stress
+half-cycle — the same order of magnitude as this repo's own existing
+`hysteresis_loss_J_per_kg` values (2–65 J/kg across five material
+families) — meaning this new parasitic channel is not obviously
+negligible next to what AMR already pays for hysteresis, though the
+estimate is a thermodynamic floor only (excludes actuator/hydraulic
+drive inefficiency, which would only raise it further) and does not
+convert to a power or COP absent a cycling frequency and device mass,
+neither of which any source reports.
+
+**Both `docs/Literature_Review.md` entries updated** with a "Phase 36
+speculative estimate (not a new default)" subsection under each finding,
+pointing to the new modules and restating their own caveats inline
+rather than only in the module docstrings.
+
+**Tests.** Two new test files added:
+`tests/test_mnfepsi_doped_hysteresis_speculative.py` (8 tests — checks
+the k-fit is reproducible and matches the documented values, both
+estimates land below the 25.0 J/kg placeholder and are correctly flagged
+as far extrapolations, and the module does not mutate
+`MNFEPSI_FIRST_ORDER` as a side effect) and
+`tests/test_hysteresis_exploiting_actuator_estimate.py` (6 tests — checks
+the sigma·epsilon/rho formula directly, monotonicity in epsilon and rho,
+and that the result overlaps this repo's existing hysteresis-loss range
+without exposing a COP or power figure). All 14 pass. Neither new module
+imports from or is imported by any existing physics/optimizer module, so
+no existing test suite behavior is affected — confirmed by re-running
+`test_first_order_mce.py` (29 passed) and
+`test_hysteresis_sensitivity.py` + `test_material_family_comparison.py`
+(17 passed) alongside the two new files.
+
+**Full-suite run, first time in a while.** Unlike prior phases (which
+re-ran only the targeted test files touched, because the full suite had
+previously timed out at >15 min), this phase ran the complete suite
+(636 tests, ~14.5 min) to completion. It surfaced 3 pre-existing
+failures, entirely unrelated to anything touched above — see Phase 37.
+
+## Phase 37 — Calibration drift found by the first full-suite run in a while: CORE mdot re-sync (again) + one genuinely non-calibrating point
+
+The full-suite run at the end of Phase 36 caught `CALIBRATION_POINTS_CORE`
+(and its `_MAGGIE_HIGHSPAN` extension) drifted out of sync with
+`amr_cycle.py`'s current `cooling_capacity()` a SECOND time — the exact
+failure mode `test_core_calibration_points_are_self_consistent`'s own
+docstring already documents happening once before (Paper-Mining Pass
+Part 4). Nothing in Phase 35 or 36 touches `core/loss_model.py`,
+`core/amr_cycle.py`, or any of their inputs, so this drift was latent
+before this session and simply hadn't been caught by a full-suite run
+recently.
+
+**Diagnosis, all three CORE points, checked directly (not assumed):**
+at their existing hardcoded mdot, current `cooling_capacity()` now
+under-predicts each point's own literature Qc — Astronautics 18.1% low
+(2048.4W vs 2502.0W), DTU 74.1% low (26.7W vs 102.8W), Tusek 65.1% low
+(1.84W vs 5.27W). The `DTU_Eriksen_MAGGIE_2016` high-span point (used
+only with `no_load_span_override=21.04`) was 6.1% low (76.5W vs 81.5W).
+
+**Fix: re-ran the exact same brentq(qc_residual, 1e-6, 5.0) procedure**
+already documented in `loss_model.py`'s own comments, same
+material/mass/frequency/span inputs as before (only `cooling_capacity()`'s
+own mdot-sensitivity moved, not any input data):
+
+| Point | mdot (old → new) | Wp_required |
+|---|---|---|
+| Astronautics_rotary_2014 | 0.252999 → 0.309029 | 1133.70 (unchanged) |
+| DTU_Eriksen_rotary_Gd_2015 | 0.084666 → 0.326616 | 26.18 (unchanged) |
+| Tusek_singlebed_Gd_2010 | 0.007351 → 0.021068 | 0.7250 (unchanged) |
+| DTU_Eriksen_MAGGIE_2016 (highspan) | 0.014650 → 0.015606 | 14.23 (unchanged) |
+
+As with the first drift, `Wp_required` (which depends on `COP_ideal`, not
+mdot) came out matching the existing hardcoded values to 2–4 decimal
+places for all four points — only `cooling_capacity()`'s own
+Qc-vs-mdot relationship moved, not the ideal-COP side of the fit. One
+downstream honesty-flag test
+(`test_maggie_point_mdot_is_back_calculated_not_measured`, comparing this
+point's back-calculated mdot against the device's real measured 2.5
+L/min flow rate) had its expected ratio updated from ~2.84x to ~2.67x to
+match — same qualitative finding (model's back-calculated flow is
+several-fold smaller than the real one), updated digits only.
+
+**One point turned out to be genuinely non-calibrating, not just stale:**
+`Lozano_POLO_UFSC_2016_r4` (0.88T, 0.4Hz, 6.1K span target) now returns
+Qc=0.0W at every mdot from 1e-6 to 5.0 kg/s under the current model — its
+target span sits above this field/frequency's own no-load span cap
+(`span_fraction = max(0, 1 - span/(2·dTad_noload))`), so no flow rate can
+reach 62.5W there anymore. This is the same "genuine non-calibrating
+point" situation already documented for `DTU_Eriksen_MAGGIE_2016`'s 15.5K
+row in `data/amr_experimental_benchmarks.csv` — not fixable by a wider
+brentq bracket or a different mdot. Per the same convention used there,
+r4 is EXCLUDED from
+`test_rotary_drive_loss_model_substantially_improves_lozano_predictions`'s
+active comparison set (down to r6/r7/r8), with the reasoning documented
+inline in the test rather than silently dropped.
+
+**Full-suite re-run after all fixes: 636 passed, 0 failed** (~14.5 min) —
+confirmed clean, not just the previously-failing 3 tests in isolation.
+
+**Scope note.** This recalibration changes `CALIBRATION_POINTS_CORE`,
+which feeds the default `StateDependentLossModel()` used throughout this
+repo (optimizer, RSM surrogate, Sobol analysis, cascade search). The
+full-suite pass confirms nothing else silently broke, but any
+previously-reported specific numeric result that depended on the OLD
+mdot values (rather than re-deriving from the current default at request
+time, as `regime_crossover_analysis.py` and `MCE_Value_Proposition.md`
+both do) should be treated as needing a re-check if it's ever revisited —
+flagged here rather than silently assumed unaffected.

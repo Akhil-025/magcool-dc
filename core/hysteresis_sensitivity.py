@@ -69,6 +69,21 @@ Honesty flags (read before trusting this diagnostic's numbers)
    La(Fe,Si)13Hy" reading is not, until those placeholders are replaced
    with values read directly off the calibrated compositions' own
    hysteresis loops.
+   NEW: for MNFEPSI specifically, its 25.0 J/kg placeholder is now known
+   to likely be an OVERESTIMATE, not just an uncertain estimate -- see
+   the "hysteresis-reducing dopant routes" entry added to
+   docs/Literature_Review.md and the block comment above
+   MNFEPSI_FIRST_ORDER in core/first_order_mce.py: V- and B-doped
+   variants of this same Fe2P-type family report thermal hysteresis down
+   to 0.6-0.7 K, even 0.0 K, roughly an order of magnitude below the
+   un-doped compositions this placeholder is proxied from, while keeping
+   the giant MCE. No J/kg number could be derived from those sources
+   (they report hysteresis WIDTH in K, not loop-area energy), so the
+   placeholder is left at 25.0 J/kg rather than guessed lower -- but this
+   diagnostic's existing "OFF" (0.0 J/kg) arm should now be read as a
+   literature-adjacent lower bound for an optimized composition, not a
+   purely hypothetical null hypothesis, which strengthens (does not
+   weaken) whatever this diagnostic finds when ON vs OFF disagree.
 3. This diagnostic changes NOTHING about `core.cascade`'s graded-bed
    analyses (Astronautics reproduction, etc.) -- those already run
    through `AMRSystem.run()` and therefore already pick up the

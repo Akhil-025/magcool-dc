@@ -1,0 +1,24 @@
+ hysteresis sensitivity: material composition of the merged,
+globally non-dominated Pareto front, hysteresis ON vs OFF.
+(pop_size=32, n_gen=15, seed=1 -- see module
+ docstring honesty flag #1 on why this is smaller than
+ run_optimization()'s own 40/25 production default.)
+
+Hysteresis literature-placeholder values used in the ON run:
+  Gd5Si2Ge2        65.0 J/kg (see core/first_order_mce.py for provenance/caveats)
+  La(Fe,Si)13Hy    12.3 J/kg (see core/first_order_mce.py for provenance/caveats)
+  Mn-Fe-P-Si       25.0 J/kg (see core/first_order_mce.py for provenance/caveats)
+
+Material                                   OFF (pre-Ph16)    ON (Ph16)    Delta
+------------------------------------------------------------------------------
+Ga1-xCMn3+x (tuned, Tc=295.5K)                          1            1       +0
+Gd                                                      0            1       +1
+La(Fe,Si)13Hy (tuned, Tc=285.3K)                       19           19       +0
+------------------------------------------------------------------------------
+TOTAL front size                                       20           21       +1
+
+La(Fe,Si)13Hy share of merged front: 95% (OFF) -> 90% (ON)
+
+See this module's docstring (honesty flags 1-3) before treating the
+above as a settled, publication-quality answer rather than a
+directional sensitivity check.

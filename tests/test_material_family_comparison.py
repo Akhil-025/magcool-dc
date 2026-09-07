@@ -26,8 +26,8 @@ def test_fixed_candidates_use_the_same_material_across_spans():
 def test_tunable_family_composition_tracks_the_operating_point():
     """A family re-tuned for a hotter span should need a higher Tc than the
     same family re-tuned for a colder span (peak_T(Tc) is monotonic)."""
-    material_cold, tc_cold, _ = _tuned_candidate(GD_FAMILY, T_mid_K=293.0)
-    material_hot, tc_hot, _ = _tuned_candidate(GD_FAMILY, T_mid_K=305.0)
+    material_cold, tc_cold, _, _, _ = _tuned_candidate(GD_FAMILY, T_mid_K=293.0)
+    material_hot, tc_hot, _, _, _ = _tuned_candidate(GD_FAMILY, T_mid_K=305.0)
     assert tc_hot > tc_cold
 
 
@@ -35,16 +35,24 @@ def test_family_outside_its_tc_window_falls_back_to_gd():
     """MNFEPSI_FAMILY's documented window (295.3-331.2K) sits mostly AT or
     ABOVE the ASHRAE range; targeting a point well below its window should
     report in_range=False and fall back to the family's fallback_material."""
-    material, tc, in_range = _tuned_candidate(MNFEPSI_FAMILY, T_mid_K=250.0)
+    material, tc, in_range, rho_solid, sigma_e = _tuned_candidate(MNFEPSI_FAMILY, T_mid_K=250.0)
     assert in_range is False
     assert material is MNFEPSI_FAMILY.fallback_material
+    # fallback -> plain Gd, so rho_solid/sigma_e should be None (defers to
+    # thermal.py's RHO_GD/GD_SIGMA_E_S_PER_M defaults, which ARE Gd's own values).
+    assert rho_solid is None
+    assert sigma_e is None
 
 
 def test_family_inside_its_tc_window_does_not_fall_back():
-    material, tc, in_range = _tuned_candidate(LAFESIH_FAMILY, T_mid_K=296.0)
+    material, tc, in_range, rho_solid, sigma_e = _tuned_candidate(LAFESIH_FAMILY, T_mid_K=296.0)
     assert in_range is True
     assert LAFESIH_FAMILY.tc_min <= tc <= LAFESIH_FAMILY.tc_max
     assert material is not LAFESIH_FAMILY.fallback_material
+    # in-range -> should carry the family's own literature-sourced density
+    # and conductivity, not silently fall back to None/RHO_GD/GD_SIGMA_E.
+    assert rho_solid == LAFESIH_FAMILY.density_kg_m3
+    assert sigma_e == LAFESIH_FAMILY.sigma_e_S_per_m
 
 
 def test_run_analysis_writes_output_files(tmp_path):

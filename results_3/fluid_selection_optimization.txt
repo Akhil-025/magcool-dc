@@ -1,0 +1,16 @@
+fluid_selection_optimization.py -- results
+============================================================
+Operating point: baseline (T_cold=291K, span=10K, mu0H=1.5T, mass=5.0kg, f=1.0Hz)
+mdot re-optimized per fluid over (0.02, 0.5) kg/s (200-point grid), maximizing COP_electrical.
+
+rank  fluid         mdot(kg/s)   COP_elec     Qc(W)  exergy_eff  %below water
+1     water             0.3215     6.9315   2557.38      0.5151          0.0%
+2     water_eg10        0.3167     6.8332   2445.72      0.5169          1.4%
+3     water_eg20        0.3046     6.6744   2291.32      0.5193          3.7%
+4     water_pg30        0.2709     6.4019   2048.10      0.5229          7.6%
+5     ethanol           0.2829     5.5083   1439.18      0.5311         20.5%
+
+Ranking: water > water_eg10 > water_eg20 > water_pg30 > ethanol
+
+Pure water is not a real option for actual hardware (Gd corrodes in plain water -- see core/fluids.py). Among the corrosion-protected fluids, 'water_eg10' gives up the least COP_electrical relative to the pure-water ceiling (1.4%), making it the recommended realistic default.
+DEFAULT_FLUID (core/fluids.py) = 'water_eg10'

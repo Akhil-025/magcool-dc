@@ -22,6 +22,14 @@ and Halbach-cylinder magnet-mass Pareto-front sensitivity (34). Figures 33
 and 34 re-run NSGA-III twice each (same as fig18) and fall back to
 pre-computed results/pareto_front_*.csv files if pymoo is unavailable.
 
+Figures 36-45 cover later additions: the MCE_Value_Proposition.md figure
+set (36-39: COP crossover, emissions breakdown, refrigerant GWP, and
+real-deployment comparisons), speculative MnFePSi-doped hysteresis
+modelling and its k-fit quality (40-41), a hysteresis-exploiting actuator
+cost estimate and the underlying hysteresis-loss landscape (42-43), and
+the Phase 37 calibration-drift fix together with the Lozano row-by-row
+calibration-status check it motivated (44-45).
+
 Notes
 -----
 Two analyses in this repository (Sobol sensitivity via SALib, NSGA-III
@@ -77,6 +85,13 @@ from core import fluid_mce_analysis
 from core import passive_regenerator_analysis
 from core import hysteresis_sensitivity
 from core import magnet_geometry
+from core import beverage_cooler_validation
+from core import alternative_caloric_comparison
+from core import water_usage
+from core import uncertainty_propagation
+from core import heat_pump_validation
+from core import hypereg_analysis
+from core import regime_crossover_analysis
 
 try:
     from core import sensitivity as sensitivity_mod
@@ -240,9 +255,14 @@ def plot_gd_validation():
     ax2.set_xticklabels([f'{b:.0f} T' for b in Bs])
     ax2.set_ylabel('Error vs. literature [%]')
     ax2.set_title('Model Error\n(mean-field theory overpredicts near Tc)')
+    err_span = max(err) - min(err) if max(err) != min(err) else 1.0
+    label_gap = max(err_span * 0.08, 0.6)
+    pad = max(err_span * 0.35, 3.0)
+    ax2.set_ylim(min(err) - pad, max(err) + pad)
     for xi, e in zip(x, err):
-        ax2.text(xi, e + (1.5 if e >= 0 else -3.0), f'{e:+.1f}%',
-                  ha='center', fontsize=9)
+        va = 'bottom' if e >= 0 else 'top'
+        ax2.text(xi, e + (label_gap if e >= 0 else -label_gap), f'{e:+.1f}%',
+                  ha='center', va=va, fontsize=9)
 
     fig.suptitle('Mean-Field MCE Model Validation — Gadolinium (Tc = 294 K)',
                  fontsize=13)
@@ -693,8 +713,38 @@ def plot_system_validation(precomputed=None):
         ax.scatter(x_, y_, s=90, color=color, zorder=3, edgecolor='white')
         lims = [0, max(max(x_), max(y_)) * 1.15]
         ax.plot(lims, lims, 'k--', linewidth=1, label='Perfect agreement')
+        # Points that sit close together produce overlapping text if
+        # labeled in place, so group nearby points into clusters (in
+        # axis-fraction units): isolated points keep inline labels, and
+        # any cluster of 2+ points is labeled with small numbered
+        # markers plus a legend box, which never overlaps.
+        span = max(lims[1], 1e-9)
+        clusters = []
         for xx, yy, nn in zip(x_, y_, n_):
-            ax.annotate(nn, (xx, yy), fontsize=7, xytext=(5, 5), textcoords='offset points')
+            for c in clusters:
+                if abs(c['x'][0] - xx) / span < 0.06 and abs(c['y'][0] - yy) / span < 0.06:
+                    c['x'].append(xx); c['y'].append(yy); c['n'].append(nn)
+                    break
+            else:
+                clusters.append({'x': [xx], 'y': [yy], 'n': [nn]})
+
+        legend_lines = []
+        counter = 1
+        for c in clusters:
+            if len(c['n']) == 1:
+                ax.annotate(c['n'][0], (c['x'][0], c['y'][0]), fontsize=7,
+                            xytext=(5, 5), textcoords='offset points')
+            else:
+                for xx, yy, nn in zip(c['x'], c['y'], c['n']):
+                    ax.annotate(str(counter), (xx, yy), fontsize=7, fontweight='bold',
+                                xytext=(0, 0), textcoords='offset points',
+                                ha='center', va='center', color='white')
+                    legend_lines.append(f"{counter}: {nn}")
+                    counter += 1
+        if legend_lines:
+            ax.text(0.98, 0.02, '\n'.join(legend_lines), transform=ax.transAxes,
+                    fontsize=6.5, ha='right', va='bottom',
+                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.85, edgecolor='0.7'))
         ax.set_xlim(lims)
         ax.set_ylim(lims)
         ax.set_xlabel('Literature COP (electrical)')
@@ -1024,7 +1074,8 @@ def plot_cascade_giant_vs_gd(precomputed=None):
     if not all(tuned_in_range):
         first_oor = spans[tuned_in_range.index(False)] if False in tuned_in_range else None
         if first_oor is not None:
-            ax.axvline(first_oor, color='#85bb65', linestyle=':', alpha=0.5, linewidth=1)
+            ax.axvline(first_oor, color='#85bb65', linestyle=':', alpha=0.5, linewidth=1,
+                       label="Tuned family's documented Tc window ends")
     ax.set_xlabel('Temperature Span [K]')
     ax.set_ylabel('Electrical COP')
     ax.set_title('Gd vs. Gd5Si2Ge2 in the ASHRAE Range\n'
@@ -1754,11 +1805,882 @@ def plot_regenerative_amplification_override_check(precomputed=None):
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# FIG 36 — Value Proposition: COP crossover, AMR vs VCC across spans
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_value_proposition_cop_crossover():
+    """First figure for docs/MCE_Value_Proposition.md's Section 1 (the COP
+    case does not exist) -- that section previously had only a markdown
+    table. Reproduces run_material_and_field_crossover_search()'s own
+    4-span result directly (hardcoded from that module's own printed
+    table, not re-run here, to keep this figure cheap -- see that
+    module's own run function for the live search) rather than
+    re-deriving a new number: at every span, AMR's best found COP (best
+    of an 1-7T / multi-material / cascade grid) still trails VCC's, and
+    by a WIDER margin as span shrinks, not a narrower one."""
+    spans = [5.0, 10.0, 15.0, 20.0]
+    amr_cop = [9.70, 7.05, 5.43, 4.32]
+    vcc_cop = [24.36, 11.97, 7.84, 5.77]
+
+    fig, ax = plt.subplots(figsize=(8, 5.5))
+    ax.plot(spans, amr_cop, 'o-', color=COLOR_POWER, label='Best AMR COP found\n'
+            '(La(Fe,Si)13Hy, 1-7T grid, cascades)')
+    ax.plot(spans, vcc_cop, 's-', color=COLOR_MAIN, label='VCC COP (eta=0.42)')
+    ax.fill_between(spans, amr_cop, vcc_cop, color=COLOR_MAIN, alpha=0.08)
+    for s, a, v in zip(spans, amr_cop, vcc_cop):
+        ax.annotate(f'{v/a:.1f}x', xy=(s, (a + v) / 2), ha='center', fontsize=9,
+                    color='#555555')
+    ax.set_xlabel('Temperature Span [K]')
+    ax.set_ylabel('COP')
+    ax.set_title('No Crossover Found: AMR Never Beats VCC\n'
+                  '(labels show VCC/AMR ratio -- widens, not narrows, at small spans)')
+    ax.legend(fontsize=9)
+    fig.tight_layout()
+    save(fig, 'fig36_value_proposition_cop_crossover')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 37 — Value Proposition: emissions breakdown, AMR vs VCC vs liquid
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_value_proposition_emissions_breakdown():
+    """Second figure for MCE_Value_Proposition.md's Section 2 (refrigerant
+    elimination does not rescue emissions at this COP gap) -- reuses
+    core.emissions.compare_emissions() at the SAME Magnotherm Eclipse
+    operating point (AMR COP=1.76, VCC COP=6.66) the doc's own table
+    already cites, rather than a fresh/different call, so this figure and
+    that table cannot silently drift apart."""
+    results = emissions.compare_emissions(0.4, amr_cop=1.76, vcc_cop=6.66, liquid_cop=9.0)
+    names = [r.technology for r in results]
+    refrig = [r.refrigerant_GWP_tCO2e_per_year for r in results]
+    op = [r.operational_CO2_tCO2e_per_year for r in results]
+    total = [r + o for r, o in zip(refrig, op)]
+
+    fig, ax = plt.subplots(figsize=(8.5, 5.5))
+    x = np.arange(len(names))
+    ax.bar(x, refrig, label='Refrigerant leakage', color='#e07b54', alpha=0.85, edgecolor='white')
+    ax.bar(x, op, bottom=refrig, label='Operational (electricity)', color=COLOR_MAIN,
+           alpha=0.85, edgecolor='white')
+    for i, t in enumerate(total):
+        ax.annotate(f'{t:.3f}', xy=(i, t), xytext=(0, 4), textcoords='offset points',
+                    ha='center', fontsize=9, fontweight='bold')
+    ax.set_xticks(x)
+    ax.set_xticklabels(names, fontsize=8.5, rotation=10, ha='right')
+    ax.set_ylabel(r'tCO$_2$e / year')
+    ax.set_title('Emissions at the Magnotherm Eclipse Operating Point (0.4kW)\n'
+                 'AMR comes out 3.6x higher total, driven by the operational (COP) term,\n'
+                 'not the eliminated refrigerant term')
+    ax.legend(fontsize=9)
+    fig.tight_layout()
+    save(fig, 'fig37_value_proposition_emissions_breakdown')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 38 — Value Proposition: refrigerant GWP landscape
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_value_proposition_refrigerant_gwp():
+    """Third figure for the Value Proposition doc -- the regulatory-parity
+    argument (Section 4) rests on refrigerant GWP figures already in
+    core/emissions.py's own REFRIGERANT_GWP dict; this puts them on one
+    axis, with AMR's own zero placed for direct visual contrast, rather
+    than leaving the comparison to a sentence."""
+    gwp = dict(emissions.REFRIGERANT_GWP)
+    names = list(gwp.keys()) + ['Magnetocaloric\n(AMR, no refrigerant)']
+    values = list(gwp.values()) + [0]
+    colors = list(plt.cm.YlOrRd(np.linspace(0.35, 0.85, len(gwp)))) + ['#2ca02c']
+
+    fig, ax = plt.subplots(figsize=(8, 5.5))
+    bars = ax.bar(names, values, color=colors, alpha=0.9, edgecolor='white')
+    for b, v in zip(bars, values):
+        ax.annotate(f'{v:g}', xy=(b.get_x() + b.get_width() / 2, v), xytext=(0, 4),
+                    textcoords='offset points', ha='center', fontsize=9)
+    ax.set_ylabel('100-year GWP (IPCC AR5)')
+    ax.set_title('Refrigerant GWP Landscape\n'
+                 '(the regulatory-tailwind argument: real, but does not by itself\n'
+                 'close the COP/emissions gap shown in fig37)')
+    ax.tick_params(axis='x', labelsize=8.5)
+    fig.tight_layout()
+    save(fig, 'fig38_value_proposition_refrigerant_gwp')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 39 — Value Proposition: real deployments, what they actually show
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_value_proposition_real_deployments():
+    """Fourth figure for the Value Proposition doc's Section 3 (what the
+    real, deployed systems actually show) -- plots Magnotherm Eclipse's
+    reported real-world energy SAVING (a relative, same-duty comparison,
+    not a COP) alongside Polaris's directly reported plug-in COP and
+    second-law efficiency (from core/beverage_cooler_validation.py's own
+    ECLIPSE_REPORTED_ENERGY_SAVING_PCT / POLARIS_PLUGIN_COP /
+    POLARIS_SECOND_LAW_EFF_PCT constants -- not re-typed numbers), next
+    to VCC's own COP for scale. Two different metrics deliberately kept
+    on two panels rather than forced onto one axis, since a plug-in COP
+    of 1.0 and a 15% energy saving are not directly comparable
+    quantities -- conflating them into one bar chart would misstate what
+    either device actually demonstrated."""
+    left_labels = ['Magnotherm Eclipse\nvs. incumbent R290\n(same duty)']
+    left_vals = [beverage_cooler_validation.ECLIPSE_REPORTED_ENERGY_SAVING_PCT]
+
+    right_labels = ['Polaris\nplug-in COP', 'Reference VCC\nCOP (eta=0.42,\nsame 15K span)']
+    polaris_cop = beverage_cooler_validation.POLARIS_PLUGIN_COP
+    T_cold_K = beverage_cooler_validation.ECLIPSE_T_COLD_C + 273.15
+    T_hot_K = T_cold_K + beverage_cooler_validation.POLARIS_SPAN_K
+    vcc_ref_cop = vapor_compression_cop(T_cold_K, T_hot_K, eta_2nd_law=0.42).COP
+    right_vals = [polaris_cop, vcc_ref_cop]
+
+    fig, axes = plt.subplots(1, 2, figsize=(11, 5.5))
+    axes[0].bar(left_labels, left_vals, color='#2ca02c', alpha=0.85, edgecolor='white', width=0.5)
+    axes[0].set_ylabel('Real-world energy saving [%]')
+    axes[0].set_title('Eclipse / REWE Pilot\n(11-week in-store, press-reported)')
+    axes[0].annotate(f'{left_vals[0]:.0f}%', xy=(0, left_vals[0]), xytext=(0, 4),
+                      textcoords='offset points', ha='center', fontsize=10, fontweight='bold')
+
+    axes[1].bar(right_labels, right_vals, color=[COLOR_POWER, COLOR_MAIN], alpha=0.85,
+                edgecolor='white', width=0.5)
+    axes[1].set_ylabel('COP')
+    axes[1].set_title(f'Polaris (peer-reviewed)\nsecond-law eff.='
+                       f'{beverage_cooler_validation.POLARIS_SECOND_LAW_EFF_PCT:.1f}% '
+                       f'at {beverage_cooler_validation.POLARIS_FIELD_T}T/'
+                       f'{beverage_cooler_validation.POLARIS_SPAN_K:.0f}K')
+    for i, v in enumerate(right_vals):
+        axes[1].annotate(f'{v:.2f}', xy=(i, v), xytext=(0, 4), textcoords='offset points',
+                          ha='center', fontsize=10, fontweight='bold')
+
+    fig.suptitle('Real Deployed Magnetocaloric Systems: Neither Claims COP Superiority',
+                 fontsize=12)
+    fig.tight_layout()
+    save(fig, 'fig39_value_proposition_real_deployments')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 40 — Doped (Mn,Fe)2(P,Si) hysteresis-loss speculative estimate
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_mnfepsi_doped_hysteresis_speculative():
+    """First figure for Phase 36's mnfepsi_doped_hysteresis_speculative.py
+    -- puts the two V-doped estimates (mean-k and least-squares-k) next
+    to MNFEPSI_FIRST_ORDER's own existing 25.0 J/kg placeholder on a log
+    axis (the estimates are ~30-40x smaller, which a linear axis would
+    flatten to invisible bars). Explicitly titled/labeled as
+    SPECULATIVE, matching the module's own honesty-flag convention --
+    this is not a replacement default."""
+    from core.mnfepsi_doped_hysteresis_speculative import VONFE_ESTIMATE, VONMN_ESTIMATE
+    from core.first_order_mce import MNFEPSI_FIRST_ORDER
+
+    labels = ['MNFEPSI_FIRST_ORDER\n(current placeholder)',
+              'V-on-Fe doped\n(mean-k, SPECULATIVE)', 'V-on-Fe doped\n(least-sq-k, SPECULATIVE)',
+              'V-on-Mn doped\n(mean-k, SPECULATIVE)', 'V-on-Mn doped\n(least-sq-k, SPECULATIVE)']
+    values = [MNFEPSI_FIRST_ORDER.hysteresis_loss_J_per_kg,
+              VONFE_ESTIMATE.estimate_J_per_kg_mean_k, VONFE_ESTIMATE.estimate_J_per_kg_ls_k,
+              VONMN_ESTIMATE.estimate_J_per_kg_mean_k, VONMN_ESTIMATE.estimate_J_per_kg_ls_k]
+    colors = [COLOR_MAIN, '#e07b54', '#e07b54', '#c9a227', '#c9a227']
+
+    fig, ax = plt.subplots(figsize=(9, 5.5))
+    bars = ax.bar(labels, values, color=colors, alpha=0.85, edgecolor='white')
+    ax.set_yscale('log')
+    for b, v in zip(bars, values):
+        ax.annotate(f'{v:.2f}', xy=(b.get_x() + b.get_width() / 2, v), xytext=(0, 4),
+                    textcoords='offset points', ha='center', fontsize=9)
+    ax.set_ylabel('Hysteresis loss [J/kg] (log scale)')
+    ax.set_title('SPECULATIVE: V-Doped (Mn,Fe)2(P,Si) Hysteresis-Loss Estimate\n'
+                 'vs. Current 25.0 J/kg Placeholder (Phase 36, not a new default)')
+    ax.tick_params(axis='x', labelsize=8)
+    fig.tight_layout()
+    save(fig, 'fig40_mnfepsi_doped_hysteresis_speculative')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 41 — Zhang et al. k-fit quality (proxy for the estimate above)
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_mnfepsi_hysteresis_kfit_quality():
+    """Second figure for the same Phase 36 module -- shows the actual fit
+    quality of k=W_hys/(dS*T_hys) against Zhang et al.'s own 5-point
+    table (module docstring), the thing VONFE_ESTIMATE/VONMN_ESTIMATE are
+    extrapolated from. Plots measured W_hys against k_mean*dS*T_hys for
+    each of the 5 points, with a y=x reference line, so the ~20-40%
+    scatter the module's own docstring quotes is visible directly rather
+    than only stated as a number."""
+    from core.mnfepsi_doped_hysteresis_speculative import _ZHANG_TABLE, K_MEAN
+
+    xs = [ds * t for (_x, t, _w, ds) in _ZHANG_TABLE]
+    ys_actual = [w for (_x, _t, w, _ds) in _ZHANG_TABLE]
+    ys_fit = [K_MEAN * x for x in xs]
+    comp_labels = [f'x={x_comp:.1f}' for (x_comp, _t, _w, _ds) in _ZHANG_TABLE]
+
+    fig, ax = plt.subplots(figsize=(7, 6))
+    lims = [0, max(xs) * 1.15]
+    ax.plot(lims, [K_MEAN * v for v in lims], '--', color='#888888',
+            label=f'k_mean fit (k={K_MEAN:.3f})')
+    ax.scatter(xs, ys_actual, s=70, color=COLOR_POWER, zorder=3, label='Zhang et al. measured')
+    # Two points (x=0.9, x=1.0) sit close together in both axes and their
+    # labels overlap with a fixed offset; alternate the offset direction
+    # for any point that is within a small fraction of the x-range of an
+    # already-placed label so they fan out instead of colliding.
+    x_span = max(xs) - min(xs) if max(xs) != min(xs) else 1.0
+    placed = []
+    for x, y, label in zip(xs, ys_actual, comp_labels):
+        dx, dy = 6, 4
+        for px, py in placed:
+            if abs(px - x) / x_span < 0.08:
+                dy = -14
+                dx = 6
+                break
+        ax.annotate(label, xy=(x, y), xytext=(dx, dy), textcoords='offset points', fontsize=9)
+        placed.append((x, y))
+    ax.set_xlabel(r'$\Delta S \times T_{hys}$  [J/kg]')
+    ax.set_ylabel(r'$W_{hys}$ measured [J/kg]')
+    ax.set_title('Fit Quality: the k-Proxy Used to Extrapolate the Doped\n'
+                 'V-on-Fe/V-on-Mn Estimates in fig40 (checked against real data)')
+    ax.legend(fontsize=9)
+    fig.tight_layout()
+    save(fig, 'fig41_mnfepsi_hysteresis_kfit_quality')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 42 — Hysteresis-exploiting actuator work estimate
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_hysteresis_exploiting_actuator_estimate():
+    """Figure for Phase 36's hysteresis_exploiting_actuator_estimate.py --
+    the sigma*epsilon/rho specific-work grid (4 epsilon/rho combinations)
+    plotted against this repo's own existing hysteresis_loss_J_per_kg
+    range across five material families (2-65 J/kg), the module's own
+    stated basis for comparison. Explicitly titled SPECULATIVE / FLOOR
+    ESTIMATE, matching the module's own honesty flags (excludes actuator
+    inefficiency; would only rise further)."""
+    from core.hysteresis_exploiting_actuator_estimate import run_estimate
+    result = run_estimate(verbose=False)
+    estimates = result['estimates']
+    labels = [f'eps={e.epsilon*100:.1f}%\nrho={e.rho_kg_m3:.0f}' for e in estimates]
+    values = [e.specific_work_J_per_kg for e in estimates]
+
+    fig, ax = plt.subplots(figsize=(8.5, 5.5))
+    ax.axhspan(2.0, 65.0, color=COLOR_MAIN, alpha=0.12,
+               label='This repo\'s existing hysteresis_loss_J_per_kg\nrange (5 material families)')
+    bars = ax.bar(labels, values, color=COLOR_POWER, alpha=0.85, edgecolor='white', width=0.5)
+    for b, v in zip(bars, values):
+        ax.annotate(f'{v:.1f}', xy=(b.get_x() + b.get_width() / 2, v), xytext=(0, 4),
+                    textcoords='offset points', ha='center', fontsize=9)
+    ax.set_ylabel('Specific mechanical work [J/kg per stress half-cycle]')
+    ax.set_title('SPECULATIVE FLOOR ESTIMATE: Actuator Work for the\n'
+                 'Hysteresis-Exploiting Multicaloric Cycle (Phase 36)\n'
+                 '(excludes actuator/hydraulic inefficiency -- would only rise further)')
+    ax.legend(fontsize=8.5, loc='upper left')
+    fig.tight_layout()
+    save(fig, 'fig42_hysteresis_exploiting_actuator_estimate')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 43 — Combined hysteresis-loss landscape (Phase 36 findings together)
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_hysteresis_loss_landscape():
+    """Ties fig40 and fig42 together on one axis: this repo's existing
+    hysteresis_loss_J_per_kg range across five material families, next
+    to Phase 36's two SPECULATIVE follow-ups -- the doped-material
+    estimate (pushes the LOW end down, by roughly an order of magnitude)
+    and the actuator-work estimate (a NEW, structurally different
+    parasitic channel that lands INSIDE the existing range, not below
+    or dramatically above it). Deliberately one summary figure rather
+    than repeating fig40/fig42's own bars, so the two findings' relative
+    position is visible at a glance."""
+    from core.mnfepsi_doped_hysteresis_speculative import VONFE_ESTIMATE, VONMN_ESTIMATE
+    from core.hysteresis_exploiting_actuator_estimate import (
+        _EXISTING_HYSTERESIS_LOSS_RANGE_J_PER_KG, run_estimate)
+
+    lo, hi = _EXISTING_HYSTERESIS_LOSS_RANGE_J_PER_KG
+    actuator_vals = [e.specific_work_J_per_kg for e in run_estimate(verbose=False)['estimates']]
+    doped_vals = [VONFE_ESTIMATE.estimate_J_per_kg_mean_k, VONFE_ESTIMATE.estimate_J_per_kg_ls_k,
+                  VONMN_ESTIMATE.estimate_J_per_kg_mean_k, VONMN_ESTIMATE.estimate_J_per_kg_ls_k]
+
+    fig, ax = plt.subplots(figsize=(9, 5.5))
+    ax.axhspan(lo, hi, color=COLOR_MAIN, alpha=0.15,
+               label=f'Existing hysteresis_loss_J_per_kg range\n({lo:.0f}-{hi:.0f} J/kg, 5 families)')
+    ax.scatter([0.2] * len(doped_vals), doped_vals, s=70, color='#c9a227', zorder=3,
+               label='SPECULATIVE: V-doped MnFePSi estimates\n(pushes the low end down)')
+    ax.scatter([0.8] * len(actuator_vals), actuator_vals, s=70, color=COLOR_POWER, zorder=3,
+               label='SPECULATIVE: hysteresis-exploiting\nactuator work (new channel, lands inside)')
+    ax.set_yscale('log')
+    ax.set_xlim(0, 1)
+    ax.set_xticks([0.2, 0.8])
+    ax.set_xticklabels(['Doped materials\n(Phase 36)', 'Dual-stimulus actuator\n(Phase 36)'])
+    ax.set_ylabel('Specific loss/work [J/kg] (log scale)')
+    ax.set_title('Hysteresis-Loss Landscape: Where Phase 36\'s Two\n'
+                 'Speculative Follow-Ups Sit Relative to Validated Data')
+    ax.legend(fontsize=8, loc='upper center', bbox_to_anchor=(0.5, -0.12), ncol=1)
+    fig.tight_layout()
+    save(fig, 'fig43_hysteresis_loss_landscape')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 44 — Phase 37 calibration drift: predicted vs. literature Qc
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_calibration_drift_phase37():
+    """Documents the Phase 37 finding directly: for each of the 4
+    recalibrated CORE/MAGGIE_HIGHSPAN points, shows literature Qc against
+    (a) what the STALE (pre-Phase-37) mdot predicted and (b) what the
+    RE-CALIBRATED mdot predicts (should equal literature Qc by
+    construction, i.e. an exact match -- shown for direct visual
+    contrast with how far off the stale value had drifted)."""
+    from core.mce_material import GADOLINIUM
+    T_COLD = 289.0
+    # (name, freq, field, mass, span, old_mdot, new_mdot, Qc_lit, no_load_override)
+    points = [
+        ("Astronautics_rotary_2014", 4.0, 1.44, 1.52, 11.0, 0.252999, 0.309029, 2502.0, None),
+        ("DTU_Eriksen_rotary_Gd_2015", 0.75, 1.13, 1.7, 10.2, 0.084666, 0.326616, 102.8, None),
+        ("Tusek_singlebed_Gd_2010", 0.3, 1.15, 0.1763, 7.26, 0.007351, 0.021068, 5.27, None),
+        ("DTU_Eriksen_MAGGIE_2016", 0.61, 1.13, 1.7, 15.5, 0.014650, 0.015606, 81.5, 21.04),
+    ]
+    names, old_qc, new_qc, lit_qc = [], [], [], []
+    for name, f, H, mass, span, old_mdot, new_mdot, Qc_lit, override in points:
+        kwargs = dict(material=GADOLINIUM, mu0H_max=H, mass_regenerator=mass, frequency=f)
+        if override is not None:
+            kwargs['no_load_span_override'] = override
+        sys_old = AMRSystem(fluid_mdot=old_mdot, **kwargs)
+        sys_new = AMRSystem(fluid_mdot=new_mdot, **kwargs)
+        qc_old, _ = sys_old.cooling_capacity(T_COLD, span)
+        qc_new, _ = sys_new.cooling_capacity(T_COLD, span)
+        names.append(name.replace('_', '\n'))
+        old_qc.append(qc_old)
+        new_qc.append(qc_new)
+        lit_qc.append(Qc_lit)
+
+    x = np.arange(len(names))
+    w = 0.27
+    fig, ax = plt.subplots(figsize=(10, 5.5))
+    ax.bar(x - w, lit_qc, w, label='Literature Qc (target)', color='#2ca02c', alpha=0.85,
+           edgecolor='white')
+    ax.bar(x, old_qc, w, label='Stale mdot (pre-Phase-37)', color=COLOR_POWER, alpha=0.85,
+           edgecolor='white')
+    ax.bar(x + w, new_qc, w, label='Recalibrated mdot (Phase 37)', color=COLOR_MAIN, alpha=0.85,
+           edgecolor='white')
+    for i, (o, l) in enumerate(zip(old_qc, lit_qc)):
+        pct = 100 * (l - o) / l
+        ax.annotate(f'{pct:.0f}% low', xy=(i, o), xytext=(0, 4), textcoords='offset points',
+                    ha='center', fontsize=8, color=COLOR_POWER)
+    ax.set_xticks(x)
+    ax.set_xticklabels(names, fontsize=7.5)
+    ax.set_ylabel('Qc [W]')
+    ax.set_yscale('log')
+    ax.set_title('Phase 37: CALIBRATION_POINTS_CORE Drift, Found and Fixed\n'
+                 '(stale mdot under-predicted every point; recalibrated mdot matches by construction)')
+    ax.legend(fontsize=9)
+    fig.tight_layout()
+    save(fig, 'fig44_calibration_drift_phase37')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 45 — Lozano rows: which ones calibrate, which structurally can't
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_lozano_calibration_status():
+    """Documents the other Phase 37 finding: Lozano_POLO_UFSC_2016_r4's
+    6.1K target span sits ABOVE this repo's model's own no-load span cap
+    at 0.88T/0.4Hz, so Qc=0.0W at every mdot -- a structural, not a
+    stale-calibration, non-match (excluded from
+    test_rotary_drive_loss_model_substantially_improves_lozano_
+    predictions as of Phase 37). Plots Qc vs. mdot for all four Lozano
+    rows (r4, r6, r7, r8) on one log-log axis: r4's curve should visibly
+    flatline at 0 while the other three rise smoothly and cross their
+    own Qc_lit target (marked with a horizontal dashed line + star)."""
+    from core.mce_material import GADOLINIUM
+    T_COLD_ASSUMED_K = 294.0 - 5.0
+    rows = [
+        ("Lozano r4 (EXCLUDED, non-calibrating)", 0.4, 0.88, 6.1, 62.5),
+        ("Lozano r6", 0.8, 0.88, 5.0, 81.2),
+        ("Lozano r7", 0.4, 0.88, 3.7, 80.8),
+        ("Lozano r8", 0.8, 0.88, 3.7, 120.4),
+    ]
+    mdots = np.logspace(-4, 0, 60)
+    colors4 = ['#c00000', '#1f4e79', '#2ca02c', '#c9a227']
+
+    fig, ax = plt.subplots(figsize=(8.5, 6))
+    all_qcs = []
+    for (name, f, H, span, Qc_lit) in rows:
+        qcs = []
+        for mdot in mdots:
+            sys_ = AMRSystem(material=GADOLINIUM, mu0H_max=H, mass_regenerator=1.0,
+                              frequency=f, fluid_mdot=mdot)
+            qc, _ = sys_.cooling_capacity(T_COLD_ASSUMED_K, span)
+            qcs.append(max(qc, 1e-4))
+        all_qcs.append(qcs)
+
+    # r7 and r8 land on numerically identical Qc(mdot) curves at this
+    # operating point (frequency doesn't move the no-load-span-capped
+    # result here), so plotting both as solid lines hides one completely
+    # underneath the other. Give any curve that nearly coincides with an
+    # already-drawn one a dashed style and a slightly thicker/offset
+    # width so both remain visible.
+    drawn = []
+    for (name, f, H, span, Qc_lit), color, qcs in zip(rows, colors4, all_qcs):
+        overlaps = any(
+            np.allclose(np.log10(np.array(qcs)), np.log10(np.array(prev)), atol=1e-6)
+            for prev in drawn
+        )
+        linestyle = '--' if overlaps else '-'
+        linewidth = 3.5 if overlaps else 2.0
+        ax.plot(mdots, qcs, color=color, linestyle=linestyle, linewidth=linewidth,
+                label=f'{name} (span={span}K)' + (' [overlaps another curve]' if overlaps else ''))
+        ax.axhline(Qc_lit, color=color, linestyle=':', alpha=0.6)
+        drawn.append(qcs)
+
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_xlabel('mdot [kg/s]')
+    ax.set_ylabel('Qc [W] (floored at 1e-4 for the log axis)')
+    ax.set_title('Which Lozano Rows Calibrate? r4 Flatlines at Qc=0\n'
+                 'for EVERY mdot (span exceeds this field/frequency\'s own span cap);\n'
+                 'r6/r7/r8 rise smoothly and reach their dotted Qc_lit target')
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    save(fig, 'fig45_lozano_calibration_status')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 46 — Alternative solid-state caloric technologies vs. VCC
+# ══════════════════════════════════════════════════════════════════════════
+
+def _load_or_build_vcc_cop_by_span():
+    """Reads results/comparison_table.csv if it already exists (written by
+    main.py's step 4 / this module's own plot_amr_vs_baselines() call
+    earlier in a full pipeline run); otherwise builds it fresh via
+    main.run_baseline_sweep() so this figure works standalone
+    (`python plots.py`) too, exactly like every other figure here.
+    Passes out_path=csv_path explicitly (rather than relying on
+    run_baseline_sweep()'s own RESULTS_CSV default) so this keeps working
+    when plots.RESULTS_DIR has been redirected -- e.g. under this test
+    suite's own tmp_path fixture -- instead of silently reading from a
+    location run_baseline_sweep() never actually wrote to."""
+    csv_path = RESULTS_DIR / 'comparison_table.csv'
+    if not csv_path.exists():
+        import main as main_mod
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+        main_mod.run_baseline_sweep(out_path=str(csv_path))
+    return alternative_caloric_comparison.load_vcc_cop_by_span_from_csv(str(csv_path))
+
+
+def plot_alternative_caloric_comparison():
+    """Figure for alternative_caloric_comparison.py: does ANY solid-state
+    caloric cooling technology -- not just this repo's own magnetocaloric
+    model -- beat this repo's own VCC electrical COP in the data-center
+    5-20K span range? Left panel: literature COP claims (elastocaloric,
+    barocaloric, electrocaloric) plotted against this repo's own VCC COP
+    at each claim's matched span, MEASURED-device claims shown solid,
+    SIMULATION/PROJECTION/vendor claims hatched (matching this repo's own
+    material_family_comparison.py hatching convention for "outside the
+    documented window"). Right panel: the more rigorous physics-model span
+    sweep (this repo's own elastocaloric_cycle.py/barocaloric_cycle.py/
+    electrocaloric_cycle.py models, calibrated to those same literature
+    points, run across the SAME 5-20K grid as comparison_table.csv) vs.
+    VCC, so the headline "does this generalize past MCE" finding is
+    visible as a chart, not only as a text report."""
+    vcc = _load_or_build_vcc_cop_by_span()
+    claim_results = alternative_caloric_comparison.compare_all_at_matched_spans(
+        vcc, verbose=False)
+    sweep_results, _, _ = alternative_caloric_comparison.compare_physics_models_across_spans(
+        vcc, verbose=False)
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+
+    # --- Left: literature claims vs. VCC at each claim's matched span ---
+    labels = [f"{r['technology']}\n{r['system'][:28]}" for r in claim_results]
+    claim_cops = [r['claimed_cop'] for r in claim_results]
+    vcc_cops_matched = [r['vcc_cop_at_matched_span'] for r in claim_results]
+    measured = [r['is_measured_device_cop'] for r in claim_results]
+    x = np.arange(len(labels))
+    w = 0.35
+    bars_claim = ax1.bar(x - w / 2, claim_cops, w, color=COLOR_POWER, alpha=0.85,
+                          edgecolor='white', label='Literature caloric-technology COP')
+    for b, m in zip(bars_claim, measured):
+        if not m:
+            b.set_hatch('//')
+    ax1.bar(x + w / 2, vcc_cops_matched, w, color=COLOR_MAIN, alpha=0.85,
+            edgecolor='white', label="This repo's own VCC COP (matched span)")
+    for xi, c in zip(x, claim_cops):
+        ax1.annotate(f'{c:.1f}', xy=(xi - w / 2, c), xytext=(0, 4),
+                     textcoords='offset points', ha='center', fontsize=8)
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(labels, fontsize=7, rotation=20, ha='right')
+    ax1.set_ylabel('COP')
+    ax1.set_title('Literature Claims vs. This Repo\'s VCC\n'
+                   '(hatched = simulation/projection/vendor claim, not a measured device)')
+    ax1.legend(fontsize=8)
+
+    # --- Right: physics-model span sweep ---
+    spans = [r['span_K'] for r in sweep_results]
+    vcc_line = [r['vcc_cop'] for r in sweep_results]
+    eq_line = [r['elastocaloric_cop_electrical'] for r in sweep_results]
+    bc_line = [r['barocaloric_cop_electrical'] for r in sweep_results]
+    ec_line = [r['electrocaloric_cop_electrical'] for r in sweep_results]
+    ec_far = [r['electrocaloric_is_far_extrapolation'] for r in sweep_results]
+    ec_extrap = [r['electrocaloric_is_extrapolated'] for r in sweep_results]
+
+    ax2.plot(spans, vcc_line, color='k', marker='o', label="This repo's VCC COP")
+    ax2.plot(spans, eq_line, color='#2ca02c', marker='s', label='Elastocaloric (calibrated model)')
+    ax2.plot(spans, bc_line, color='#c9a227', marker='^', label='Barocaloric (calibrated model)')
+    # Electrocaloric: solid where it's the one measured calibration point,
+    # dashed everywhere else (extrapolated), so the single-point basis for
+    # this line is visible rather than implied to be validated everywhere.
+    for i in range(len(spans) - 1):
+        style = '-' if not (ec_extrap[i] or ec_extrap[i + 1]) else '--'
+        color = '#c00000' if not (ec_far[i] or ec_far[i + 1]) else '#e88'
+        ax2.plot(spans[i:i + 2], ec_line[i:i + 2], color=color, linestyle=style, linewidth=2)
+    ax2.plot([], [], color='#c00000', marker='d', label='Electrocaloric (1 measured pt, extrapolated elsewhere)')
+    ax2.scatter([s for s, e in zip(spans, ec_extrap) if not e],
+                [c for c, e in zip(ec_line, ec_extrap) if not e],
+                color='#c00000', marker='d', s=60, zorder=5)
+    ax2.scatter([s for s, e in zip(spans, ec_extrap) if e],
+                [c for c, e in zip(ec_line, ec_extrap) if e],
+                color='#e88', marker='d', s=30, zorder=4)
+    ax2.set_xlabel('Temperature Span [K]')
+    ax2.set_ylabel('COP')
+    ax2.set_title('Physics-Model Span Sweep\n'
+                   '(this repo\'s own literature-calibrated models, same grid as comparison_table.csv)')
+    ax2.legend(fontsize=7.5)
+
+    fig.suptitle('Does ANY Solid-State Caloric Technology Beat This Repo\'s Own VCC COP?\n'
+                 'Honest answer: only one measured device (electrocaloric, 20.9K, 2.1W) — everything else is simulation, projection, or loses',
+                 fontsize=11)
+    fig.tight_layout()
+    save(fig, 'fig46_alternative_caloric_comparison')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 47 — Annual water usage (WUE) comparison
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_water_usage_comparison(precomputed=None):
+    """Figure for water_usage.py: converts each technology's own already-
+    computed electrical COP into an annual water-consumption figure via
+    the industry-standard Water Usage Effectiveness (WUE) metric, the
+    same three-technology shape as plot_emissions() (fig23). Uses the
+    representative 10K-span row from comparison_table.csv (same
+    convention as plot_economics()/plot_emissions()) rather than
+    water_usage.py's own illustrative __main__ defaults, unless that row
+    isn't available yet, in which case those defaults are used and the
+    figure says so explicitly."""
+    precomputed = precomputed or {}
+    rows = precomputed.get('baseline_rows')
+    is_default = False
+    if rows is None:
+        csv_path = RESULTS_DIR / 'comparison_table.csv'
+        if csv_path.exists():
+            rows = _read_csv_rows(str(csv_path))
+    if rows:
+        rep = min(rows, key=lambda r: abs(r['span_K'] - 10.0))
+        amr_cop = rep['AMR_COP_electrical']
+        vcc_cop = rep['VaporCompression_COP']
+        liquid_cop = rep['LiquidCooling_COP']
+    else:
+        is_default = True
+        amr_cop, vcc_cop, liquid_cop = 4.63, 3.2, 4.0
+
+    results = water_usage.compare_water_usage(100.0, amr_cop, vcc_cop, liquid_cop)
+    labels = [r.technology for r in results]
+    liters_per_kw = [r.annual_water_liters_per_kW_IT for r in results]
+    wues = [r.WUE_L_per_kWh_IT for r in results]
+    colors = [COLOR_MAIN, COLOR_POWER, '#2ca02c']
+
+    fig, ax = plt.subplots(figsize=(9, 5.5))
+    bars = ax.bar(labels, liters_per_kw, color=colors, alpha=0.85, edgecolor='white')
+    for b, v, w_ in zip(bars, liters_per_kw, wues):
+        ax.annotate(f'{v:,.0f} L/kW-IT/yr\n(WUE={w_:.2f} L/kWh)', xy=(b.get_x() + b.get_width() / 2, v),
+                    xytext=(0, 4), textcoords='offset points', ha='center', fontsize=9)
+    ax.set_ylabel('Annual water consumption [L per kW-IT per year]')
+    title = ('Annual Water Usage (WUE) Comparison, 100kW-IT Facility\n'
+             '(AMR assigned dry/air-cooled rejection by default — a design choice, '
+             'not a property of the magnetocaloric cycle itself)')
+    if is_default:
+        title += '\n[ILLUSTRATIVE — comparison_table.csv not found, using placeholder COPs]'
+    ax.set_title(title, fontsize=11)
+    fig.tight_layout()
+    save(fig, 'fig47_water_usage_comparison')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 48 — Monte Carlo calibration-uncertainty band on COP_electrical
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_uncertainty_propagation():
+    """Figure for uncertainty_propagation.py: overlays a 90% confidence
+    band (Monte Carlo resampling of the CORE loss-model's 3 calibration
+    points under an assumed +/-15% measurement-noise model) on top of
+    comparison_table.csv's own point-value AMR_COP_electrical curve,
+    across the full 5-20K ASHRAE span sweep -- the "single point-value
+    predictions with no uncertainty band" gap this module's own docstring
+    names explicitly. n_draws is reduced from the module's own default
+    (2000 at a single span / 500 across the sweep) to keep this figure's
+    own runtime bounded; the band shape is stable well below that."""
+    rows = uncertainty_propagation.uncertainty_band_across_spans(
+        spans_K=range(5, 21), n_draws=120, verbose=False)
+    spans = [r['span_K'] for r in rows]
+    mean = [r['COP_electrical_mean'] for r in rows]
+    p05 = [r['COP_electrical_p05'] for r in rows]
+    p95 = [r['COP_electrical_p95'] for r in rows]
+
+    # NaN rows (every draw infeasible at that span, e.g. above the 0-D
+    # model's own no-load span cap) would otherwise silently break the
+    # fill_between/plot calls -- mask them out and note it explicitly
+    # rather than plotting a misleading gap-free line through them.
+    valid = [i for i in range(len(spans)) if np.isfinite(mean[i])]
+    n_masked = len(spans) - len(valid)
+
+    fig, ax = plt.subplots(figsize=(9, 6))
+    vs = [spans[i] for i in valid]
+    vm = [mean[i] for i in valid]
+    vlo = [p05[i] for i in valid]
+    vhi = [p95[i] for i in valid]
+    ax.fill_between(vs, vlo, vhi, color=COLOR_MAIN, alpha=0.25,
+                     label='90% CI (assumed +/-15% calibration-input noise)')
+    ax.plot(vs, vm, color=COLOR_MAIN, marker='o', label='Monte Carlo mean COP_electrical')
+    if n_masked:
+        ax.annotate(f'{n_masked} span(s) omitted: all MC draws infeasible\n'
+                    '(0-D model\'s own no-load span cap)',
+                    xy=(0.02, 0.02), xycoords='axes fraction', fontsize=8,
+                    color='#888888', style='italic')
+    ax.set_xlabel('Temperature Span [K]')
+    ax.set_ylabel('Electrical COP')
+    ax.set_title('Calibration-Uncertainty Band on AMR Electrical COP\n'
+                 '(Monte Carlo over the CORE loss-model\'s 3 calibration points, '
+                 'assumed +/-15% measurement noise — not a source-derived error bar)')
+    ax.legend(fontsize=9)
+    fig.tight_layout()
+    save(fig, 'fig48_uncertainty_propagation_band')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 49 — NSGA-III Pareto-front multiseed stability
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_pareto_multiseed_stability():
+    """Figure for pareto_multiseed_stability.py: reruns the main material+
+    geometry NSGA-III co-optimization (optimize.run_optimization(), the
+    engine behind fig18/pareto_front.csv) across several independent
+    seeds, at a REDUCED pop_size/n_gen from the module's own production
+    default (40/25) to keep this figure's own runtime bounded -- the
+    question being tested (does the search's own random seed move the
+    headline numbers) does not require production-scale settings to
+    demonstrate qualitatively. Left panel: material-family share of the
+    merged Pareto front, mean +/- std across seeds (the "100%
+    La(Fe,Si)13Hy"-style claim this repo has made before). Right panel:
+    knee-point COP_electrical and best COP_electrical, mean +/- std."""
+    from core import pareto_multiseed_stability
+    result = pareto_multiseed_stability.run_pareto_multiseed_stability_check(
+        seeds=(1, 2, 3, 4, 5), pop_size=20, n_gen=10, verbose=False)
+    summary = result['summary']
+    if summary is None:
+        fig, ax = plt.subplots(figsize=(8, 5))
+        ax.text(0.5, 0.5, 'All seeds returned an empty Pareto front --\nnothing to plot.',
+                ha='center', va='center', fontsize=11)
+        ax.axis('off')
+        save(fig, 'fig49_pareto_multiseed_stability')
+        return
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 6))
+
+    mats = sorted(summary['material_share_stats'].keys(),
+                  key=lambda m: -summary['material_share_stats'][m]['mean_pct'])
+    means = [summary['material_share_stats'][m]['mean_pct'] for m in mats]
+    stds = [summary['material_share_stats'][m]['std_pct'] for m in mats]
+    ax1.bar(range(len(mats)), means, yerr=stds, capsize=4, color=COLOR_MAIN,
+            alpha=0.85, edgecolor='white')
+    ax1.set_xticks(range(len(mats)))
+    ax1.set_xticklabels(mats, rotation=30, ha='right', fontsize=7)
+    ax1.set_ylabel('Share of merged Pareto front [%]')
+    ax1.set_title('Material-Family Share, Mean ± Std\nAcross 5 NSGA-III Seeds')
+
+    labels2 = ['Best COP\n(across front)', 'Knee-point COP\n(balanced design)']
+    means2 = [summary['best_COP_electrical_mean'], summary['knee_COP_electrical_mean']]
+    stds2 = [summary['best_COP_electrical_std'], summary['knee_COP_electrical_std']]
+    ax2.bar(labels2, means2, yerr=stds2, capsize=6, color=COLOR_POWER, alpha=0.85,
+            edgecolor='white', width=0.5)
+    for i, (m, s) in enumerate(zip(means2, stds2)):
+        ax2.annotate(f'{m:.2f} ± {s:.2f}', xy=(i, m), xytext=(0, 8),
+                    textcoords='offset points', ha='center', fontsize=9)
+    ax2.set_ylabel('Electrical COP')
+    consistent = summary['knee_material_consistent_across_seeds']
+    ax2.set_title(f'Headline COP Numbers, Mean ± Std\n'
+                  f'Knee-point material {"consistent" if consistent else "NOT consistent"} '
+                  f'across seeds: {summary["knee_materials_seen"]}')
+
+    fig.suptitle('NSGA-III Pareto Front: Seed-to-Seed Stability Check\n'
+                 '(reduced pop_size=20/n_gen=10 for this figure — see docstring)',
+                 fontsize=12)
+    fig.tight_layout()
+    save(fig, 'fig49_pareto_multiseed_stability')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 50 — Regime-crossover search: does AMR ever beat VCC anywhere?
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_regime_crossover_analysis():
+    """Figure for regime_crossover_analysis.py: the direct visual answer
+    to "where, if anywhere, does this repo's own model show magnetic
+    cooling beating conventional cooling" -- a systematic search, not one
+    favorable-looking point. Left panel: best achievable AMR COP found
+    across a broad design grid at each span, against VCC's COP at every
+    eta_2nd_law tried (including VCC's own worst-case setting) -- the
+    band between VCC's best and worst case vs. the single best-AMR line
+    makes the gap's size directly visible. Right panel: the more generous
+    best-material/best-field graded-cascade search (fields up to 7T),
+    annotated with which field the search actually picked at each span
+    (the "search never wants the high fields" finding)."""
+    cop_search = regime_crossover_analysis.run_cop_crossover_search(verbose=False)
+    mat_search = regime_crossover_analysis.run_material_and_field_crossover_search(verbose=False)
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 6))
+
+    spans1 = [r['span_K'] for r in cop_search['rows']]
+    best_amr = [r['best_AMR_COP_electrical'] for r in cop_search['rows']]
+    vcc_best = [max(r['VCC_COPs_by_eta'].values()) for r in cop_search['rows']]
+    vcc_worst = [min(r['VCC_COPs_by_eta'].values()) for r in cop_search['rows']]
+    ax1.fill_between(spans1, vcc_worst, vcc_best, color=COLOR_MAIN, alpha=0.2,
+                     label='VCC COP range (eta=0.25-0.55)')
+    ax1.plot(spans1, vcc_worst, color=COLOR_MAIN, linestyle=':', linewidth=1.2,
+             label="VCC's own WORST-case COP (eta=0.25)")
+    ax1.plot(spans1, best_amr, color=COLOR_POWER, marker='o',
+             label='Best AMR COP found\n(broad grid: mass/freq/mdot/field, fixed Gd)')
+    ax1.set_xlabel('Temperature Span [K]')
+    ax1.set_ylabel('Electrical COP')
+    ax1.set_title('COP Crossover Search\n(NO crossover found — AMR never beats even VCC\'s own worst case)')
+    ax1.legend(fontsize=8)
+
+    spans2 = [r['span_K'] for r in mat_search['rows']]
+    best_amr2 = [r['best_AMR_COP_electrical'] for r in mat_search['rows']]
+    vcc2 = [r['VCC_COP'] for r in mat_search['rows']]
+    fields2 = [r['field_at_best_design_T'] for r in mat_search['rows']]
+    ax2.plot(spans2, vcc2, color=COLOR_MAIN, marker='s', label='VCC COP (eta=0.42)')
+    ax2.plot(spans2, best_amr2, color=COLOR_POWER, marker='o',
+             label='Best AMR COP found\n(best material, graded cascade, field up to 7T)')
+    for s, c, f in zip(spans2, best_amr2, fields2):
+        ax2.annotate(f'{f:.0f}T', xy=(s, c), xytext=(0, -14), textcoords='offset points',
+                    ha='center', fontsize=8, color='#555555')
+    ax2.set_xlabel('Temperature Span [K]')
+    ax2.set_ylabel('Electrical COP')
+    ax2.set_title('Best-Material/Best-Field Search\n'
+                  '(labels = field the search picked — never the 5-7T ceiling offered)')
+    ax2.legend(fontsize=8)
+
+    fig.suptitle('Does This Repo\'s Own Model Show AMR Beating VCC Anywhere?\n'
+                 'Two independent searches, both null — see regime_crossover_analysis.py',
+                 fontsize=12)
+    fig.tight_layout()
+    save(fig, 'fig50_regime_crossover_analysis')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 51 — Ames Lab heat-pump architecture check
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_heat_pump_validation():
+    """Figure for heat_pump_validation.py: this repo's own default Gd
+    packed-bed AMR design (the SAME architecture Ames Lab's real device
+    uses) at a representative residential-heat-pump operating point,
+    shown ALONGSIDE Ames Lab's real reported whole-device specific power
+    density (SPD) figures -- deliberately on two SEPARATE panels with no
+    computed ratio between them, since the two quantities have different
+    mass denominators (this repo's own MCM-only mass vs. Ames Lab's
+    whole-device mass including magnet/motor/housing) and are therefore
+    not directly comparable -- see the module's own honesty flag."""
+    result = heat_pump_validation.run_ames_lab_architecture_check()
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 5.5))
+
+    if result['model_specific_cooling_power_w_per_kg_MCM'] is not None:
+        ax1.bar(['This repo\'s model\n(Gd, packed-bed AMR)'],
+                [result['model_specific_cooling_power_w_per_kg_MCM']],
+                color=COLOR_MAIN, alpha=0.85, edgecolor='white', width=0.5)
+        ax1.annotate(f"{result['model_specific_cooling_power_w_per_kg_MCM']:.1f} W/kg-MCM",
+                    xy=(0, result['model_specific_cooling_power_w_per_kg_MCM']),
+                    xytext=(0, 4), textcoords='offset points', ha='center', fontsize=10)
+    ax1.set_ylabel('Specific cooling power [W per kg of MCM ONLY]')
+    ax1.set_title(f"This Repo's Model\n(T_cold={result['T_cold_K']-273.15:.0f}°C, "
+                  f"span={result['span_K']:.0f}K, {result['AMR_n_stages']} stage(s))")
+
+    labels = ['Baseline', 'Optimized', 'Projected\nceiling']
+    vals = [result['ames_baseline_SPD_w_per_kg_whole_device'],
+            result['ames_optimized_SPD_w_per_kg_whole_device'],
+            result['ames_projected_max_SPD_w_per_kg_whole_device']]
+    ax2.bar(labels, vals, color=COLOR_POWER, alpha=0.85, edgecolor='white')
+    for i, v in enumerate(vals):
+        ax2.annotate(f'{v:.1f}', xy=(i, v), xytext=(0, 4), textcoords='offset points',
+                    ha='center', fontsize=9)
+    ax2.set_ylabel('Specific power density [W per kg, WHOLE DEVICE]')
+    ax2.set_title('Ames Lab\'s Real Device (Applied Energy 377, 2025)\n'
+                  '(magnet + motor + housing + everything)')
+
+    fig.suptitle('Ames Lab Heat-Pump Architecture Check — Same Architecture, Different Metric\n'
+                 'NOT directly comparable: MCM-only mass (left) vs. whole-device mass (right) — see docstring',
+                 fontsize=11)
+    fig.tight_layout()
+    save(fig, 'fig51_heat_pump_validation')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 52 — Hypereg parallel-hydraulic pumping-power reduction
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_hypereg_analysis():
+    """Figure for hypereg_analysis.py: does Klinar et al.'s (2024)
+    parallel-hydraulic "Hypereg" regenerator split give a genuine,
+    non-negligible COP benefit in this repo's own calibrated loss model?
+    Left panel: COP_electrical vs. n_parallel at the module's own
+    representative operating point, showing the benefit saturate quickly
+    (eddy-current and base-overhead losses are untouched by
+    parallelization). Right panel: the ROADMAP-motivated follow-up --
+    does the benefit become non-negligible at a 4x higher mdot, where
+    pumping power is a bigger share of total loss?"""
+    n_rows = hypereg_analysis.sweep_n_parallel(verbose=False)
+    n_rows_high_mdot = hypereg_analysis.sweep_n_parallel_at_higher_mdot(verbose=False)
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5.5))
+
+    ns = [r[0] for r in n_rows]
+    cops = [r[2] for r in n_rows]
+    ax1.plot(ns, cops, color=COLOR_MAIN, marker='o')
+    ax1.set_xscale('log', base=2)
+    ax1.set_xticks(ns)
+    ax1.set_xticklabels([str(n) for n in ns])
+    ax1.set_xlabel('n_parallel sub-regenerators (n=1 = conventional series flow)')
+    ax1.set_ylabel('Electrical COP')
+    ax1.set_title(f'COP vs. Hypereg Split\n(mdot={hypereg_analysis.MDOT_KG_S}kg/s baseline — benefit saturates)')
+
+    conv_cop = n_rows[0][2]
+    best_cop = max(n_rows, key=lambda r: r[2])[2]
+    conv_cop_high = n_rows_high_mdot[0][2]
+    best_cop_high = max(n_rows_high_mdot, key=lambda r: r[2])[2]
+    rel_gain_baseline = 100 * (best_cop - conv_cop) / conv_cop if conv_cop > 0 else 0.0
+    rel_gain_high = 100 * (best_cop_high - conv_cop_high) / conv_cop_high if conv_cop_high > 0 else 0.0
+
+    labels = [f'Baseline mdot\n({hypereg_analysis.MDOT_KG_S}kg/s)',
+              f'Higher mdot\n({0.3}kg/s)']
+    gains = [rel_gain_baseline, rel_gain_high]
+    ax2.bar(labels, gains, color=COLOR_POWER, alpha=0.85, edgecolor='white', width=0.5)
+    for i, g in enumerate(gains):
+        ax2.annotate(f'{g:.2f}%', xy=(i, g), xytext=(0, 4), textcoords='offset points',
+                    ha='center', fontsize=10)
+    ax2.set_ylabel('Best relative COP gain from Hypereg split [%]')
+    ax2.set_title('Does a Higher Flow Rate Make the\nBenefit Non-Negligible? (ROADMAP follow-up)')
+
+    fig.suptitle('Hypereg Parallel-Hydraulic Regenerator Split (Klinar et al. 2024)\n'
+                 'Real but modest benefit — pumping power is only one of three loss channels',
+                 fontsize=12)
+    fig.tight_layout()
+    save(fig, 'fig52_hypereg_analysis')
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # Generate all figures
 # ══════════════════════════════════════════════════════════════════════════
 
 def run_all(precomputed=None):
-    """Generates all 35 figures.
+    """Generates all 52 figures.
 
     precomputed, if given, is a dict that may carry results already
     computed earlier in the SAME pipeline run (main.py steps
@@ -1774,7 +2696,7 @@ def run_all(precomputed=None):
       - 'hysteresis_result' (step 11b)
       - 'magnet_geometry_result' (step 11d)
       - 'override_check_result' (step 2f)
-    Figures 8, 14, 16, 18, 19, 20, 21, 25, 26, 33, 34, and 35 reuse
+    Figures 8, 14, 16, 18, 19, 20, 21, 25, 26, 33, 34, 35, and 47 reuse
     whichever of these are supplied instead of recomputing them, which
     otherwise adds several minutes of redundant work (mostly fig21's
     graded-cascade sweep, fig25's Astronautics validation, fig33/fig34's
@@ -1785,6 +2707,15 @@ def run_all(precomputed=None):
     still computes its own data fresh from core/, exactly as before
     (fig35 falls back to the SAME bounded max_devices=3 check main.py
     itself runs by default, not the full every-flagged-device version).
+
+    Figures 46-52 cover the last round of previously-unplotted analysis
+    modules: cross-technology caloric comparison vs. VCC (46), annual
+    water-usage/WUE comparison (47), Monte Carlo calibration-uncertainty
+    band on COP_electrical (48), NSGA-III Pareto-front seed-to-seed
+    stability (49, reduced pop_size/n_gen for runtime), the two-search
+    regime-crossover null result (50), the Ames Lab heat-pump
+    architecture check (51), and the Hypereg parallel-hydraulic
+    pumping-power sensitivity (52).
     """
     print("Generating all figures...\n")
     precomputed = precomputed or {}
@@ -1843,6 +2774,40 @@ def run_all(precomputed=None):
          lambda: plot_magnet_geometry_pareto_sensitivity(precomputed)),
         ("35 Regenerative-amplification override check (this session)",
          lambda: plot_regenerative_amplification_override_check(precomputed)),
+        ("36 Value proposition: COP crossover, AMR vs. VCC across spans",
+         plot_value_proposition_cop_crossover),
+        ("37 Value proposition: emissions breakdown, AMR vs. VCC vs. liquid",
+         plot_value_proposition_emissions_breakdown),
+        ("38 Value proposition: refrigerant GWP comparison",
+         plot_value_proposition_refrigerant_gwp),
+        ("39 Value proposition: real-deployment comparison",
+         plot_value_proposition_real_deployments),
+        ("40 MnFePSi-doped hysteresis (speculative)",
+         plot_mnfepsi_doped_hysteresis_speculative),
+        ("41 MnFePSi hysteresis k-fit quality",
+         plot_mnfepsi_hysteresis_kfit_quality),
+        ("42 Hysteresis-exploiting actuator cost estimate",
+         plot_hysteresis_exploiting_actuator_estimate),
+        ("43 Hysteresis-loss landscape",
+         plot_hysteresis_loss_landscape),
+        ("44 Phase 37: CALIBRATION_POINTS_CORE drift, found and fixed",
+         plot_calibration_drift_phase37),
+        ("45 Which Lozano rows calibrate?",
+         plot_lozano_calibration_status),
+        ("46 Alternative caloric technologies vs. this repo's VCC COP",
+         plot_alternative_caloric_comparison),
+        ("47 Annual water-usage (WUE) comparison",
+         lambda: plot_water_usage_comparison(precomputed)),
+        ("48 Monte Carlo calibration-uncertainty band on COP_electrical",
+         plot_uncertainty_propagation),
+        ("49 NSGA-III Pareto-front seed-to-seed stability",
+         plot_pareto_multiseed_stability),
+        ("50 Regime-crossover search: does AMR ever beat VCC anywhere?",
+         plot_regime_crossover_analysis),
+        ("51 Ames Lab heat-pump architecture validation",
+         plot_heat_pump_validation),
+        ("52 Hypereg parallel-hydraulic pumping-power sensitivity",
+         plot_hypereg_analysis),
     ]
 
     failures = []

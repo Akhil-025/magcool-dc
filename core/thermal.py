@@ -154,14 +154,23 @@ GD_SIGMA_E_S_PER_M = 7.6e5   # S/m, gadolinium electrical conductivity near room
 
 def water_properties(T_K=300.0):
     """Simplified constant water properties near room temperature (adequate
-    for this 0-D estimate; a full model would use IAPWS correlations)."""
-    return {"rho": 997.0, "cp": 4186.0, "mu": 8.9e-4, "k": 0.606}
+    for this 0-D estimate; a full model would use IAPWS correlations).
+
+    Kept as a thin backward-compatible wrapper around
+    core.fluids.fluid_properties("water", T_K) -- every existing caller
+    that calls this function directly (rather than one of the newer
+    fluid=...-parameterized functions below) continues to get exactly
+    pure-water properties, unchanged. See core/fluids.py for the other
+    literature-grounded heat-transfer-fluid options (water/glycol
+    mixtures, ethanol) now selectable via the `fluid` parameter."""
+    from core.fluids import fluid_properties
+    return fluid_properties("water", T_K)
 
 
 def regenerator_effectiveness(mass_regenerator, frequency, mdot,
                                 particle_diameter=0.0005, porosity=0.365,
                                 bed_cross_section_area=0.002, T_K=300.0,
-                                cp_solid=None):
+                                cp_solid=None, fluid="water", rho_solid=None):
     """Returns (eps, NTU, utilization, h, Re) for a packed-sphere-bed AMR
     regenerator. bed_cross_section_area (m^2) sets superficial velocity from
     mdot; default 0.002 m^2 (~ a 5x4 cm bed face) is representative of the
@@ -178,10 +187,36 @@ def regenerator_effectiveness(mass_regenerator, frequency, mdot,
     Curie-point heat-capacity peak reduce U (raise buffering capacity per
     cycle) relative to a conventional non-magnetic regenerator material at
     the same mass/frequency/flow -- same additive-override discipline as
-    the earlier pumping_power_override and the earlier thermal_diode=None."""
-    fluid = water_properties(T_K)
+    the earlier pumping_power_override and the earlier thermal_diode=None.
+
+    fluid ( addition): heat-transfer-fluid name, one of
+    core.fluids.FLUID_NAMES ("water", "water_eg10", "water_eg20",
+    "water_pg30", "ethanol"). Default "water" reproduces every existing
+    caller's exact previous numeric output unchanged -- see
+    core/fluids.py's module docstring for why real AMR hardware actually
+    runs a glycol mixture instead, and
+    core/fluid_selection_optimization.py for the comparison.
+
+    rho_solid ( addition): optional override for the packed-bed solid
+    MCM density, kg/m^3, used only for the V_bed = mass_regenerator /
+    (rho_solid * (1 - porosity)) geometry conversion above. Default None
+    reproduces the exact previous behavior (module-level RHO_GD, i.e.
+    gadolinium's own density) for every existing caller -- this function
+    is called for every material family this repo models (GD_FAMILY,
+    LAFESIH_FAMILY, MNFEPSI_FAMILY, GA1XCMN3X_FAMILY, MNCUCOGE_FAMILY,
+    core/cascade.py), and until now every one of them silently got Gd's
+    density regardless of its own. core.cascade.GradedFamily.density_kg_m3
+    (see that class) now supplies a literature-grounded per-family value
+    here via core.amr_cycle.AMRSystem's own new material_density_kg_m3
+    parameter -- see that parameter's docstring for the literature sources
+    and for which family (GA1XCMN3X) still falls back to RHO_GD because no
+    density was located for it either (same honesty-flag precedent as
+    core/antiperovskite_material.py's own module docstring)."""
+    from core.fluids import fluid_properties
+    fluid = fluid_properties(fluid, T_K)
     cp_solid_eff = CP_SOLID_GD if cp_solid is None else cp_solid
-    V_bed = mass_regenerator / (RHO_GD * (1 - porosity))
+    rho_solid_eff = RHO_GD if rho_solid is None else rho_solid
+    V_bed = mass_regenerator / (rho_solid_eff * (1 - porosity))
     a_specific = 6 * (1 - porosity) / particle_diameter   # m^2/m^3
     A_total = a_specific * V_bed
 
@@ -203,7 +238,7 @@ def regenerator_effectiveness(mass_regenerator, frequency, mdot,
 
 def pressure_drop_packed_bed(mdot, particle_diameter=0.0005, porosity=0.365,
                               bed_cross_section_area=0.002, mass_regenerator=2.0,
-                              T_K=300.0):
+                              T_K=300.0, fluid="water", rho_solid=None):
     """Viscous pressure drop (Pa) across a packed-sphere-bed AMR, using the
     friction-factor correlation Eq. (5) of Tusek, Kitanovski, Poredos
     (2013), Int. J. Refrig. 36, 1456-1464:
@@ -215,9 +250,19 @@ def pressure_drop_packed_bed(mdot, particle_diameter=0.0005, porosity=0.365,
     d_h = 4 V_bed eps / A_total (equivalent to the common packed-bed form
     d_h = (2/3) d_p eps/(1-eps) once A_total = 6(1-eps)/d_p * V_bed is
     substituted). Returns a dict with dP, Re, f, u_s, d_h, L for inspection.
+
+    fluid ( addition): heat-transfer-fluid name, one of
+    core.fluids.FLUID_NAMES. Default "water" reproduces prior behavior
+    unchanged -- see regenerator_effectiveness()'s own `fluid` docstring.
+
+    rho_solid ( addition): optional per-family solid-MCM density
+    override, kg/m^3, same convention/default as
+    regenerator_effectiveness()'s own `rho_solid` -- see that docstring.
     """
-    fluid = water_properties(T_K)
-    V_bed = mass_regenerator / (RHO_GD * (1 - porosity))
+    from core.fluids import fluid_properties
+    fluid = fluid_properties(fluid, T_K)
+    rho_solid_eff = RHO_GD if rho_solid is None else rho_solid
+    V_bed = mass_regenerator / (rho_solid_eff * (1 - porosity))
     a_specific = 6 * (1 - porosity) / particle_diameter
     A_total = a_specific * V_bed
     L = V_bed / bed_cross_section_area
@@ -233,15 +278,27 @@ def pressure_drop_packed_bed(mdot, particle_diameter=0.0005, porosity=0.365,
 
 def pumping_power_packed_bed(mdot, particle_diameter=0.0005, porosity=0.365,
                               bed_cross_section_area=0.002, mass_regenerator=2.0,
-                              T_K=300.0):
+                              T_K=300.0, fluid="water", rho_solid=None):
     """Idealized hydraulic pumping power (W) = dP * volumetric flow rate,
     for a packed-sphere-bed AMR. No pump/motor efficiency is applied (see
     module docstring) -- this is a supplementary, geometry-explicit
     estimate for `geometry_analysis.py`, not the production
-    `loss_model.StateDependentLossModel` parasitic-power term."""
-    fluid = water_properties(T_K)
+    `loss_model.StateDependentLossModel` parasitic-power term.
+
+    fluid ( addition): heat-transfer-fluid name, one of
+    core.fluids.FLUID_NAMES. Default "water" reproduces prior behavior
+    unchanged -- see regenerator_effectiveness()'s own `fluid` docstring.
+
+    rho_solid ( addition): optional per-family solid-MCM density
+    override, kg/m^3 -- see regenerator_effectiveness()'s own `rho_solid`
+    docstring. Passed through to pressure_drop_packed_bed() below.
+    """
+    from core.fluids import fluid_properties
+    fluid_name = fluid
+    fluid = fluid_properties(fluid_name, T_K)
     info = pressure_drop_packed_bed(mdot, particle_diameter, porosity,
-                                     bed_cross_section_area, mass_regenerator, T_K)
+                                     bed_cross_section_area, mass_regenerator, T_K,
+                                     fluid=fluid_name, rho_solid=rho_solid)
     Q_vol = mdot / fluid["rho"]
     P_pump = info["dP_Pa"] * Q_vol
     info["P_pump_W"] = P_pump
@@ -249,7 +306,8 @@ def pumping_power_packed_bed(mdot, particle_diameter=0.0005, porosity=0.365,
 
 
 def intragranular_eddy_power(frequency, mu0H, particle_diameter=0.0005,
-                              mass_regenerator=2.0, sigma_e=GD_SIGMA_E_S_PER_M):
+                              mass_regenerator=2.0, sigma_e=None,
+                              rho_solid=None):
     """geometry-explicit eddy-current power dissipated WITHIN the
     MCM particles/plates themselves (W), as a function of particle_diameter
     (or, for a parallel-plate bed, plate_thickness passed through this same
@@ -301,15 +359,47 @@ def intragranular_eddy_power(frequency, mu0H, particle_diameter=0.0005,
     across both geometries; the absolute prefactor is not.
 
     mu0H here is mu0*H (Tesla), matching this repo's convention elsewhere
-    (e.g. StateDependentLossModel.parasitic_power()'s own mu0H argument)."""
-    V_MCM = mass_regenerator / RHO_GD
-    Pe_volume = (np.pi ** 2 / 6.0) * sigma_e * particle_diameter ** 2 * frequency ** 2 * mu0H ** 2
+    (e.g. StateDependentLossModel.parasitic_power()'s own mu0H argument).
+
+    rho_solid ( addition): optional per-family solid-MCM density
+    override, kg/m^3, for the V_MCM conversion below -- see
+    regenerator_effectiveness()'s own `rho_solid` docstring. Default None
+    reproduces the exact previous behavior (RHO_GD, gadolinium's own
+    density, used regardless of which material family was actually being
+    modeled).
+
+    sigma_e (addition): optional per-family solid-MCM electrical
+    conductivity override, S/m. Default None reproduces the exact
+    previous behavior (GD_SIGMA_E_S_PER_M, gadolinium's own conductivity,
+    silently used for every family regardless of which material was
+    actually being modeled -- the same class of bug rho_solid fixes for
+    density). Literature-grounded values (see GradedFamily's own
+    docstring in core/cascade.py for full sourcing): unlike density,
+    most of these compounds' conductivities land within roughly a factor
+    of ~1.3 of Gd's own 7.6e5 S/m (LAFESIH_FAMILY, MNFEPSI_FAMILY) since
+    they are all metallic transition-metal intermetallics -- a modest
+    correction. GA1XCMN3X_FAMILY (Mn3GaC) is the outlier: a direct
+    resistivity measurement (Kamishima et al., Phys. Rev. B 63, 024426
+    (2000), rho~1.5-2.0 mOhm*cm in the ferromagnetic phase near/above its
+    own Tc=245.8K) gives sigma~5-7e4 S/m, roughly 10-15x LOWER than Gd --
+    a large, well-grounded correction, comparable in size to MNFEPSI's
+    own density correction. MNCUCOGE_FAMILY has no located conductivity
+    data (Md Din et al., Mater. Sci. Forum 1010, 86-91 (2020) gives only
+    qualitative impedance trends with no sample geometry to convert to an
+    absolute conductivity) and is left at None (RHO_GD's electrical
+    analog) intentionally -- same honesty-flag convention as
+    GA1XCMN3X_FAMILY's own density gap."""
+    rho_solid_eff = RHO_GD if rho_solid is None else rho_solid
+    sigma_e_eff = GD_SIGMA_E_S_PER_M if sigma_e is None else sigma_e
+    V_MCM = mass_regenerator / rho_solid_eff
+    Pe_volume = (np.pi ** 2 / 6.0) * sigma_e_eff * particle_diameter ** 2 * frequency ** 2 * mu0H ** 2
     return Pe_volume * V_MCM
 
 
 def regenerator_effectiveness_parallel_plate(mass_regenerator, frequency, mdot,
                                               plate_thickness=0.0005, plate_spacing=0.0002,
-                                              bed_cross_section_area=0.002, T_K=300.0):
+                                              bed_cross_section_area=0.002, T_K=300.0,
+                                              fluid="water", rho_solid=None):
     """Parallel-plate analogue of `regenerator_effectiveness()`, using the
     Nickolay & Martin (2002) laminar-entry Nusselt correlation (Eq. 4 of
     Tusek et al. 2013), read directly off the rasterized page image
@@ -327,10 +417,21 @@ def regenerator_effectiveness_parallel_plate(mass_regenerator, frequency, mdot,
     porosity eps = r/(r+d), specific surface area a = 2/(r+d) (two wetted
     faces per unit-cell period), hydraulic diameter d_h = 2*r
     (parallel-plate slot limit of Eq. 7). Returns the same dict shape as
-    `regenerator_effectiveness()`."""
-    fluid = water_properties(T_K)
+    `regenerator_effectiveness()`.
+
+    fluid ( addition): heat-transfer-fluid name, one of
+    core.fluids.FLUID_NAMES. Default "water" reproduces prior behavior
+    unchanged -- see regenerator_effectiveness()'s own `fluid` docstring.
+
+    rho_solid ( addition): optional per-family solid-MCM density
+    override, kg/m^3 -- see regenerator_effectiveness()'s own `rho_solid`
+    docstring.
+    """
+    from core.fluids import fluid_properties
+    fluid = fluid_properties(fluid, T_K)
+    rho_solid_eff = RHO_GD if rho_solid is None else rho_solid
     porosity = plate_spacing / (plate_spacing + plate_thickness)
-    V_bed = mass_regenerator / (RHO_GD * (1 - porosity))
+    V_bed = mass_regenerator / (rho_solid_eff * (1 - porosity))
     a_specific = 2.0 / (plate_spacing + plate_thickness)
     A_total = a_specific * V_bed
     L = V_bed / bed_cross_section_area
@@ -358,15 +459,26 @@ def regenerator_effectiveness_parallel_plate(mass_regenerator, frequency, mdot,
 
 def pumping_power_parallel_plate(mdot, plate_thickness=0.0005, plate_spacing=0.0002,
                                   bed_cross_section_area=0.002, mass_regenerator=2.0,
-                                  T_K=300.0):
+                                  T_K=300.0, fluid="water", rho_solid=None):
     """Idealized hydraulic pumping power (W) for a parallel-plate AMR,
     using the laminar friction factor f = 24/Re (Eq. 6 of Tusek et al.
     2013, valid Re < 2300) with the same Darcy-Weisbach relation and
     hydraulic diameter as `regenerator_effectiveness_parallel_plate()`.
-    Idealized (no pump/motor efficiency) -- see module docstring."""
-    fluid = water_properties(T_K)
+    Idealized (no pump/motor efficiency) -- see module docstring.
+
+    fluid ( addition): heat-transfer-fluid name, one of
+    core.fluids.FLUID_NAMES. Default "water" reproduces prior behavior
+    unchanged -- see regenerator_effectiveness()'s own `fluid` docstring.
+
+    rho_solid ( addition): optional per-family solid-MCM density
+    override, kg/m^3 -- see regenerator_effectiveness()'s own `rho_solid`
+    docstring.
+    """
+    from core.fluids import fluid_properties
+    fluid = fluid_properties(fluid, T_K)
+    rho_solid_eff = RHO_GD if rho_solid is None else rho_solid
     porosity = plate_spacing / (plate_spacing + plate_thickness)
-    V_bed = mass_regenerator / (RHO_GD * (1 - porosity))
+    V_bed = mass_regenerator / (rho_solid_eff * (1 - porosity))
     L = V_bed / bed_cross_section_area
     d_h = 2 * plate_spacing
 
@@ -435,7 +547,8 @@ def pumping_power_parallel_plate(mdot, plate_thickness=0.0005, plate_spacing=0.0
 #      paper sketches.
 def pumping_power_packed_bed_hypereg(mdot, particle_diameter=0.0005, porosity=0.365,
                                        bed_cross_section_area=0.002, mass_regenerator=2.0,
-                                       T_K=300.0, n_parallel_subregenerators=4):
+                                       T_K=300.0, n_parallel_subregenerators=4,
+                                       fluid="water", rho_solid=None):
     """Hypereg-style parallel-hydraulic pumping power (W): identical to
     `pumping_power_packed_bed()` except the pressure-drop length L is
     divided by `n_parallel_subregenerators` (Klinar et al. 2024 Fig. 19;
@@ -445,12 +558,20 @@ def pumping_power_packed_bed_hypereg(mdot, particle_diameter=0.0005, porosity=0.
     unchanged from the conventional-series case; only the flow path is
     reconfigured, so `regenerator_effectiveness()` (heat-transfer side) is
     unaffected -- callers should pair this with the SAME eps as the
-    conventional case, not a re-derived one (see honesty flag #2)."""
+    conventional case, not a re-derived one (see honesty flag #2).
+
+    rho_solid ( addition): optional per-family solid-MCM density
+    override, kg/m^3 -- see regenerator_effectiveness()'s own `rho_solid`
+    docstring. Passed through to both pressure_drop_packed_bed() and the
+    internal pumping_power_packed_bed() comparison call below."""
     if n_parallel_subregenerators < 1:
         raise ValueError("n_parallel_subregenerators must be >= 1")
-    fluid = water_properties(T_K)
+    from core.fluids import fluid_properties
+    fluid_name = fluid
+    fluid = fluid_properties(fluid_name, T_K)
     info = pressure_drop_packed_bed(mdot, particle_diameter, porosity,
-                                     bed_cross_section_area, mass_regenerator, T_K)
+                                     bed_cross_section_area, mass_regenerator, T_K,
+                                     fluid=fluid_name, rho_solid=rho_solid)
     L_hypereg = info["L_m"] / n_parallel_subregenerators
     dP_hypereg = info["f"] * (L_hypereg / info["d_h_m"]) * (fluid["rho"] * info["u_s_m_s"] ** 2 / 2)
     Q_vol = mdot / fluid["rho"]
@@ -462,7 +583,7 @@ def pumping_power_packed_bed_hypereg(mdot, particle_diameter=0.0005, porosity=0.
         "n_parallel_subregenerators": n_parallel_subregenerators,
         "P_pump_W_conventional_series": pumping_power_packed_bed(
             mdot, particle_diameter, porosity, bed_cross_section_area,
-            mass_regenerator, T_K)["P_pump_W"],
+            mass_regenerator, T_K, fluid=fluid_name)["P_pump_W"],
     }
 
 

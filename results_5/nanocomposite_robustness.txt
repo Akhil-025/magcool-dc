@@ -1,0 +1,15 @@
+==========================================================================================
+PHASE 22 ITEM 2 (follow-up): does the nanocomposite blend's breadth pay off
+when the FIXED, already-built composition operates away from its design span?
+==========================================================================================
+Both candidates tuned ONCE at design_span_K=10.0K's own T_mid=296.15K (Tc_design=285.40K), then evaluated WITHOUT retuning at every span below:
+
+ span_K  nanocomp_COP  nanocomp_Qc_W  single_COP  single_Qc_W
+    5.0         3.492          863.9       0.000          0.0
+   10.0         4.795         1753.7       7.166       4995.8  <- design span
+   15.0         0.000            0.0       0.000          0.0
+   20.0         0.000            0.0       0.000          0.0
+
+Off-design feasibility (Qc>0): nanocomposite feasible at 1/3 off-design span(s); single phase feasible at 0/3.
+At 1 off-design span(s) ([5.0]), the single phase collapses to Qc=0 (span_fraction feasibility cutoff, core/amr_cycle.py) while the nanocomposite still delivers positive Qc -- its broader working range covers a span the sharply-tuned single phase cannot.
+CONCLUSION: The nanocomposite's breadth DOES pay off in one specific, checkable way: at 1 off-design span(s) narrower than the design span, the sharply-tuned single phase collapses to Qc=0 (its no-load DeltaT_ad no longer covers a mismatched span) while the nanocomposite -- whose working range is deliberately spread -- still delivers positive Qc. No off-design span in this set left both candidates feasible simultaneously, so no raw Qc/COP comparison could be made there; the design span itself (where the single phase is optimally tuned and wins outright) is the only point where both are feasible. So the genuine finding here is ROBUSTNESS TO NARROWING (avoiding a catastrophic Qc=0 failure), not raw performance, and this is a first-pass finding at ONE spread value and ONE design/off-design span set, not a general claim.

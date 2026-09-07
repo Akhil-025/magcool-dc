@@ -65,7 +65,7 @@ from core.first_order_mce import (
     lafesih_composition_tuned_material,
 )
 from core.mce_material import GADOLINIUM
-from core.cascade import GradedFamily, _target_composition_for_peak
+from core.cascade import GradedFamily, LAFESIH_FAMILY, _target_composition_for_peak
 
 NANOCOMPOSITE_SPREAD_K = 4.0
 # Illustrative, design-chosen spread (not a digitized or fitted value --
@@ -197,6 +197,19 @@ NANOCOMPOSITE_FAMILY = GradedFamily(
     # should be close to (though not identical to) a single phase's own
     # offset, and the root-finder self-corrects from there.
     reference_material=LAFESIH_FIRST_ORDER, fallback_material=GADOLINIUM,
+    # density_kg_m3 ( addition): NOT a new literature figure -- this
+    # blend's three phases ARE LAFESIH_FAMILY compositions (see
+    # nanocomposite_tuned_material() above, base_tuned_fn=
+    # lafesih_composition_tuned_material), so its solid-MCM density is
+    # LAFESIH_FAMILY's own density_kg_m3 by direct construction, not an
+    # estimate. Before this, it silently fell back to RHO_GD (7900
+    # kg/m^3) like every other family did prior to the density fix --
+    # see GradedFamily's own docstring in core/cascade.py.
+    density_kg_m3=LAFESIH_FAMILY.density_kg_m3,
+    # Same reasoning as density_kg_m3 above: this blend IS LAFESIH_FAMILY
+    # compositions, so its electrical conductivity is LAFESIH_FAMILY's
+    # own sigma_e_S_per_m by direct construction.
+    sigma_e_S_per_m=LAFESIH_FAMILY.sigma_e_S_per_m,
 )
 
 

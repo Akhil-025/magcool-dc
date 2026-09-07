@@ -1,0 +1,35 @@
+ open item (Paper-Mining Pass review item 4, and this module's
+own honesty flag on run_geometric_cost_pareto_sensitivity()): does the
+'geometric cost term does NOT pull the mean field down' finding at
+pop_size=32/n_gen=15/seed=1 hold at production pop_size/n_gen settings
+and across multiple seeds, or was it search noise at the smaller setting?
+
+Settings: pop_size=40, n_gen=25, seeds=[1, 2, 3]
+
+  seed  mean_FLAT_T  mean_GEOM_T  front_FLAT  front_GEOM
+--------------------------------------------------------
+     1        1.14        1.18          23          21
+     2        1.29        1.64          21          21
+     3        1.08        1.15          27          22
+--------------------------------------------------------
+
+RESULT: NOT STABLE (or does not reverse cleanly). At least one seed's
+GEOMETRIC run had a mean mu0H_max_T HIGHER than its own FLAT run -- the
+'geometric cost pulls mean field down' expectation does NOT hold
+universally across seeds even at production settings. Treat the
+direction of the mean-field effect as seed-dependent / not reliably
+signed, not as a settled result in either direction -- see the per-seed
+table above for which seed(s) disagree. This is the SAME kind of
+outcome core/hysteresis_sensitivity.py's own multiseed check found for
+its analogous comparison (results/hysteresis_multiseed_
+stability.txt) -- NSGA-III search noise at this problem's scale appears
+large enough to flip BOTH of this repo's reduced-setting Pareto
+sensitivity findings, not just one of them.
+
+Caveat carried over unchanged from this module's own honesty flags 1-2:
+the geometric magnet-mass relation itself is standard closed-form Halbach-
+cylinder physics (not fitted), but the underlying MCM_COST_PER_KG_BY_FAMILY
+$/kg figures and the ~2T 'sweet spot' literature claim were not
+independently re-derived by this repo -- this check resolves the
+NSGA-III-search-noise question, not the underlying-cost-data-quality
+question.

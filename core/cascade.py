@@ -79,13 +79,54 @@ class GradedFamily:
     peak-vs-Tc offset is the starting guess); tuned_fn(Tc_target_K) must
     return a FirstOrderMCEMaterial and raise ValueError outside
     [tc_min, tc_max] (both composition_tuned_material() and
-    lafesih_composition_tuned_material() already do this)."""
+    lafesih_composition_tuned_material() already do this).
+
+    density_kg_m3 ( addition): this family's own solid-MCM mass
+    density, kg/m^3, for the packed-bed V_bed = mass_regenerator /
+    (density_kg_m3 * (1 - porosity)) geometry conversion used throughout
+    core/thermal.py (regenerator_effectiveness() and friends) whenever
+    USE_NTU_THERMAL_MODEL=True. Until now, every family silently reused
+    GD_FAMILY's own RHO_GD=7900 kg/m^3 here regardless of its own density
+    (core/thermal.py's module-level RHO_GD was the only value used, and
+    GradedFamily had no density field at all) -- this affected every
+    material_family_comparison.py comparison and every optimize.py
+    NSGA-III material co-optimization Pareto front
+    (results/material_family_comparison.csv, results/pareto_front.csv,
+    results/pareto_front_by_material/*.csv), since both run with
+    USE_NTU_THERMAL_MODEL=True. Default None preserves the exact previous
+    behavior (falls back to RHO_GD inside thermal.py) for any
+    GradedFamily that doesn't set this explicitly. See each family
+    instance below for its own literature source; GA1XCMN3X_FAMILY
+    leaves this None (not RHO_GD written in explicitly) because no
+    density was located for that specific alloy either -- same honesty-
+    flag precedent as core/antiperovskite_material.py's own module
+    docstring, which already flags this exact gap for that family.
+    See results/material_density_correction_analysis.txt for the
+    quantified COP/Qc impact of this fix on each affected family.
+
+    sigma_e_S_per_m ( addition): this family's own solid-MCM
+    electrical conductivity, S/m, forwarded (via
+    core.amr_cycle.AMRSystem's own material_sigma_e_S_per_m parameter)
+    to core.thermal.intragranular_eddy_power() -- the intragranular
+    eddy-current loss channel, active whenever particle_diameter is set
+    (which the NSGA-III optimizer's design variables do). Same shape of
+    gap as density_kg_m3 above: every family silently reused
+    GD_SIGMA_E_S_PER_M=7.6e5 S/m regardless of its own conductivity.
+    Default None preserves the exact previous behavior. See each family
+    instance below for its own literature source; unlike density, most
+    of these compounds land within ~1.3x of Gd's own value (they are all
+    metallic transition-metal intermetallics) -- GA1XCMN3X_FAMILY
+    (Mn3GaC) is the one large, well-grounded outlier. MNCUCOGE_FAMILY
+    leaves this None (no conductivity data located) -- same honesty-flag
+    convention as its own and GA1XCMN3X_FAMILY's density gaps."""
     name: str
     tuned_fn: Callable[[float], object]
     tc_min: float
     tc_max: float
     reference_material: object
     fallback_material: object = field(default_factory=lambda: GADOLINIUM)
+    density_kg_m3: float = None
+    sigma_e_S_per_m: float = None
 
 
 GD_FAMILY = GradedFamily(
@@ -93,6 +134,15 @@ GD_FAMILY = GradedFamily(
     tuned_fn=lambda Tc: composition_tuned_material(Tc, apply_giguere_correction=True),
     tc_min=GIANT_MCE_TC_MIN_K, tc_max=GIANT_MCE_TC_MAX_K,
     reference_material=GD5SI2GE2_FIRST_ORDER, fallback_material=GADOLINIUM,
+    # written in explicitly (rather than left None) so this family's own
+    # density is documented alongside the other four, even though it is
+    # numerically identical to thermal.py's RHO_GD fallback -- standard
+    # literature value for elemental Gd.
+    density_kg_m3=7900.0,
+    # 7.6e5 S/m: standard literature value for elemental Gd -- written
+    # in explicitly alongside density_kg_m3 above, numerically identical
+    # to thermal.py's GD_SIGMA_E_S_PER_M fallback.
+    sigma_e_S_per_m=7.6e5,
 )
 
 LAFESIH_FAMILY = GradedFamily(
@@ -100,6 +150,25 @@ LAFESIH_FAMILY = GradedFamily(
     tuned_fn=lafesih_composition_tuned_material,
     tc_min=LAFESIH_TC_MIN_K, tc_max=LAFESIH_TC_MAX_K,
     reference_material=LAFESIH_FIRST_ORDER, fallback_material=GADOLINIUM,
+    # 7300 kg/m^3: X-ray (true, non-porous) density of the LaFe13-xSix
+    # 1:13 phase. Directly reported as 7.3 g/cm^3 for the LaFe11.8Si1.2
+    # composition (x=1.2, within this family's own composition-tunable
+    # range) by Pathak et al., "Extraordinarily strong magneto-
+    # responsiveness in phase-separated LaFe2Si" (OSTI 1798867), and
+    # independently reproduced here from that paper's own NaZn13-type
+    # cubic cell (a~11.46 Angstrom, Z=8 formula units/cell, space group
+    # Fm-3c) -- both agree to within rounding.
+    density_kg_m3=7300.0,
+    # 8.0e5 S/m: averaged from two independent room-temperature
+    # resistivity measurements on La-Fe-Si-based 1:13-phase compounds
+    # close to this family's own composition range -- Abdulkadirova et
+    # al. (Phys. Metals Metallogr. 123, 414 (2022), LaFe11.1Mn0.1Co0.7Si1.1,
+    # rho~100-110 uOhm*cm away from Tc -> sigma~9.5e5 S/m) and Palstra et
+    # al. (J. Magn. Magn. Mater. 36, 290 (1983), La(Fe,Si)13 across
+    # x=0.807-0.885, rho~130-150 uOhm*cm -> sigma~6.7-7.7e5 S/m). Only
+    # ~5% above GD_SIGMA_E_S_PER_M's 7.6e5 S/m -- a modest correction,
+    # unlike this family's own density correction above.
+    sigma_e_S_per_m=8.0e5,
 )
 
 # Paper-Mining Pass recommendation #3: (Mn,Fe)2(P,Si), a third pluggable
@@ -114,6 +183,28 @@ MNFEPSI_FAMILY = GradedFamily(
     tuned_fn=mnfepsi_composition_tuned_material,
     tc_min=MNFEPSI_TC_MIN_K, tc_max=MNFEPSI_TC_MAX_K,
     reference_material=MNFEPSI_FIRST_ORDER, fallback_material=GADOLINIUM,
+    # 6370 kg/m^3: crystallographic density computed from Hoglin et al.,
+    # "The crystal and magnetic structure of the magnetocaloric compound
+    # FeMnP0.5Si0.5" (Phys. Rev. B / arXiv:1105.1942) -- hexagonal
+    # Fe2P-type structure, space group P-62m, Z=3 formula units/cell,
+    # room-temperature (ferromagnetic-phase) lattice parameters
+    # a=6.2090(3) Angstrom, c=3.2880(3) Angstrom. This is the LARGEST
+    # correction of the four non-Gd families (~19% below RHO_GD's
+    # 7900 kg/m^3), not the "same order as Gd" modest correction
+    # initially guessed before checking the literature.
+    density_kg_m3=6370.0,
+    # 7.5e5 S/m: this family's own (Mn,Fe)2(P,Si) is Fe2P-type
+    # hexagonal, bounded by its own binary end-members' single-crystal
+    # resistivities -- Ota et al. (JPS Conf. Proc. 30, 011087 (2020)):
+    # Mn2P rho0=0.08 uOhm*cm, RRR=840 -> rho(RT)~67 uOhm*cm ->
+    # sigma~1.5e6 S/m; Fe2P rho0=0.2 uOhm*cm, RRR=760 -> rho(RT)~152
+    # uOhm*cm -> sigma~6.6e5 S/m. This family's own composition
+    # (Mn0.60-0.68Fe1.3-1.22, Fe-rich) sits closer to the Fe2P end, so
+    # sigma is set nearer that bound rather than the midpoint -- only
+    # ~1% below GD_SIGMA_E_S_PER_M's 7.6e5 S/m, a modest correction like
+    # LAFESIH_FAMILY's above, despite this family's own LARGE density
+    # correction.
+    sigma_e_S_per_m=7.5e5,
 )
 
 # fourth pluggable family, Ga1-xCMn3+x (see
@@ -135,6 +226,32 @@ GA1XCMN3X_FAMILY = GradedFamily(
     tuned_fn=ga1xcmn3x_composition_tuned_material,
     tc_min=GA1XCMN3X_TC_MIN_K, tc_max=GA1XCMN3X_TC_MAX_K,
     reference_material=GA1XCMN3X_REF, fallback_material=GADOLINIUM,
+    # density_kg_m3 deliberately left at its GradedFamily default (None,
+    # i.e. thermal.py falls back to RHO_GD) rather than a guessed number:
+    # a literature search for this SPECIFIC alloy (Ga1-xCMn3+x, x~0.07)
+    # did not turn up a reported mass density, only the stoichiometric
+    # parent Mn3GaC's (a different, off-Tc compound -- see
+    # core/antiperovskite_material.py's own module docstring, which
+    # already flags this same "density not located" gap for this family
+    # in its HONESTY FLAG section). Inventing a number from the parent
+    # compound's lattice would replace one unsourced figure with another;
+    # this family's Qc/COP numbers should be read with that in mind,
+    # same as its already-flagged uncalibrated peak-magnitude caveat.
+    #
+    # sigma_e_S_per_m, unlike density_kg_m3 above, IS grounded: Kamishima
+    # et al. ("Giant magnetoresistance in the intermetallic compound
+    # Mn3GaC", Phys. Rev. B 63, 024426 (2000)) directly measured this
+    # exact parent compound's resistivity (Fig. 2), rho~1.5-2.0 mOhm*cm
+    # in the ferromagnetic phase near/above its own Tc=245.8K -> sigma
+    # ~5-7e4 S/m. Set to the midpoint. This is ~10-15x LOWER than
+    # GD_SIGMA_E_S_PER_M's 7.6e5 S/m -- a large, well-grounded
+    # correction (comparable in size to MNFEPSI_FAMILY's own density
+    # correction), despite the parent-compound caveat that applies to
+    # this family's density gap above (Mn3GaC IS the reference compound
+    # this family's own tunable series (Ga1-xCMn3+x, x~0.07) is built
+    # from, so a directly-measured PARENT-compound property is a much
+    # safer proxy here than inventing a number outright would be).
+    sigma_e_S_per_m=6.0e4,
 )
 
 # fifth pluggable family, Mn1-xCuxCoGe (see the block comment
@@ -145,11 +262,38 @@ GA1XCMN3X_FAMILY = GradedFamily(
 # MNFEPSI_FAMILY below -- so, unlike GA1XCMN3X_FAMILY, its
 # reference_material really is the same kind of calibrated-to-a-digitized-
 # DeltaS_M-target object the other three first-order families use.
+GA1XCMN3X_FAMILY = GA1XCMN3X_FAMILY  # placeholder to keep diff minimal below
+
 MNCUCOGE_FAMILY = GradedFamily(
     name="Mn1-xCuxCoGe",
     tuned_fn=mncucoge_composition_tuned_material,
     tc_min=MNCUCOGE_TC_MIN_K, tc_max=MNCUCOGE_TC_MAX_K,
     reference_material=MNCUCOGE_FIRST_ORDER, fallback_material=GADOLINIUM,
+    # 7760 kg/m^3: crystallographic density of the parent MnCoGe
+    # TiNiSi-type orthorhombic cell (space group Pnma, Z=4 formula
+    # units/cell), computed from the room-temperature lattice parameters
+    # a=5.918, b=3.827, c=7.050 Angstrom, V=159.7 Angstrom^3 reported for
+    # MnCoGe1-xInx (x=0, i.e. undoped MnCoGe) by the MnCoGe1-xInx giant-
+    # MCE study (ScienceDirect, J. Alloys Compd.). Cu-for-Co substitution
+    # (Cu 63.55 vs Co 58.93 g/mol, similar unit-cell volume per the
+    # Mn1-xCuxCoGe XRD literature) changes this by well under 1%, so the
+    # parent compound's density is used unchanged. Only ~2% below
+    # RHO_GD's 7900 kg/m^3 -- genuinely the "same order as Gd, modest
+    # correction" case, unlike MNFEPSI_FAMILY above.
+    density_kg_m3=7760.0,
+    # sigma_e_S_per_m deliberately left at its GradedFamily default
+    # (None, i.e. thermal.py falls back to GD_SIGMA_E_S_PER_M): Md Din
+    # et al. ("Study of Heat Treatment Effect in MnCoGe Compound on
+    # Structure and Electric Properties", Mater. Sci. Forum 1010, 86-91
+    # (2020)) measured only relative impedance |Z| (Ohm) with no sample
+    # cross-section/length given, so it cannot be converted to an
+    # absolute conductivity -- their qualitative finding (this family's
+    # own hexagonal/austenite phase, the one relevant at its Curie point
+    # ~269-275K, is LESS conductive than the orthorhombic phase) hints
+    # the true correction could be non-trivial, but inventing a number
+    # from a qualitative trend would replace one unsourced figure with
+    # another. Same honesty-flag convention as GA1XCMN3X_FAMILY's own
+    # density gap.
 )
 
 
@@ -418,10 +562,27 @@ def _compare_graded_cascade_cell(args):
 
 def run_cascade(T_cold_K, total_span_K, n_stages, material=None, mu0H_max=2.0,
                  mass_per_stage=2.0, frequency=1.0, fluid_mdot=0.08,
-                 regenerator_effectiveness=0.85):
+                 regenerator_effectiveness=0.85, rho_solid=None, sigma_e=None):
     """Runs n_stages identical AMR modules in series, each covering
     total_span_K/n_stages, all passing the same Qc through in steady state
-    (Qc is set by the coldest/first stage's capacity at its local span)."""
+    (Qc is set by the coldest/first stage's capacity at its local span).
+
+    rho_solid ( addition): forwarded to AMRSystem as
+    material_density_kg_m3. Default None preserves the exact previous
+    behavior (AMRSystem/thermal.py fall back to RHO_GD's 7900 kg/m^3)
+    for any caller that doesn't set this explicitly. Callers iterating
+    over core.cascade's GradedFamily objects (e.g.
+    material_family_comparison.py) should pass the tuned family's own
+    family.density_kg_m3 here -- see GradedFamily's own docstring for
+    why this matters (every non-Gd family previously and silently used
+    Gd's own density for its packed-bed volume, which feeds NTU/
+    effectiveness whenever USE_NTU_THERMAL_MODEL=True, as it is here).
+
+    sigma_e ( addition): forwarded to AMRSystem as
+    material_sigma_e_S_per_m -- same rationale as rho_solid above, but
+    for the intragranular eddy-current loss channel (active whenever a
+    caller sets particle_diameter, which run_cascade itself doesn't).
+    Default None preserves the exact previous behavior."""
     if material is None:
         material = GADOLINIUM
     span_per_stage = total_span_K / n_stages
@@ -430,7 +591,8 @@ def run_cascade(T_cold_K, total_span_K, n_stages, material=None, mu0H_max=2.0,
     stage1 = AMRSystem(material=material, mu0H_max=mu0H_max,
                         mass_regenerator=mass_per_stage, frequency=frequency,
                         fluid_mdot=fluid_mdot, regenerator_effectiveness=regenerator_effectiveness,
-                        loss_model=_LOSS_MODEL, use_ntu_thermal_model=USE_NTU_THERMAL_MODEL)
+                        loss_model=_LOSS_MODEL, use_ntu_thermal_model=USE_NTU_THERMAL_MODEL,
+                        material_density_kg_m3=rho_solid, material_sigma_e_S_per_m=sigma_e)
     r1 = stage1.run(T_local, span_per_stage)
     Qc_target = r1.Qc
     if Qc_target <= 0:
@@ -443,7 +605,8 @@ def run_cascade(T_cold_K, total_span_K, n_stages, material=None, mu0H_max=2.0,
         stage = AMRSystem(material=material, mu0H_max=mu0H_max,
                            mass_regenerator=mass_per_stage, frequency=frequency,
                            fluid_mdot=fluid_mdot, regenerator_effectiveness=regenerator_effectiveness,
-                           loss_model=_LOSS_MODEL, use_ntu_thermal_model=USE_NTU_THERMAL_MODEL)
+                           loss_model=_LOSS_MODEL, use_ntu_thermal_model=USE_NTU_THERMAL_MODEL,
+                           material_density_kg_m3=rho_solid, material_sigma_e_S_per_m=sigma_e)
         # each stage handles the same Qc_target at its local span; back out
         # the required work by re-running at span_per_stage and scaling mdot
         # if needed so Qc matches Qc_target (steady-state series constraint)
@@ -1107,7 +1270,9 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
                         fluid_mdot=fluid_mdot, regenerator_effectiveness=regenerator_effectiveness,
                         loss_model=_LOSS_MODEL, use_ntu_thermal_model=USE_NTU_THERMAL_MODEL,
                         cycle_type=cycle_type, particle_diameter=particle_diameter,
-                        blow_fraction=blow_fraction, pump_motor_efficiency=pump_motor_efficiency)
+                        blow_fraction=blow_fraction, pump_motor_efficiency=pump_motor_efficiency,
+                        material_density_kg_m3=family.density_kg_m3,
+                        material_sigma_e_S_per_m=family.sigma_e_S_per_m)
     r1 = stage1.run(T_local, span_per_stage)
     Qc_target = r1.Qc
     if Qc_target <= 0:
@@ -1125,7 +1290,9 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
                            fluid_mdot=fluid_mdot, regenerator_effectiveness=regenerator_effectiveness,
                            loss_model=_LOSS_MODEL, use_ntu_thermal_model=USE_NTU_THERMAL_MODEL,
                            cycle_type=cycle_type, particle_diameter=particle_diameter,
-                           blow_fraction=blow_fraction, pump_motor_efficiency=pump_motor_efficiency)
+                           blow_fraction=blow_fraction, pump_motor_efficiency=pump_motor_efficiency,
+                           material_density_kg_m3=family.density_kg_m3,
+                           material_sigma_e_S_per_m=family.sigma_e_S_per_m)
         r_i = stage.run(T_local, span_per_stage)
         if r_i.Qc > 0:
             scale = Qc_target / r_i.Qc

@@ -235,7 +235,7 @@ class AMRSystem:
 
     def __init__(self, material: MagnetocaloricMaterial, mu0H_max: float,
                  mass_regenerator: float, frequency: float,
-                 fluid_cp: float = 4186.0, fluid_mdot: float = 0.05,
+                 fluid_cp: float = None, fluid_mdot: float = 0.05,
                  regenerator_effectiveness: float = 0.85,
                  parasitic_fraction: float = 0.15,
                  loss_model=None, use_ntu_thermal_model: bool = False,
@@ -246,14 +246,41 @@ class AMRSystem:
                  cycle_type: str = "brayton",
                  thermal_diode=None,
                  pump_motor_efficiency: float = 1.0,
-                 no_load_span_override: float = None):
+                 no_load_span_override: float = None,
+                 fluid: str = "water",
+                 material_density_kg_m3: float = None,
+                 material_sigma_e_S_per_m: float = None):
         """
         material               : MagnetocaloricMaterial instance
         mu0H_max                : peak applied field, Tesla
         mass_regenerator        : kg of magnetocaloric material in the bed
         frequency                : AMR cycle frequency, Hz
-        fluid_cp                 : heat transfer fluid specific heat, J/(kg K)
+        fluid_cp                 : heat transfer fluid specific heat, J/(kg K).
+                                     Default None derives cp from the `fluid`
+                                     parameter below via core.fluids (water's
+                                     cp=4186.0, so every existing caller that
+                                     leaves both fluid_cp and fluid at their
+                                     defaults is completely unaffected).
+                                     Passing an explicit fluid_cp always wins
+                                     over `fluid`, for backward compatibility
+                                     with callers that set fluid_cp directly.
         fluid_mdot                : fluid mass flow rate, kg/s
+        fluid                      : heat-transfer-fluid name, one of
+                                     core.fluids.FLUID_NAMES ("water",
+                                     "water_eg10", "water_eg20", "water_pg30",
+                                     "ethanol"). Threaded into the NTU
+                                     thermal model (use_ntu_thermal_model=
+                                     True) and the geometry-explicit pumping-
+                                     power calc (particle_diameter set) --
+                                     see core/fluids.py's module docstring
+                                     for why real AMR hardware runs a glycol
+                                     mixture, not pure water, and
+                                     core/fluid_selection_optimization.py
+                                     for the system-level comparison this
+                                     project's own optimizer was run against.
+                                     Default "water" reproduces every
+                                     existing caller's exact previous
+                                     numeric output.
         regenerator_effectiveness : NTU-based regenerator effectiveness (0-1),
                                      from thermal.py NTU correlation
         parasitic_fraction        : pump + magnet-motor-drive electrical
@@ -442,6 +469,43 @@ class AMRSystem:
                                      are unaffected), not because the
                                      override is ready to replace the old
                                      cap as this project's default.
+        material_density_kg_m3        :  addition. Optional
+                                     solid-MCM density override, kg/m^3,
+                                     forwarded as `rho_solid` to every
+                                     core.thermal packed-bed/parallel-
+                                     plate/eddy-power call this class
+                                     makes (regenerator_effectiveness(),
+                                     pumping_power_packed_bed()/_hypereg(),
+                                     intragranular_eddy_power()) whenever
+                                     use_ntu_thermal_model=True and/or
+                                     particle_diameter is set. Default
+                                     None preserves ALL previous behavior
+                                     exactly (those functions fall back to
+                                     core.thermal.RHO_GD, gadolinium's own
+                                     density, regardless of `material`).
+        material_sigma_e_S_per_m       :  addition. Optional
+                                     solid-MCM electrical conductivity
+                                     override, S/m, forwarded as
+                                     `sigma_e` to
+                                     intragranular_eddy_power() (the only
+                                     core.thermal call this class makes
+                                     that uses it) whenever
+                                     particle_diameter is set. Default
+                                     None preserves ALL previous behavior
+                                     exactly (falls back to
+                                     core.thermal.GD_SIGMA_E_S_PER_M,
+                                     gadolinium's own conductivity,
+                                     regardless of `material`) -- see
+                                     GradedFamily's own docstring in
+                                     core/cascade.py for the literature
+                                     sourcing of the per-family values.
+                                     Callers modeling a non-Gd family
+                                     should pass their own
+                                     core.cascade.GradedFamily.density_kg_m3
+                                     here -- see that field's own
+                                     docstring for the literature sources
+                                     and for which family still has no
+                                     located density.
         """
         if cycle_type not in CYCLE_TYPE_FACTORS:
             raise ValueError(
@@ -450,6 +514,10 @@ class AMRSystem:
         self.mu0H_max = mu0H_max
         self.m_reg = mass_regenerator
         self.f = frequency
+        self.fluid = fluid
+        if fluid_cp is None:
+            from core.fluids import fluid_properties
+            fluid_cp = fluid_properties(fluid)["cp"]
         self.cp_f = fluid_cp
         self.mdot_f = fluid_mdot
         self.eps = regenerator_effectiveness
@@ -464,6 +532,8 @@ class AMRSystem:
         self.thermal_diode = thermal_diode
         self.pump_motor_efficiency = pump_motor_efficiency
         self.no_load_span_override = no_load_span_override
+        self.material_density_kg_m3 = material_density_kg_m3
+        self.material_sigma_e_S_per_m = material_sigma_e_S_per_m
         self._last_ntu_info = None
 
     def _cycle_type_factor(self):
@@ -547,7 +617,8 @@ class AMRSystem:
         if not self.use_ntu_thermal_model:
             return self.eps
         from core.thermal import regenerator_effectiveness as ntu_eps
-        kwargs = dict(bed_cross_section_area=self.bed_cross_section_area)
+        kwargs = dict(bed_cross_section_area=self.bed_cross_section_area,
+                      fluid=self.fluid, rho_solid=self.material_density_kg_m3)
         if self.particle_diameter is not None:
             kwargs["particle_diameter"] = self.particle_diameter
         info = ntu_eps(self.m_reg, self.f, self.mdot_f, **kwargs)
@@ -605,12 +676,14 @@ class AMRSystem:
                 self.mdot_f, particle_diameter=self.particle_diameter,
                 bed_cross_section_area=self.bed_cross_section_area,
                 mass_regenerator=self.m_reg,
-                n_parallel_subregenerators=self.hypereg_n_parallel)
+                n_parallel_subregenerators=self.hypereg_n_parallel,
+                fluid=self.fluid, rho_solid=self.material_density_kg_m3)
         else:
             info = pumping_power_packed_bed(
                 self.mdot_f, particle_diameter=self.particle_diameter,
                 bed_cross_section_area=self.bed_cross_section_area,
-                mass_regenerator=self.m_reg)
+                mass_regenerator=self.m_reg, fluid=self.fluid,
+                rho_solid=self.material_density_kg_m3)
         return info["P_pump_W"] / self.pump_motor_efficiency
 
     def _geometry_eddy_power_W(self):
@@ -628,7 +701,8 @@ class AMRSystem:
         from core.thermal import intragranular_eddy_power
         return intragranular_eddy_power(
             self.f, self.mu0H_max, particle_diameter=self.particle_diameter,
-            mass_regenerator=self.m_reg)
+            mass_regenerator=self.m_reg, rho_solid=self.material_density_kg_m3,
+            sigma_e=self.material_sigma_e_S_per_m)
 
     def cooling_capacity(self, T_cold, T_span):
         """Cooling capacity Qc (W) at a given no-load DeltaT_ad and imposed

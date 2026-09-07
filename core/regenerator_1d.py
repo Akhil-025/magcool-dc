@@ -297,6 +297,7 @@ Known limitations (stated, not hidden)
 import numpy as np
 from core.thermal import (regenerator_effectiveness, regenerator_effectiveness_parallel_plate,
                            water_properties, CP_SOLID_GD, K_SOLID_GD)
+from core.fluids import fluid_properties
 
 #  fix: bumped whenever a change to simulate_amr_1d()'s physics
 # would silently invalidate previously-cached no_load_span() results
@@ -460,9 +461,17 @@ def simulate_amr_1d(material, mu0H_max, mass_total, frequency, mdot,
                      bed_cross_section_area=0.002, T_K_for_ntu=300.0,
                      cp_solid=None, k_solid=None, T_init=None, n_substeps=None,
                      geometry="packed_bed", plate_thickness=0.00025,
-                     plate_spacing=0.0001):
+                     plate_spacing=0.0001, fluid="water"):
     """Runs the blow-by-blow simulation described in this module's own
     docstring to periodic steady state.
+
+    fluid ( addition): heat-transfer-fluid name, one of
+    core.fluids.FLUID_NAMES ("water", "water_eg10", "water_eg20",
+    "water_pg30", "ethanol"). Default "water" reproduces every existing
+    call's exact previous numeric output unchanged -- see
+    core/fluids.py's module docstring and
+    core/fluid_selection_optimization.py for why a glycol mixture is
+    the literature-realistic choice for actual hardware.
 
     geometry ( addition): "packed_bed" (default -- exactly
     reproduces every existing call's behavior, since every other new
@@ -509,7 +518,8 @@ def simulate_amr_1d(material, mu0H_max, mass_total, frequency, mdot,
     modest, at least 4: max(4, ceil(4 * mdot*tau_blow*cp_f/(m_node*cp_solid))).
     See validate_against_benchmarks() for the convergence-in-n_substeps
     check that confirms the auto default is adequate."""
-    fluid = water_properties(T_K_for_ntu)
+    fluid_name = fluid
+    fluid = fluid_properties(fluid_name, T_K_for_ntu)
     cp_f = fluid["cp"]
     cp_solid_eff = CP_SOLID_GD if cp_solid is None else cp_solid
     k_solid_eff = K_SOLID_GD if k_solid is None else k_solid
@@ -531,7 +541,7 @@ def simulate_amr_1d(material, mu0H_max, mass_total, frequency, mdot,
         ntu_result = regenerator_effectiveness_parallel_plate(
             mass_total, frequency, mdot, plate_thickness=plate_thickness,
             plate_spacing=plate_spacing, bed_cross_section_area=bed_cross_section_area,
-            T_K=T_K_for_ntu)
+            T_K=T_K_for_ntu, fluid=fluid_name)
     else:
         # Axial (node-to-node) conduction, applied once per cycle over the full
         # cycle period 1/frequency -- see _apply_axial_conduction()'s docstring
@@ -563,7 +573,7 @@ def simulate_amr_1d(material, mu0H_max, mass_total, frequency, mdot,
         ntu_result = regenerator_effectiveness(
             mass_total, frequency, mdot, particle_diameter=particle_diameter,
             porosity=porosity, bed_cross_section_area=bed_cross_section_area,
-            T_K=T_K_for_ntu, cp_solid=cp_solid)
+            T_K=T_K_for_ntu, cp_solid=cp_solid, fluid=fluid_name)
 
     cycle_period = 1.0 / frequency if frequency > 0 else 0.0
     # material.delta_T_adiabatic() expects the field strength H in A/m, not

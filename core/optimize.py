@@ -216,11 +216,27 @@ def _material_candidates(T_mid_K=T_MID_K, mu0H_max_for_tuning=2.0):
     at ITS OWN operating point rather than assuming that result still
     holds.
 
-    Returns a list of (label, material, family_name_for_cost) tuples,
+    Returns a list of (label, material, family_name_for_cost,
+    material_density_kg_m3, material_sigma_e_S_per_m) tuples,
     family_name_for_cost matching a key in
-    economics.MCM_COST_PER_KG_BY_FAMILY.
+    economics.MCM_COST_PER_KG_BY_FAMILY. material_density_kg_m3
+    ( addition) is each family's own family.density_kg_m3 (None
+    for plain Gd, which is fine -- AMRSystem/thermal.py's default IS
+    RHO_GD, Gd's own density); before this, every non-Gd candidate here
+    silently used Gd's density for its packed-bed volume regardless of
+    which family was actually being optimized -- see GradedFamily's own
+    docstring in core/cascade.py.
+
+    material_sigma_e_S_per_m ( addition) is each family's own
+    family.sigma_e_S_per_m (None for plain Gd -- AMRSystem/thermal.py's
+    default IS GD_SIGMA_E_S_PER_M, Gd's own conductivity). This path is
+    where the fix actually matters most: particle_diameter is a live
+    NSGA-III design variable here (see AMRDesignProblem._evaluate's x[6]
+    below), so the eddy-current loss channel this feeds is genuinely
+    live during optimization, unlike material_family_comparison.py's
+    fixed-particle-diameter sweep where it's dormant.
     """
-    candidates = [("Gd", GADOLINIUM, "Gd")]
+    candidates = [("Gd", GADOLINIUM, "Gd", None, None)]
     for family in (GD_FAMILY, LAFESIH_FAMILY, MNFEPSI_FAMILY, GA1XCMN3X_FAMILY,
                    MNCUCOGE_FAMILY):
         tc = _target_composition_for_peak(T_mid_K, mu0H_max_for_tuning, family)
@@ -233,16 +249,28 @@ def _material_candidates(T_mid_K=T_MID_K, mu0H_max_for_tuning=2.0):
                   "duplicate Gd row).")
             continue
         candidates.append((f"{family.name} (tuned, Tc={tc:.1f}K)",
-                            family.tuned_fn(tc), family.name))
+                            family.tuned_fn(tc), family.name, family.density_kg_m3,
+                            family.sigma_e_S_per_m))
     return candidates
 
 
 class AMRDesignProblem(ElementwiseProblem):
     def __init__(self, material=GADOLINIUM, family_name="Gd",
-                 use_geometric_magnet_mass=False):
+                 use_geometric_magnet_mass=False, material_density_kg_m3=None,
+                 material_sigma_e_S_per_m=None):
         self.material = material
         self.family_name = family_name
         self.use_geometric_magnet_mass = use_geometric_magnet_mass
+        # material_density_kg_m3 ( addition): forwarded to AMRSystem
+        # below -- see _material_candidates()'s own docstring. Default
+        # None preserves the exact previous behavior (RHO_GD fallback)
+        # for any caller that doesn't set this explicitly.
+        self.material_density_kg_m3 = material_density_kg_m3
+        # material_sigma_e_S_per_m ( addition): forwarded to AMRSystem
+        # below, same rationale as material_density_kg_m3 above -- see
+        # _material_candidates()'s own docstring. Default None preserves
+        # the exact previous behavior (GD_SIGMA_E_S_PER_M fallback).
+        self.material_sigma_e_S_per_m = material_sigma_e_S_per_m
         super().__init__(
             n_var=7, n_obj=3, n_constr=0,
             xl=_XL, xu=_XU,
@@ -255,7 +283,9 @@ class AMRDesignProblem(ElementwiseProblem):
                           loss_model=_LOSS_MODEL, use_ntu_thermal_model=USE_NTU_THERMAL_MODEL,
                           blow_fraction=blow_fraction,
                           particle_diameter=particle_diameter_mm / 1000.0,
-                          bed_cross_section_area=BED_CROSS_SECTION_AREA_M2)
+                          bed_cross_section_area=BED_CROSS_SECTION_AREA_M2,
+                          material_density_kg_m3=self.material_density_kg_m3,
+                          material_sigma_e_S_per_m=self.material_sigma_e_S_per_m)
         result = sys_.run(T_COLD_K, SPAN_K)
         f1 = -result.COP_electrical
         f2 = -result.Qc
@@ -655,7 +685,9 @@ def _write_csv(rows, path, fieldnames=None):
 
 def run_optimization_for_material(material, family_name, material_label,
                                     pop_size=40, n_gen=25, seed=1,
-                                    out_csv=None, use_geometric_magnet_mass=False):
+                                    out_csv=None, use_geometric_magnet_mass=False,
+                                    material_density_kg_m3=None,
+                                    material_sigma_e_S_per_m=None):
     """Runs NSGA-III for a single material candidate. This is the
     per-family sub-search of the "option (b)" material
     co-optimization (see module docstring item 2). `pop_size`/`n_gen` are
@@ -666,11 +698,27 @@ def run_optimization_for_material(material, family_name, material_label,
 
     `use_geometric_magnet_mass` (, default False = old behavior)
     is passed straight through to `AMRDesignProblem`/`cost_index()` --
-    see `cost_index()`'s own docstring."""
+    see `cost_index()`'s own docstring.
+
+    `material_density_kg_m3` ( addition, default None = old
+    RHO_GD-fallback behavior): passed straight through to
+    `AMRDesignProblem` -- see `_material_candidates()`'s own docstring
+    for why this now varies per family instead of always defaulting to
+    Gd's own density.
+
+    `material_sigma_e_S_per_m` ( addition, default None = old
+    GD_SIGMA_E_S_PER_M-fallback behavior): passed straight through to
+    `AMRDesignProblem` -- see `_material_candidates()`'s own docstring.
+    Unlike `material_density_kg_m3`, this one feeds a channel
+    (intragranular eddy-current loss) that's actually LIVE here, since
+    `particle_diameter_mm` is one of `AMRDesignProblem`'s own free
+    design variables (x[6])."""
     ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=6)
     algorithm = NSGA3(pop_size=pop_size, ref_dirs=ref_dirs)
     problem = AMRDesignProblem(material=material, family_name=family_name,
-                                use_geometric_magnet_mass=use_geometric_magnet_mass)
+                                use_geometric_magnet_mass=use_geometric_magnet_mass,
+                                material_density_kg_m3=material_density_kg_m3,
+                                material_sigma_e_S_per_m=material_sigma_e_S_per_m)
     res = pymoo_minimize(problem, algorithm, ("n_gen", n_gen), seed=seed, verbose=False)
 
     X, F = res.X, res.F
@@ -738,15 +786,17 @@ def run_optimization(pop_size=40, n_gen=25, seed=1,
     all_rows = []
     per_material_rows = {}
     print(f" material co-optimization: {len(candidates)} candidate(s) -- "
-          f"{', '.join(label for label, _, _ in candidates)}")
-    for label, material, family_name in candidates:
+          f"{', '.join(label for label, _, _, _, _ in candidates)}")
+    for label, material, family_name, material_density_kg_m3, material_sigma_e_S_per_m in candidates:
         safe_label = "".join(c if c.isalnum() else "_" for c in label)
         out_path = os.path.join(per_material_out_dir, f"{safe_label}.csv") \
             if per_material_out_dir else None
         rows = run_optimization_for_material(
             material, family_name, label, pop_size=pop_size, n_gen=n_gen,
             seed=seed, out_csv=out_path,
-            use_geometric_magnet_mass=use_geometric_magnet_mass)
+            use_geometric_magnet_mass=use_geometric_magnet_mass,
+            material_density_kg_m3=material_density_kg_m3,
+            material_sigma_e_S_per_m=material_sigma_e_S_per_m)
         per_material_rows[label] = rows
         all_rows.extend(rows)
         print(f"  {label:<40} {len(rows)} Pareto-optimal design(s) found"

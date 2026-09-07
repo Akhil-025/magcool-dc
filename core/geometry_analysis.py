@@ -79,35 +79,46 @@ MASS_KG = 2.0
 BED_AREA_M2 = 0.002
 MDOT_REPRESENTATIVE_KG_S = 0.08  # a fixed, representative lab-scale flow rate
                                  # (matches thermal.py's own __main__ example)
+HTF_FLUID = "water"  # ( addition) heat-transfer-fluid name passed to every
+                     # thermal.py call below, one of core.fluids.FLUID_NAMES.
+                     # Default "water" reproduces every existing result in
+                     # this module unchanged. See core/fluids.py and
+                     # core/fluid_selection_optimization.py for the
+                     # literature-grounded alternatives and comparison.
 
 
-def _augmented_cop_packed_bed(d_p, mdot=MDOT_REPRESENTATIVE_KG_S):
+def _augmented_cop_packed_bed(d_p, mdot=MDOT_REPRESENTATIVE_KG_S, fluid=HTF_FLUID):
     eps = regenerator_effectiveness(MASS_KG, FREQUENCY_HZ, mdot,
                                      particle_diameter=d_p,
-                                     bed_cross_section_area=BED_AREA_M2)["eps"]
+                                     bed_cross_section_area=BED_AREA_M2,
+                                     fluid=fluid)["eps"]
     sys_ = AMRSystem(GADOLINIUM, mu0H_max=MU0H_T, mass_regenerator=MASS_KG,
                       frequency=FREQUENCY_HZ, fluid_mdot=mdot,
                       regenerator_effectiveness=eps, use_ntu_thermal_model=False)
     res = sys_.run(T_COLD_K, SPAN_K)
     pump = pumping_power_packed_bed(mdot, particle_diameter=d_p,
                                      bed_cross_section_area=BED_AREA_M2,
-                                     mass_regenerator=MASS_KG)["P_pump_W"]
+                                     mass_regenerator=MASS_KG,
+                                     fluid=fluid)["P_pump_W"]
     W_total = res.W_mag + pump
     cop_aug = res.Qc / W_total if W_total > 0 else 0.0
     return res.Qc, cop_aug
 
 
-def _augmented_cop_parallel_plate(spacing, thickness, mdot=MDOT_REPRESENTATIVE_KG_S):
+def _augmented_cop_parallel_plate(spacing, thickness, mdot=MDOT_REPRESENTATIVE_KG_S,
+                                   fluid=HTF_FLUID):
     eps = regenerator_effectiveness_parallel_plate(
         MASS_KG, FREQUENCY_HZ, mdot, plate_thickness=thickness,
-        plate_spacing=spacing, bed_cross_section_area=BED_AREA_M2)["eps"]
+        plate_spacing=spacing, bed_cross_section_area=BED_AREA_M2,
+        fluid=fluid)["eps"]
     sys_ = AMRSystem(GADOLINIUM, mu0H_max=MU0H_T, mass_regenerator=MASS_KG,
                       frequency=FREQUENCY_HZ, fluid_mdot=mdot,
                       regenerator_effectiveness=eps, use_ntu_thermal_model=False)
     res = sys_.run(T_COLD_K, SPAN_K)
     pump = pumping_power_parallel_plate(
         mdot, plate_thickness=thickness, plate_spacing=spacing,
-        bed_cross_section_area=BED_AREA_M2, mass_regenerator=MASS_KG)["P_pump_W"]
+        bed_cross_section_area=BED_AREA_M2, mass_regenerator=MASS_KG,
+        fluid=fluid)["P_pump_W"]
     W_total = res.W_mag + pump
     cop_aug = res.Qc / W_total if W_total > 0 else 0.0
     return res.Qc, cop_aug

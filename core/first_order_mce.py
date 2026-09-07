@@ -901,6 +901,27 @@ MNFEPSI_FIRST_ORDER = FirstOrderMCEMaterial(
     # values in this module (proxy system, not even the same composition
     # axis), pending a targeted re-read of the Hanggai et al. (2026)
     # paper itself for a direct number.
+    #
+    # NEW literature note (see docs/Literature_Review.md's new "hysteresis-
+    # reducing dopant routes" entry for full citations): V-substituted
+    # (Lai et al. 2024, J. Sci. Adv. Mater. Dev. 9(1) 100660; Lai et al.,
+    # arXiv:1810.09902) and B-co-doped (Materials 10, 14 (2017)) variants
+    # of this same Fe2P-type family report thermal hysteresis down to
+    # 0.6-0.7 K, even 0.0 K (unresolvable) at higher B content -- roughly
+    # an order of magnitude below the un-doped compositions Zhang et al.
+    # tabulate above -- while KEEPING the giant MCE (|DeltaS_M| and
+    # DeltaT_ad comparable to or better than plain Gd). This 25.0 J/kg
+    # placeholder is therefore very likely a substantial OVERESTIMATE of
+    # what an optimized, doped composition could achieve. It is NOT
+    # lowered here: none of those three papers report hysteresis LOSS in
+    # J/kg (the unit this constant and amr_cycle.py's W_hys actually
+    # need) -- only thermal hysteresis WIDTH in K -- and backsolving a
+    # J/kg number from a K width without the transition's latent heat or
+    # a digitized M-H loop would be exactly the fabrication this
+    # codebase's other hysteresis_loss_J_per_kg honesty flags exist to
+    # avoid. Treat 25.0 J/kg as a conservative (pessimistic) placeholder
+    # for what a hysteresis-optimized composition in this family could
+    # realistically do, not a ceiling.
 )
 
 

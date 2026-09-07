@@ -59,7 +59,15 @@ DeltaS_M value), not a peak |DeltaS_M| in J/(kg K) at a stated field.
 Converting RCP (J/cm^3) to a peak DeltaS_M (J/(kg K)) target would need
 this specific alloy's density, which was not located either -- inventing
 one to force a calibration would replace one unsourced number with
-another. So, UNLIKE GADOLINIUM/LACAMNO3, this material's peak
+another. (This is the same "density not located" gap
+core/cascade.py's GA1XCMN3X_FAMILY.density_kg_m3 flags by leaving that
+field at its None default rather than guessing a number from the
+stoichiometric parent Mn3GaC -- a different, non-tunable, wrong-Tc
+compound for this application, see the module docstring above -- so this
+family's packed-bed volume, and hence its NTU/eps/COP numbers in
+material_family_comparison.py, still fall back to gadolinium's own
+RHO_GD density, unlike the other four families in cascade.py, which now
+have their own literature-grounded densities.) So, UNLIKE GADOLINIUM/LACAMNO3, this material's peak
 DeltaS_M/DeltaT_ad MAGNITUDE is NOT calibrated against a literature
 number -- only:
   (a) Tc and its tunable range (250.0-323.5K, four real measured

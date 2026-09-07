@@ -216,6 +216,24 @@ from scipy.optimize import nnls
 # mdot^2 pumping-term *inputs* (the A matrix) were wrong.
 # `tests/test_loss_model.py::test_core_calibration_points_are_self_consistent`
 # guards against this drifting again silently.
+#
+# FIX (Phase 37): it drifted again. `test_core_calibration_points_are_
+# self_consistent` caught all three mdot values stale a second time --
+# same failure mode as Paper-Mining Pass Part 4 above, same fix. Verified
+# directly (all three predicted Qc well below their own literature target
+# under the CURRENT cooling_capacity()):
+#   Astronautics: old mdot=0.252999 -> predicted 2048.4W, not 2502.0W (18.1% low)
+#   DTU:          old mdot=0.084666 -> predicted   26.7W, not  102.8W (74.1% low)
+#   Tusek:        old mdot=0.007351 -> predicted    1.84W, not    5.27W (65.1% low)
+# Re-recalibrated via the exact same brentq(qc_residual, 1e-6, 5.0)
+# procedure, same GADOLINIUM/T_cold=289K/mass/frequency/span inputs as
+# before (nothing about the *inputs* changed, only the cooling_capacity()
+# model's own mdot-sensitivity did, hence new mdot but stable Wp target).
+# W_parasitic_required recomputed the same way (Wp=Qc*(1/COP_lit -
+# 1/COP_ideal)) and, as with the first drift, came out matching the
+# existing hardcoded values to 2-4 decimal places for all three points --
+# COP_ideal (unlike Qc-vs-mdot) evidently did not move, so only the mdot
+# column below actually changed this pass.
 CALIBRATION_POINTS_CORE = [
     # CITATION AUDIT (, CITATION_AUDIT_PHASE30.md items 1-2):
     # Astronautics_rotary_2014 and DTU_Eriksen_rotary_Gd_2015 below were
@@ -227,7 +245,7 @@ CALIBRATION_POINTS_CORE = [
     # frequency discrepancy flag (see that point's own long comment) was
     # CONFIRMED, not newly discovered: the source paper's own text reports
     # 1.15T/0.3Hz throughout, "1.69" does not appear anywhere in it.
-    ("Astronautics_rotary_2014", 4.0, 1.44, 0.252999, 2502.0, 1133.70),
+    ("Astronautics_rotary_2014", 4.0, 1.44, 0.309029, 2502.0, 1133.70),
     # FIX (Paper-Mining Pass Part 6): replaces the fabricated/unlocated
     # "DTU_rotary_Gd_2016" point (818W, mdot=0.198062, Wp=139.79 -- these
     # numbers do not correspond to any real published operating point, see
@@ -238,10 +256,13 @@ CALIBRATION_POINTS_CORE = [
     # 2015) that calibrates cleanly under the current cooling_capacity()
     # model. mdot and Wp_required recomputed with the same brentq(
     # qc_residual, 1e-6, 5.0)/Wp=Qc*(1/COP_lit-1/COP_ideal) procedure used
-    # for every other CORE point, GADOLINIUM material, T_cold=289K:
-    #   mdot_cal = 0.084666 kg/s  ->  Qc_model = 102.8W (exact match)
-    #   COP_ideal = 14.73  ->  Wp_required = 102.8*(1/3.1 - 1/14.73) = 26.18W
-    ("DTU_Eriksen_rotary_Gd_2015", 0.75, 1.13, 0.084666, 102.8, 26.18),
+    # for every other CORE point, GADOLINIUM material, T_cold=289K.
+    # RE-CALIBRATED (Phase 37, see this array's own header comment --
+    # the 0.084666 value below predicted only 26.7W, not 102.8W, after
+    # cooling_capacity()'s mdot-sensitivity moved again):
+    #   mdot_cal = 0.326616 kg/s  ->  Qc_model = 102.8W (exact match)
+    #   COP_ideal = 14.7333  ->  Wp_required = 102.8*(1/3.1 - 1/14.7333) = 26.18W
+    ("DTU_Eriksen_rotary_Gd_2015", 0.75, 1.13, 0.326616, 102.8, 26.18),
     # Tusek: FIXED . Previously used the pre-correction field/mass/
     # frequency (1.69T, 0.196kg, 0.25Hz) as a deliberate stopgap, because the
     # corrected, paper-verified operating point (1.15T, 0.1763kg, 0.3Hz) did
@@ -258,15 +279,24 @@ CALIBRATION_POINTS_CORE = [
     # -- recomputed here via the same brentq(qc_residual, 1e-6, 5.0)/
     # Wp=Qc*(1/COP_lit-1/COP_ideal) procedure used for every other CORE
     # point, GADOLINIUM material, T_cold=289K:
-    #   mdot_cal = 0.007351 kg/s  ->  Qc_model = 5.270W (exact match)
+    #   mdot_cal = 0.007351 kg/s  ->  Qc_model = 5.270W (exact match, AT THE TIME)
     #   COP_ideal = 20.70  ->  Wp_required = 5.27*(1/5.38 - 1/20.70) = 0.725W
     # (mdot_cal=0.0074 independently cross-checked against the CSV row's own
     # note, which reports the same value to 2 sig figs from a separate
-    # computation -- good agreement.) This CORE point now uses the SAME
-    # verified field/mass/frequency as data/amr_experimental_benchmarks.csv's
-    # Tusek_singlebed_Gd_2010 row, closing the discrepancy
-    # CITATION_AUDIT_PHASE30.md flagged between this module and that CSV.
-    ("Tusek_singlebed_Gd_2010", 0.3, 1.15, 0.007351, 5.27, 0.7250),
+    # computation -- good agreement, AT THE TIME.) This CORE point now uses
+    # the SAME verified field/mass/frequency as
+    # data/amr_experimental_benchmarks.csv's Tusek_singlebed_Gd_2010 row,
+    # closing the discrepancy CITATION_AUDIT_PHASE30.md flagged between
+    # this module and that CSV.
+    # RE-CALIBRATED (Phase 37, see this array's own header comment -- the
+    # 0.007351 value above predicted only 1.84W, not 5.27W, after
+    # cooling_capacity()'s mdot-sensitivity moved again):
+    #   mdot_cal = 0.021068 kg/s  ->  Qc_model = 5.270W (exact match)
+    #   COP_ideal = 20.6997  ->  Wp_required = 5.27*(1/5.38 - 1/20.6997) = 0.7250W
+    # (COP_ideal barely moved from the prior pass's 20.70, so Wp_required
+    # is unchanged to 4 decimal places -- the CSV cross-check above is now
+    # stale re: mdot and should be treated as historical, not current.)
+    ("Tusek_singlebed_Gd_2010", 0.3, 1.15, 0.021068, 5.27, 0.7250),
 ]
 # EXTENDED: CORE + Okamura & Hirano (2013). Retained only as a
 # diagnostic comparison; not used as the default calibration.
@@ -349,12 +379,15 @@ CALIBRATION_POINTS_FURTHER_EXTENDED = CALIBRATION_POINTS_EXTENDED + [
 # back-calculated Wp=Qc*(1/COP_lit-1/COP_ideal) formula every other CORE
 # point already uses is applied instead, for an apples-to-apples fit.
 #
-# HONESTY FLAG, checked directly: the device's own DIRECTLY-MEASURED flow
-# rate (2.5 L/min, from the same thesis Table 6.2 cited above) is
-# 0.04167 kg/s -- 2.84x LARGER than this point's back-calculated
-# mdot=0.014650 kg/s. Run at the real measured flow rate instead of the
-# back-calculated one, cooling_capacity() predicts Qc=231.8W against the
-# actual measured Qc=81.5W -- a ~2.8x OVER-prediction. This means this
+# HONESTY FLAG, checked directly (numbers below UPDATED Phase 37 after
+# the mdot recalibration above -- the ~2.7x gap this flag describes
+# persisted through that re-sync, just at slightly different digits): the
+# device's own DIRECTLY-MEASURED flow rate (2.5 L/min, from the same
+# thesis Table 6.2 cited above) is 0.04167 kg/s -- 2.67x LARGER than this
+# point's back-calculated mdot=0.015606 kg/s. Run at the real measured
+# flow rate instead of the back-calculated one, cooling_capacity()
+# predicts Qc=217.6W against the actual measured Qc=81.5W -- a ~2.7x
+# OVER-prediction. This means this
 # calibration point's mdot is doing exactly what every other CORE point's
 # mdot also does (solved to reproduce the reported Qc under this model,
 # not taken from the device's real flow rate) and should not be read as
@@ -366,14 +399,23 @@ CALIBRATION_POINTS_FURTHER_EXTENDED = CALIBRATION_POINTS_EXTENDED + [
 # except Lozano's WM/frequency data used by RotaryDriveLossModel below);
 # this is simply the first point where a real measured flow rate happened
 # to be available to check against. Not treated as disqualifying -- the
-# alternative (using the real 0.04167 kg/s and accepting a ~2.8x Qc miss
+# alternative (using the real 0.04167 kg/s and accepting a ~2.7x Qc miss
 # instead of an exact match) would be a strictly worse calibration input,
 # not a more honest one -- but it is a genuine, quantified gap between
 # "this model's own effective flow dependence" and "this device's real
 # flow dependence" worth having on record for whoever next revisits how
 # mdot is calibrated in this module.
+# RE-CALIBRATED (Phase 37): mdot=0.014650 predicted only 76.5W, not 81.5W
+# (6.1% low -- outside the test's 2% tolerance), same
+# cooling_capacity()-drift as CALIBRATION_POINTS_CORE above. Re-solved via
+# the same brentq(qc_residual, 1e-6, 5.0) procedure with
+# no_load_span_override=21.04 supplied (same convention as the test):
+#   mdot_cal = 0.015606 kg/s  ->  Qc_model = 81.5W (exact match)
+#   COP_ideal = 9.6955  ->  Wp_required = 81.5*(1/3.6 - 1/9.6955) = 14.23W
+# (Wp_required unchanged to 2 decimal places -- COP_ideal, not the target
+# vector, is what stayed stable, same pattern as the CORE points.)
 CALIBRATION_POINTS_CORE_PLUS_MAGGIE_HIGHSPAN = CALIBRATION_POINTS_CORE + [
-    ("DTU_Eriksen_MAGGIE_2016", 0.61, 1.13, 0.014650, 81.5, 14.23),
+    ("DTU_Eriksen_MAGGIE_2016", 0.61, 1.13, 0.015606, 81.5, 14.23),
 ]
 
 # CORE_PLUS_TUSEK_MULTIPOINT : the SAME experiment as

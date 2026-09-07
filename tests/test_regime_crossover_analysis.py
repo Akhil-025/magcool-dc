@@ -13,7 +13,9 @@ import pytest
 
 from core.regime_crossover_analysis import (
     run_cop_crossover_search, run_emissions_crossover_check,
+    run_material_and_field_crossover_search,
     COP_SEARCH_SPANS_K, COP_SEARCH_VCC_ETA_RANGE,
+    MATERIAL_FIELD_SEARCH_SPANS_K, MATERIAL_FIELD_SEARCH_MU0H_T,
 )
 
 
@@ -86,3 +88,58 @@ def test_emissions_crossover_check_at_a_closer_cop_gap_can_still_favor_vcc():
     result = run_emissions_crossover_check(capacity_kW=0.4, amr_cop=5.0,
                                             vcc_cop=6.0, verbose=False)
     assert result["amr_wins_total_emissions"] is False
+
+
+@pytest.fixture(scope="module")
+def material_field_search_result():
+    """Expensive (~30s): each grid point costs a per-stage Curie-
+    composition root-solve. Computed once per test module and shared,
+    same discipline as e.g. test_cascade.py's heavier fixtures."""
+    return run_material_and_field_crossover_search(verbose=False)
+
+
+def test_material_field_search_covers_every_span(material_field_search_result):
+    result = material_field_search_result
+    assert "rows" in result and "any_crossover_found" in result
+    assert len(result["rows"]) == len(MATERIAL_FIELD_SEARCH_SPANS_K)
+    for row in result["rows"]:
+        for key in ("span_K", "T_cold_K", "best_AMR_COP_electrical",
+                    "best_design", "VCC_COP", "AMR_beats_VCC",
+                    "field_at_best_design_T", "field_is_at_grid_floor"):
+            assert key in row
+
+
+def test_material_field_search_finds_no_crossover_at_current_model_state(
+        material_field_search_result):
+    """Locks down this check's own headline finding: even using this
+    repo's best-ranked giant-MCE material (La(Fe,Si)13Hy per
+    material_family_comparison.py), composition-tuned Curie-graded
+    cascades, and fields up to 7T, AMR still does not beat VCC (held at a
+    realistic eta=0.42, not COP_SEARCH_VCC_ETA_RANGE's generous 0.25
+    floor). If a future change to core/cascade.py's graded-cascade logic
+    or core/nanocomposite_material.py ever flips this, that is
+    significant enough to be a deliberate, reviewed change."""
+    result = material_field_search_result
+    assert result["any_crossover_found"] is False, (
+        "A crossover was found using the best-ranked giant-MCE material "
+        "family and fields up to 7T where none existed before -- verify "
+        "this is a genuine model improvement, not a bug, before treating "
+        "it as good news.")
+    assert all(not row["AMR_beats_VCC"] for row in result["rows"])
+
+
+def test_material_field_search_never_prefers_the_highest_fields(
+        material_field_search_result):
+    """Locks down this check's own most structurally interesting finding
+    (see module docstring): the best design at every span sits at the
+    LOWEST field in the grid, because field-scaling parasitic losses
+    (eddy currents, hysteresis) in this repo's own StateDependentLossModel
+    grow at least as fast as the extra Delta_T_ad a higher field buys. If
+    a future loss-model change ever makes 5T/7T start winning, that is a
+    real physics-relevant change worth noticing, not something that
+    should flip silently."""
+    result = material_field_search_result
+    assert result["all_best_designs_at_field_grid_floor"] is True
+    lowest_field = min(MATERIAL_FIELD_SEARCH_MU0H_T)
+    for row in result["rows"]:
+        assert row["field_at_best_design_T"] == lowest_field

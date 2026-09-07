@@ -94,27 +94,50 @@ TUNABLE_FAMILIES = (GD_FAMILY, LAFESIH_FAMILY, MNFEPSI_FAMILY, NANOCOMPOSITE_FAM
 
 
 def _tuned_candidate(family, T_mid_K, mu0H_max=MU0H_MAX):
-    """Returns (material, tc_used_K, in_range: bool) for `family` tuned so
-    its own peak DeltaT_ad lands at T_mid_K. Falls back to
-    family.fallback_material (plain Gd) if the required Tc sits outside
-    the family's documented tunability window."""
+    """Returns (material, tc_used_K, in_range: bool, rho_solid, sigma_e)
+    for `family` tuned so its own peak DeltaT_ad lands at T_mid_K. Falls
+    back to family.fallback_material (plain Gd) if the required Tc sits
+    outside the family's documented tunability window.
+
+    rho_solid ( addition): the family's own solid-MCM density
+    (family.density_kg_m3), or None on fallback -- None lets
+    core.cascade.run_cascade/AMRSystem fall back to RHO_GD (correct,
+    since the fallback material IS Gd). Before this, every tunable
+    family's bed-volume calc silently reused Gd's own 7900 kg/m^3
+    density regardless of which family was actually being evaluated;
+    see GradedFamily's own docstring in core/cascade.py and
+    results/material_density_correction_analysis.txt for the
+    literature sourcing and the quantified COP/Qc impact per family.
+
+    sigma_e ( addition): the family's own solid-MCM electrical
+    conductivity (family.sigma_e_S_per_m), same fallback rule as
+    rho_solid above. This module's own run_cascade() calls never set
+    particle_diameter, so the eddy-current channel this feeds is
+    currently dormant here regardless -- included for API consistency
+    with core.optimize's single-material path, where it IS live."""
     tc = _target_composition_for_peak(T_mid_K, mu0H_max, family)
     in_range = family.tc_min <= tc <= family.tc_max
     if not in_range:
-        return family.fallback_material, tc, False
-    return family.tuned_fn(tc), tc, True
+        return family.fallback_material, tc, False, None, None
+    return family.tuned_fn(tc), tc, True, family.density_kg_m3, family.sigma_e_S_per_m
 
 
 def _eval_cascade(material, T_cold_K, span_K, mu0H_max=MU0H_MAX,
-                   mass_per_stage=MASS_PER_STAGE, stage_counts=STAGE_COUNTS):
+                   mass_per_stage=MASS_PER_STAGE, stage_counts=STAGE_COUNTS,
+                   rho_solid=None, sigma_e=None):
     """Runs core.cascade.run_cascade for each stage count -- the same
     cascade logic run_cascade_comparison() (main.py step 7) and
     giant_mce_analysis.py's single-stage AMRSystem calls both build on,
-    just applied here across all five candidates uniformly."""
+    just applied here across all five candidates uniformly.
+
+    rho_solid / sigma_e ( addition): forwarded to run_cascade --
+    see that function's own docstring. Default None preserves the exact
+    previous behavior for any caller that doesn't set these."""
     out = {}
     for n in stage_counts:
         res = run_cascade(T_cold_K, span_K, n, material=material,
-                           mu0H_max=mu0H_max, mass_per_stage=mass_per_stage)
+                           mu0H_max=mu0H_max, mass_per_stage=mass_per_stage,
+                           rho_solid=rho_solid, sigma_e=sigma_e)
         out[f"{n}stage_COP"] = round(res["COP_cascade"], 3) if res["feasible"] else None
         out[f"{n}stage_Qc_W"] = round(res["Qc_W"], 1) if res["feasible"] else None
     return out
@@ -143,13 +166,13 @@ def build_comparison_table(spans_K=SPANS_K, T_cold_K=T_COLD_K):
                      **_eval_cascade(GD5SI2GE2_FIRST_ORDER, T_cold_K, span)})
 
         for family in TUNABLE_FAMILIES:
-            material, tc_used, in_range = _tuned_candidate(family, T_mid)
+            material, tc_used, in_range, rho_solid, sigma_e = _tuned_candidate(family, T_mid)
             rows.append({
                 "candidate": f"{family.name} (tuned)", "span_K": span, "T_mid_K": round(T_mid, 1),
                 "Tc_used_K": round(tc_used, 1),
                 "tc_window": f"{family.tc_min:.1f}-{family.tc_max:.1f}K",
                 "in_range": in_range,
-                **_eval_cascade(material, T_cold_K, span),
+                **_eval_cascade(material, T_cold_K, span, rho_solid=rho_solid, sigma_e=sigma_e),
             })
     return rows
 

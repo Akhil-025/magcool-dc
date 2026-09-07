@@ -1,0 +1,29 @@
+==========================================================================================
+PHASE 22 ITEM 1: Gaussian inhomogeneous/polycrystalline Tc-broadening
+sensitivity for the mean-field Gd model (core/mce_material.py)
+==========================================================================================
+HONESTY FLAG: Tishin & Spichkin (2003) Sec. 2.8 (inhomogeneous ferromagnets)
+is this item's intended primary source per phase_plan.md. Confirmed directly
+that this project's copy is an image-only PDF (pdfplumber extracts 0
+characters from every one of its 486 pages sampled) -- same finding already
+flagged for Tishin Ch.11 in the earlier baseline_cooling.py. So Sec. 2.8's
+specific content could not be digitized; what follows is the standard
+literature treatment of Tc-distribution broadening (see this module's own
+docstring), not book content.
+
+--- Step 1: peak DeltaT_ad / FWHM vs. sigma_Tc, at Dan'kov et al.'s own three fields ---
+
+--- Step 2: does broadening narrow the field-dependent error pattern already found
+ in the pipeline's own Step 1 (core/validation.py's run_validation())? ---
+
+Worst-field |error| vs. sigma_Tc:
+ sigma_Tc= 0.0K worst-field |error|=  42.3%  <- sharp (pre-existing) model
+ sigma_Tc= 0.5K worst-field |error|=  39.2%
+ sigma_Tc= 1.0K worst-field |error|=  36.1%
+ sigma_Tc= 2.0K worst-field |error|=  30.3%
+ sigma_Tc= 3.0K worst-field |error|=  25.0%
+ sigma_Tc= 5.0K worst-field |error|=  15.6%  <- minimum
+
+At 5T, sigma_Tc=5.0K widens the DeltaT_ad(T) FWHM from 33.00K (sharp) to 47.05K.
+
+CONCLUSION: Gaussian Tc-broadening DOES narrow the worst-field |error| against Dan'kov et al.'s three points, from 42.3% (sharp model, sigma_Tc=0) to 15.6% at sigma_Tc=5.0K, driven mainly by the 1T point (+42.3% -> +15.6%). NOTE: sigma_Tc=5.0K is the LARGEST value swept here, and the 1T error is still falling monotonically with sigma at that edge ([42.3, 39.2, 36.1, 30.3, 25.0, 15.6] for sigma=[0.0, 0.5, 1.0, 2.0, 3.0, 5.0] respectively) -- so this sweep has NOT located an interior optimum, only shown the direction of the trend within a physically plausible 0-5K range; a wider sweep (and, ideally, a real digitized dTad(T) curve to fit against, which this repo does not have) would be needed before treating any specific sigma_Tc as a calibrated value rather than a sensitivity finding.

@@ -69,7 +69,7 @@ in the repository in one pass, in dependency order, so a single
         (core/optimize.py) -- OFF BY DEFAULT, pass
         --layered-material-cross-product to run it (5 material families x
         step 11f.'s own reduced settings; multiplies 11f.'s runtime ~5x)
-    12. Figure generation (35 figures) (plots.py -> results/figures/*.png, *.pdf)
+    12. Figure generation (52 figures) (plots.py -> results/figures/*.png, *.pdf)
     13. Design-recommendations synthesis (core/design_recommendations.py) --
         consolidates steps 3c/7b/8d/9b/11's already-computed results into
         one ranked, actionable "how do I raise AMR electrical COP" report
@@ -86,6 +86,21 @@ in the repository in one pass, in dependency order, so a single
         -- design-exploration/comparison tool with an illustrative,
         literature-range-anchored effectiveness-to-COP ceiling, not a
         validated feature (see that module's own honesty flags)
+    18. Working-fluid selection comparison (core/fluid_selection_optimization.py):
+        sweeps every heat-transfer fluid in core/fluids.py's FLUID_LIBRARY
+        (pure water plus three literature-grounded corrosion-inhibited
+        water/glycol mixtures, plus ethanol) through the standard AMRSystem
+        model (NTU thermal model + calibrated StateDependentLossModel +
+        geometry-explicit hydraulic pumping), re-optimizing mdot per fluid,
+        at two different operating points, to justify core.fluids.
+        DEFAULT_FLUID ("water_eg10") as the recommended REALISTIC choice
+        given that no real AMR prototype in this project's Papers/ corpus
+        actually runs pure water. ADDITIVE ONLY: writes results/
+        fluid_selection_optimization.txt and _robustness.txt; does not
+        change core.fluids.DEFAULT_FLUID nor any existing AMRSystem call
+        site's fluid default (every existing caller in this repo still
+        defaults to fluid="water" -- see core/fluids.py's own docstring
+        for why that stays a deliberate, opt-in choice).
 
 Steps 3b and 8b reproduce core/thermal.py's and core/first_order_mce.py's
 own __main__ demo blocks. Both modules are otherwise only reached
@@ -112,7 +127,7 @@ are not.
 Step 12 runs before the new step 13; step 13 depends only on already
 -computed result objects from earlier stages, not on the figures
 themselves, but runs last so its consolidated report can also mention
-the figure count. plots.py is largely self-contained -- most of its 34
+the figure count. plots.py is largely self-contained -- most of its 52
 figures call straight into core/ and recompute their own data rather
 than reading the CSVs the earlier steps write -- but three figures
 (cascade staging, Curie-graded cascade, NSGA-III Pareto front) also
@@ -334,6 +349,7 @@ from core import hysteresis_sensitivity
 from core import thermal_diode_analysis
 from core import magnet_geometry
 from core import fluid_mce_analysis
+from core import fluid_selection_optimization
 from core import passive_regenerator_analysis
 from core import beverage_cooler_validation
 from core import heat_pump_validation
@@ -345,6 +361,7 @@ from core import pue_annualized
 from core import uncertainty_propagation
 from core import pareto_multiseed_stability
 from core import water_usage
+from core import alternative_caloric_comparison
 from core import plots
 from core import design_recommendations
 
@@ -702,7 +719,7 @@ def run_full_system_cost_by_material():
     cost, independent of the NSGA-III search's own field/frequency/flow/
     geometry choices" sanity check alongside step 11's full multi-
     objective search."""
-    for label, _material, family_name in optimize_module._material_candidates():
+    for label, _material, family_name, _density, _sigma_e in optimize_module._material_candidates():
         r = economics.full_system_cost_estimate(2.0, 5.0, family_name=family_name)
         logger.info(f"  {label:<40} materials BOM=${r['materials_bom_total_$']:>8,.0f}   "
                     f"full-system estimate=${r['full_system_cost_estimate_$']:>10,.0f}")
@@ -1061,16 +1078,22 @@ def run_eddy_and_pump_efficiency_demo():
 
 
 def run_plot_generation(precomputed=None):
-    """Step 12: renders all 35 figures in plots.py (results/figures/*.png
+    """Step 12: renders all 52 figures in plots.py (results/figures/*.png
     and *.pdf) covering material validation, AMR characteristic curves,
     thermal/geometry modelling, loss-model calibration, system/curve
     validation, cascade and Curie-graded staging, Sobol sensitivity, RSM
-    surrogate fitting, NSGA-III optimization, economics, emissions, and
+    surrogate fitting, NSGA-III optimization, economics, emissions,
     (figs 27-34) the earlier sensitivity studies: Tc-broadening,
     nanocomposite off-design robustness, thermal-diode actuation cost,
     magnetocaloric-fluid volume fraction, passive-regenerator alignment,
     rotary-device cycle-type validation, hysteresis-loss and
-    magnet-geometry Pareto-front sensitivity.
+    magnet-geometry Pareto-front sensitivity, and (figs 46-52) the last
+    round of previously-unplotted analysis modules: cross-technology
+    caloric comparison vs. VCC, annual water-usage/WUE comparison, Monte
+    Carlo calibration-uncertainty band on COP_electrical, NSGA-III
+    Pareto-front seed-to-seed stability, the regime-crossover null
+    result, the Ames Lab heat-pump architecture check, and the Hypereg
+    parallel-hydraulic pumping-power sensitivity.
     Most figures still compute their own data directly from core/, but the
     eleven figures that duplicate an earlier stage's computation exactly
     (fig08 baseline sweep, fig14 system validation, fig16 Sobol, fig18
@@ -1403,8 +1426,12 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
          "technology quality using this repo's own already-tested functions, "
          "for ANY region where this repo's own model shows AMR beating "
          "vapor-compression -- on COP, and (separately) on total emissions "
-         "after eliminating refrigerant entirely. HONEST NULL RESULT: none "
-         "found in either check, matching (not contradicting) what every "
+         "after eliminating refrigerant entirely. A third check closes the "
+         "first check's own blind spot: fixed Gd only, fields to 3T -- the "
+         "third check instead uses this repo's best-ranked giant-MCE "
+         "material (La(Fe,Si)13Hy), composition-tuned Curie-graded "
+         "cascades, and fields to 7T. HONEST NULL RESULT: none found in "
+         "any of the three checks, matching (not contradicting) what every "
          "real-world source checked in steps 15b/15c above independently "
          "reports about itself. See that module's own top-level docstring "
          "for why this null result is itself the useful, reportable finding.",
@@ -1419,6 +1446,27 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
          "(core/water_usage.py) -- each writes its own results/ file, "
          "additive-only, does not change any existing stage's output",
          None),  # handled specially below, uses representative_row from step 4
+        ("17. Alternative solid-state caloric technologies vs. VCC "
+         "(core/alternative_caloric_comparison.py): does ANY caloric cooling "
+         "technology -- not just this repo's own magnetocaloric/AMR model -- "
+         "beat vapor-compression, using published elastocaloric, "
+         "barocaloric, AND electrocaloric literature figures (Torello 2020, "
+         "Li 2023 + 2025 erratum, Meng 2020) plus this repo's own "
+         "literature-calibrated physics models for all three, checked against "
+         "step 4's own VCC COP numbers from comparison_table.csv. Additive-"
+         "only, writes results/alternative_caloric_vs_vcc.txt, does not "
+         "change any existing stage's output",
+         None),  # handled specially below, reads results/comparison_table.csv
+                 # written by step 4 (must run after it)
+        ("18. Working-fluid selection comparison (core/fluid_selection_optimization.py): "
+         "sweeps every heat-transfer fluid in core/fluids.py's FLUID_LIBRARY through the "
+         "standard AMRSystem model (NTU thermal + calibrated loss model + geometry-explicit "
+         "pumping), re-optimizing mdot per fluid, at two operating points, to justify "
+         "core.fluids.DEFAULT_FLUID as the recommended REALISTIC choice. Additive-only, "
+         "writes results/fluid_selection_optimization.txt and _robustness.txt; does not "
+         "change core.fluids.DEFAULT_FLUID or any existing AMRSystem call site's fluid "
+         "default (every existing caller still defaults to fluid=\"water\")",
+         None),  # handled specially below, result (fluid_selection_result) captured
     ]
 
     if quick:
@@ -1471,6 +1519,7 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
     magnet_geometry_result = None
     magnet_geometry_multiseed_result = None
     fluid_mce_result = None
+    fluid_selection_result = None
     passive_regen_result = None
     cycle_type_result = None
     thermal_diode_rows = None
@@ -1614,8 +1663,15 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
                     regime_crossover_analysis.run_cop_crossover_search()
                     print()
                     regime_crossover_analysis.run_emissions_crossover_check()
+                    print()
+                    regime_crossover_analysis.run_material_and_field_crossover_search()
                 elif name.startswith("16."):
                     _run_paper_strengthening_additions(representative_row)
+                elif name.startswith("17."):
+                    alternative_caloric_comparison.run_full_alternative_caloric_analysis(
+                        out_path="results/alternative_caloric_vs_vcc.txt")
+                elif name.startswith("18."):
+                    fluid_selection_result = fluid_selection_optimization.run_fluid_selection_comparison()
                 else:
                     fn()
         except Exception:
@@ -1657,7 +1713,9 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
                      "fluid_mce_analysis.txt, "
                      "passive_regenerator_analysis.txt, "
                      "geometry_optimization_analysis.txt, graded_cascade_comparison.csv, "
-                     "design_recommendations.txt, figures/*.png+*.pdf (35 figures)")
+                     "design_recommendations.txt, figures/*.png+*.pdf (35 figures), "
+                     "alternative_caloric_vs_vcc.txt, fluid_selection_optimization.txt, "
+                     "fluid_selection_optimization_robustness.txt")
     logger.info(f"Full run log: {LOG_FILE}")
 
     _print_executive_summary(representative_row, cascade_rows_gd, graded_rows,
@@ -1666,7 +1724,8 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
                               magnet_geometry_result, fluid_mce_result,
                               passive_regen_result, failures, curie_shift_v2_result,
                               astronautics_giguere_result, layered_pareto_rows,
-                              magnet_geometry_multiseed_result, layered_cross_product_rows)
+                              magnet_geometry_multiseed_result, layered_cross_product_rows,
+                              fluid_selection_result)
 
 
 def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, material_rows,
@@ -1674,7 +1733,8 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
                               hysteresis_result, magnet_geometry_result, fluid_mce_result,
                               passive_regen_result, failures, curie_shift_v2_result, 
                               astronautics_giguere_result, layered_pareto_rows, 
-                              magnet_geometry_multiseed_result, layered_cross_product_rows):
+                              magnet_geometry_multiseed_result, layered_cross_product_rows,
+                              fluid_selection_result=None):
     """Final, well-structured overview of every implemented analysis and
     its headline metric, printed once at the very end of the run so a
     reader does not have to scroll back through 13 stages of log output
@@ -1960,6 +2020,28 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
                     "anchored ceiling, not a fitted or digitized coefficient -- see that "
                     "that module's honesty flag before treating this as a validated "
                     "device-level COP prediction")
+    else:
+        logger.info("  - unavailable (stage failed or was skipped)")
+
+    logger.info("Working-fluid selection comparison (step 18)")
+    if fluid_selection_result and _ok("18."):
+        best = fluid_selection_result["best_realistic_fluid"]
+        pct = fluid_selection_result["best_realistic_pct_below_water_baseline"]
+        matches = fluid_selection_result["default_matches_best_realistic"]
+        logger.info(f"  - Recommended realistic fluid: '{best}' (gives up {pct:.1f}% "
+                    f"COP_electrical vs. the unrealistic pure-water ceiling at the baseline "
+                    f"operating point) -- {'matches' if matches else 'DOES NOT MATCH'} "
+                    f"core.fluids.DEFAULT_FLUID={fluid_selection_result['default_fluid']!r} "
+                    "(results/fluid_selection_optimization.txt, "
+                    "results/fluid_selection_optimization_robustness.txt)")
+        logger.info(f"  - Ranking identical at both operating points: "
+                    f"{fluid_selection_result['same_ranking']}. No real AMR prototype in "
+                    "this project's Papers/ corpus runs pure water (Gd corrodes in it) -- "
+                    "pure water's own #1 ranking here is not a usable recommendation, only "
+                    "a reference ceiling; see core/fluids.py's module docstring. Every "
+                    "existing AMRSystem call site in this repo still defaults to "
+                    "fluid=\"water\" -- this step is a comparison/recommendation only, not "
+                    "a default change (opt-in: pass fluid=core.fluids.DEFAULT_FLUID).")
     else:
         logger.info("  - unavailable (stage failed or was skipped)")
 

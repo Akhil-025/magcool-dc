@@ -294,8 +294,16 @@ def test_maggie_point_mdot_is_back_calculated_not_measured():
     smaller than the device's own directly-measured flow rate (2.5 L/min
     -> 0.04167 kg/s, Eriksen 2016 PhD thesis Table 6.2). If this ever
     stops being true (e.g. the point is re-derived some other way), the
-    honesty flag describing a ~2.8x gap needs to be revisited too."""
+    honesty flag describing the gap needs to be revisited too.
+
+    UPDATED (Phase 37): the mdot recalibration described in
+    CALIBRATION_POINTS_CORE_PLUS_MAGGIE_HIGHSPAN's own header comment
+    moved this point's back-calculated mdot from 0.014650 to 0.015606
+    kg/s, which moved this ratio from ~2.84x to ~2.67x -- still the same
+    qualitative gap (real flow rate several-fold larger than the
+    back-calculated one), just at updated digits. This test's expected
+    value was updated alongside that recalibration, not independently."""
     _name, _f, _H, mdot_backcalc, _Qc, _Wp = CALIBRATION_POINTS_CORE_PLUS_MAGGIE_HIGHSPAN[-1]
     mdot_measured = 2.5e-3 / 60.0 * 1000.0  # 2.5 L/min of water -> kg/s
     ratio = mdot_measured / mdot_backcalc
-    assert ratio == pytest.approx(2.84, rel=0.05)
+    assert ratio == pytest.approx(2.67, rel=0.05)

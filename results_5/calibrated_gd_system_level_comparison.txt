@@ -1,0 +1,16 @@
+====================================================================================================
+SYSTEM-LEVEL IMPACT OF THE GD PHYSICS FIX (GADOLINIUM vs. GADOLINIUM_CALIBRATED)
+Same calibrated mdot (fit against plain GADOLINIUM) fed into both materials --
+isolates the DIFFERENCE the physics fix makes at the system (COP/Qc) level.
+====================================================================================================
+
+  Tusek_singlebed_Gd_2010          COP:  1.263 ->  0.000 (-100.0%)   Qc:    5.28W ->    0.00W (-100.0%)
+  Okamura_Hirano_2013              COP:  3.831 ->  3.807 ( -0.6%)   Qc:  200.01W ->  198.28W ( -0.9%)
+  Lozano_POLO_UFSC_2016_r6         COP:  0.629 ->  0.532 (-15.4%)   Qc:   81.20W ->   68.17W (-16.0%)
+  Lozano_POLO_UFSC_2016_r7         COP:  0.856 ->  0.871 ( +1.7%)   Qc:   80.96W ->   82.45W ( +1.8%)
+  Lozano_POLO_UFSC_2016_r8         COP:  0.920 ->  0.936 ( +1.7%)   Qc:  120.37W ->  122.59W ( +1.8%)
+  DTU_Eriksen_rotary_Gd_2015       COP:  3.078 ->  0.000 (-100.0%)   Qc:  102.80W ->    0.00W (-100.0%)
+----------------------------------------------------------------------------------------------------
+Mean |COP shift| across 6 checked device(s): 36.6% (this average is dominated by outliers -- see next line).
+IMPORTANT, NOT JUST A SMALL ACCURACY SHIFT: 2/6 device(s) (Tusek_singlebed_Gd_2010, DTU_Eriksen_rotary_Gd_2015) go from a real, positive Qc under plain GADOLINIUM to a HARD ZERO under GADOLINIUM_CALIBRATED at the SAME mdot/span/field -- the grain-Tc broadening pushes the structural feasibility margin (2*dTad_noload - span, core/amr_cycle.py's cooling_capacity()) negative at these operating points, where plain GADOLINIUM's sharper (unbroadened) peak kept it just barely positive. This is real, concrete evidence -- not just the performance-cost argument above -- for why GADOLINIUM_CALIBRATED is NOT swapped in as the system-wide default: doing so would silently turn currently-working design points into 'infeasible', for reasons unrelated to any actual physical infeasibility of those devices (they demonstrably work -- that's why they're in this benchmark set).
+CONCLUSION: this is the measured cost of NOT wiring GADOLINIUM_CALIBRATED into core/amr_cycle.py's system-level default -- read it before deciding whether the ~6-19x per-call performance cost AND the feasibility-zeroing risk above (see this function's own docstring) are worth accepting for your use case. The current default (plain GADOLINIUM system-wide, GADOLINIUM_CALIBRATED only in run_validation()'s material-level report) is deliberate, not an oversight.

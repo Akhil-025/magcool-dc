@@ -1,0 +1,27 @@
+Quadratic RSM surrogate for AMR cooling capacity Qc (W)
+Design variables: ['mu0H_max_T', 'frequency_Hz', 'fluid_mdot_kgs', 'regen_eff', 'span_K']
+Bounds: [[1.0, 3.0], [0.5, 5.0], [0.02, 0.2], [0.6, 0.95], [3.0, 18.0]]
+Train samples: 300, Held-out test samples: 100
+Held-out R^2 = 0.8564, RMSE = 365.44 W
+
+intercept                     121.090602
+mu0H_max_T                   -811.531999
+frequency_Hz                 -63.947682
+fluid_mdot_kgs               -4637.107578
+regen_eff                    -3375.303235
+span_K                        452.193527
+mu0H_max_T^2                 -4.440645
+frequency_Hz^2               -16.529451
+fluid_mdot_kgs^2              4435.866371
+regen_eff^2                   871.757050
+span_K^2                     -14.776693
+mu0H_max_T*frequency_Hz       26.449062
+mu0H_max_T*fluid_mdot_kgs     7895.872753
+mu0H_max_T*regen_eff          1304.861200
+mu0H_max_T*span_K            -26.430760
+frequency_Hz*fluid_mdot_kgs   122.919201
+frequency_Hz*regen_eff        169.425625
+frequency_Hz*span_K          -2.475135
+fluid_mdot_kgs*regen_eff      10931.676114
+fluid_mdot_kgs*span_K        -1106.174084
+regen_eff*span_K             -92.819082
