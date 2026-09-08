@@ -101,6 +101,22 @@ in the repository in one pass, in dependency order, so a single
         site's fluid default (every existing caller in this repo still
         defaults to fluid="water" -- see core/fluids.py's own docstring
         for why that stays a deliberate, opt-in choice).
+    19. Hybrid solid-state magnetic regenerator (HMR) vs. VCC
+        (core/hybrid_solid_state_regenerator.py): a NEW research direction,
+        distinct from material blending -- Lin et al., Innovation (Camb)
+        5(4):100645 (2024) replaces the heat-transfer fluid this repo's
+        entire AMRSystem/loss_model.py stack assumes with alternating
+        solid HTCM/MCM slices, removing pumping/dead-volume losses
+        entirely (replaced by a different parasitic channel, inter-layer
+        friction, which the module also models). Evaluated at this
+        repo's own representative operating point. ADDITIVE ONLY: writes
+        results/hybrid_solid_state_regenerator.txt only; does not change
+        any other stage's numbers. See that module's own printed
+        APPLES-TO-ORANGES warning -- the source paper's own COP excludes
+        drive-motor/magnet-system overhead, so its HMR/VCC ratio is an
+        upper bound, not an apples-to-apples electrical-COP figure, and
+        the source is a single 2024 conceptual/FEA paper, not a built
+        full-scale prototype.
 
 Steps 3b and 8b reproduce core/thermal.py's and core/first_order_mce.py's
 own __main__ demo blocks. Both modules are otherwise only reached
@@ -362,6 +378,7 @@ from core import uncertainty_propagation
 from core import pareto_multiseed_stability
 from core import water_usage
 from core import alternative_caloric_comparison
+from core import hybrid_solid_state_regenerator
 from core import plots
 from core import design_recommendations
 
@@ -1467,6 +1484,23 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
          "change core.fluids.DEFAULT_FLUID or any existing AMRSystem call site's fluid "
          "default (every existing caller still defaults to fluid=\"water\")",
          None),  # handled specially below, result (fluid_selection_result) captured
+        ("19. Hybrid solid-state magnetic regenerator (HMR) vs. VCC "
+         "(core/hybrid_solid_state_regenerator.py): a NEW, different-from-blending "
+         "research direction -- Lin et al., Innovation (Camb) 5(4):100645 (2024), "
+         "replaces the heat-transfer FLUID this repo's entire AMRSystem/loss_model.py "
+         "stack assumes with alternating solid HTCM/MCM slices, removing pumping/"
+         "dead-volume losses entirely (a different parasitic channel -- inter-layer "
+         "friction -- takes their place). Evaluated at this repo's own representative "
+         "operating point (T_cold=291.15K, span=REPRESENTATIVE_SPAN_K, same point step "
+         "4's own representative_row is drawn from). ADDITIVE ONLY: reads "
+         "representative_row's own (T_cold, span) basis but does not read or write any "
+         "other stage's numbers; writes results/hybrid_solid_state_regenerator.txt only. "
+         "See that module's own printed APPLES-TO-ORANGES warning before citing its "
+         "HMR/VCC ratio -- the source paper's own COP is magnetic-cycle-work only (no "
+         "drive-motor/magnet-system electrical overhead), so this is an upper-bound, "
+         "not an apples-to-apples electrical-COP comparison, and the source is a single "
+         "2024 conceptual/FEA paper, not yet a built full-scale prototype.",
+         None),  # handled specially below, result (hmr_result) captured
     ]
 
     if quick:
@@ -1520,6 +1554,7 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
     magnet_geometry_multiseed_result = None
     fluid_mce_result = None
     fluid_selection_result = None
+    hmr_result = None
     passive_regen_result = None
     cycle_type_result = None
     thermal_diode_rows = None
@@ -1672,6 +1707,14 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
                         out_path="results/alternative_caloric_vs_vcc.txt")
                 elif name.startswith("18."):
                     fluid_selection_result = fluid_selection_optimization.run_fluid_selection_comparison()
+                elif name.startswith("19."):
+                    if representative_row is not None:
+                        hmr_result = hybrid_solid_state_regenerator.compare_to_vcc(
+                            273.15 + 18.0, REPRESENTATIVE_SPAN_K,
+                            out_path="results/hybrid_solid_state_regenerator.txt")
+                    else:
+                        logger.warning("19.: skipped -- representative_row unavailable "
+                                        "(step 4 failed/skipped), nothing to compare against.")
                 else:
                     fn()
         except Exception:
@@ -1715,7 +1758,8 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
                      "geometry_optimization_analysis.txt, graded_cascade_comparison.csv, "
                      "design_recommendations.txt, figures/*.png+*.pdf (35 figures), "
                      "alternative_caloric_vs_vcc.txt, fluid_selection_optimization.txt, "
-                     "fluid_selection_optimization_robustness.txt")
+                     "fluid_selection_optimization_robustness.txt, "
+                     "hybrid_solid_state_regenerator.txt")
     logger.info(f"Full run log: {LOG_FILE}")
 
     _print_executive_summary(representative_row, cascade_rows_gd, graded_rows,
@@ -1725,7 +1769,7 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
                               passive_regen_result, failures, curie_shift_v2_result,
                               astronautics_giguere_result, layered_pareto_rows,
                               magnet_geometry_multiseed_result, layered_cross_product_rows,
-                              fluid_selection_result)
+                              fluid_selection_result, hmr_result)
 
 
 def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, material_rows,
@@ -1734,7 +1778,7 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
                               passive_regen_result, failures, curie_shift_v2_result, 
                               astronautics_giguere_result, layered_pareto_rows, 
                               magnet_geometry_multiseed_result, layered_cross_product_rows,
-                              fluid_selection_result=None):
+                              fluid_selection_result=None, hmr_result=None):
     """Final, well-structured overview of every implemented analysis and
     its headline metric, printed once at the very end of the run so a
     reader does not have to scroll back through 13 stages of log output
@@ -2042,6 +2086,24 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
                     "existing AMRSystem call site in this repo still defaults to "
                     "fluid=\"water\" -- this step is a comparison/recommendation only, not "
                     "a default change (opt-in: pass fluid=core.fluids.DEFAULT_FLUID).")
+    else:
+        logger.info("  - unavailable (stage failed or was skipped)")
+
+    logger.info("Hybrid solid-state magnetic regenerator (HMR) vs. VCC (step 19, NEW "
+                "research direction)")
+    if hmr_result and _ok("19."):
+        best_row = max(hmr_result["rows"], key=lambda r: r["COP_HMR"])
+        logger.info(f"  - Best reported operating point: {best_row['frequency_Hz']:.1f} Hz, "
+                    f"COP_HMR(ideal)={best_row['COP_HMR']:.2f} vs. this repo's VCC electrical "
+                    f"COP={best_row['COP_VCC']:.2f} -- ratio {best_row['HMR_over_VCC']:.2f}x "
+                    "(results/hybrid_solid_state_regenerator.txt)")
+        logger.info("  - Lin et al., Innovation (Camb) 5(4):100645 (2024), Gd/Cu, Ns=24, "
+                     "Uf=1.0. NOT an apples-to-apples electrical-COP comparison -- the "
+                     "source paper's own COP excludes drive-motor/magnet-system overhead, "
+                     "so this ratio is an UPPER BOUND, not evidence the real-world gap is "
+                     "closed. Single 2024 conceptual/FEA paper, not a built prototype -- "
+                     "see the results file's own printed APPLES-TO-ORANGES warning before "
+                     "citing this number elsewhere.")
     else:
         logger.info("  - unavailable (stage failed or was skipped)")
 

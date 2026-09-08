@@ -1,0 +1,125 @@
+
+--- NSGA-III seed=1 ---
+_material_candidates: (Mn,Fe)2(P,Si) needs Tc=283.5K to hit T_mid=296.0K, outside its documented window [295.3, 331.2]K -- dropped from this operating point's candidate set (not substituted with a duplicate Gd row).
+_material_candidates: Mn1-xCuxCoGe needs Tc=290.3K to hit T_mid=296.0K, outside its documented window [291.0, 316.0]K -- dropped from this operating point's candidate set (not substituted with a duplicate Gd row).
+ material co-optimization: 4 candidate(s) -- Gd, Gd5(SixGe1-x)4(-Ga) (tuned, Tc=285.3K), La(Fe,Si)13Hy (tuned, Tc=285.3K), Ga1-xCMn3+x (tuned, Tc=295.5K)
+WARNING: pop_size=20 is less than the number of reference directions ref_dirs=28.
+This might cause unwanted behavior of the algorithm. 
+Please make sure pop_size is equal or larger than the number of reference directions. 
+  Gd                                       12 Pareto-optimal design(s) found
+WARNING: pop_size=20 is less than the number of reference directions ref_dirs=28.
+This might cause unwanted behavior of the algorithm. 
+Please make sure pop_size is equal or larger than the number of reference directions. 
+  Gd5(SixGe1-x)4(-Ga) (tuned, Tc=285.3K)   16 Pareto-optimal design(s) found
+WARNING: pop_size=20 is less than the number of reference directions ref_dirs=28.
+This might cause unwanted behavior of the algorithm. 
+Please make sure pop_size is equal or larger than the number of reference directions. 
+  La(Fe,Si)13Hy (tuned, Tc=285.3K)         12 Pareto-optimal design(s) found
+WARNING: pop_size=20 is less than the number of reference directions ref_dirs=28.
+This might cause unwanted behavior of the algorithm. 
+Please make sure pop_size is equal or larger than the number of reference directions. 
+  Ga1-xCMn3+x (tuned, Tc=295.5K)           1 Pareto-optimal design(s) found
+
+Merged across 4 material candidate(s): 41 total designs -> 17 globally non-dominated design(s) after cross-material Pareto filtering.
+Wrote results/pareto_front_seed1.csv
+
+Best electrical COP      material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=1.601T f=0.343Hz mdot=0.4536kg/s mass=2.0kg d_p=0.3577mm bf=0.421  -> COP_elec=10.49, Qc=25412.5W, cost=$1846.4
+Best cooling capacity    material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=1.561T f=1.26Hz mdot=0.4908kg/s mass=14.46kg d_p=0.5899mm bf=0.42  -> COP_elec=9.954, Qc=36816.13W, cost=$13039.0
+Lowest cost              material=Ga1-xCMn3+x (tuned, Tc=295.5K) H=1.018T f=2.359Hz mdot=0.2642kg/s mass=1.12kg d_p=1.3434mm bf=0.154  -> COP_elec=0.0, Qc=0.0W, cost=$673.5
+Knee point (balanced)    material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=1.516T f=2.494Hz mdot=0.4969kg/s mass=3.13kg d_p=0.3534mm bf=0.42  -> COP_elec=9.21, Qc=33130.97W, cost=$2740.8
+
+Material representation in the merged, globally non-dominated front:
+  La(Fe,Si)13Hy (tuned, Tc=285.3K)         12 design(s) (71%)
+  Gd5(SixGe1-x)4(-Ga) (tuned, Tc=285.3K)   3 design(s) (18%)
+  Gd                                       1 design(s) (6%)
+  Ga1-xCMn3+x (tuned, Tc=295.5K)           1 design(s) (6%)
+
+particle_diameter spans 0.351-1.389 mm across the merged front -- the geometry-explicit pumping-power/effectiveness trade-off (see core/geometry_analysis.py, core/amr_cycle.py's wiring) is a real, active dimension of this search, not degenerate at either bound.
+Regenerator mass spans 1.12-14.46 kg across the merged front. The NTU thermal model captures the expected trade-off between additional regenerator material, cooling capacity, and material cost.
+
+--- NSGA-III seed=2 ---
+_material_candidates: (Mn,Fe)2(P,Si) needs Tc=283.5K to hit T_mid=296.0K, outside its documented window [295.3, 331.2]K -- dropped from this operating point's candidate set (not substituted with a duplicate Gd row).
+_material_candidates: Mn1-xCuxCoGe needs Tc=290.3K to hit T_mid=296.0K, outside its documented window [291.0, 316.0]K -- dropped from this operating point's candidate set (not substituted with a duplicate Gd row).
+ material co-optimization: 4 candidate(s) -- Gd, Gd5(SixGe1-x)4(-Ga) (tuned, Tc=285.3K), La(Fe,Si)13Hy (tuned, Tc=285.3K), Ga1-xCMn3+x (tuned, Tc=295.5K)
+WARNING: pop_size=20 is less than the number of reference directions ref_dirs=28.
+This might cause unwanted behavior of the algorithm. 
+Please make sure pop_size is equal or larger than the number of reference directions. 
+  Gd                                       15 Pareto-optimal design(s) found
+WARNING: pop_size=20 is less than the number of reference directions ref_dirs=28.
+This might cause unwanted behavior of the algorithm. 
+Please make sure pop_size is equal or larger than the number of reference directions. 
+  Gd5(SixGe1-x)4(-Ga) (tuned, Tc=285.3K)   14 Pareto-optimal design(s) found
+WARNING: pop_size=20 is less than the number of reference directions ref_dirs=28.
+This might cause unwanted behavior of the algorithm. 
+Please make sure pop_size is equal or larger than the number of reference directions. 
+  La(Fe,Si)13Hy (tuned, Tc=285.3K)         11 Pareto-optimal design(s) found
+WARNING: pop_size=20 is less than the number of reference directions ref_dirs=28.
+This might cause unwanted behavior of the algorithm. 
+Please make sure pop_size is equal or larger than the number of reference directions. 
+  Ga1-xCMn3+x (tuned, Tc=295.5K)           1 Pareto-optimal design(s) found
+
+Merged across 4 material candidate(s): 41 total designs -> 14 globally non-dominated design(s) after cross-material Pareto filtering.
+Wrote results/pareto_front_seed2.csv
+
+Best electrical COP      material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=2.527T f=0.384Hz mdot=0.4244kg/s mass=1.29kg d_p=0.3848mm bf=0.424  -> COP_elec=10.425, Qc=24073.67W, cost=$1871.0
+Best cooling capacity    material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=2.06T f=4.698Hz mdot=0.4846kg/s mass=9.69kg d_p=0.4647mm bf=0.425  -> COP_elec=5.529, Qc=38479.17W, cost=$11503.6
+Lowest cost              material=Ga1-xCMn3+x (tuned, Tc=295.5K) H=1.015T f=1.782Hz mdot=0.116kg/s mass=1.03kg d_p=0.2486mm bf=0.296  -> COP_elec=0.0, Qc=0.0W, cost=$621.3
+Knee point (balanced)    material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=1.1T f=1.641Hz mdot=0.4979kg/s mass=4.49kg d_p=0.3937mm bf=0.424  -> COP_elec=10.136, Qc=32428.56W, cost=$2863.4
+
+Material representation in the merged, globally non-dominated front:
+  La(Fe,Si)13Hy (tuned, Tc=285.3K)         11 design(s) (79%)
+  Gd5(SixGe1-x)4(-Ga) (tuned, Tc=285.3K)   2 design(s) (14%)
+  Ga1-xCMn3+x (tuned, Tc=295.5K)           1 design(s) (7%)
+
+particle_diameter spans 0.249-1.269 mm across the merged front -- the geometry-explicit pumping-power/effectiveness trade-off (see core/geometry_analysis.py, core/amr_cycle.py's wiring) is a real, active dimension of this search, not degenerate at either bound.
+Regenerator mass spans 1.03-9.69 kg across the merged front. The NTU thermal model captures the expected trade-off between additional regenerator material, cooling capacity, and material cost.
+
+--- NSGA-III seed=3 ---
+_material_candidates: (Mn,Fe)2(P,Si) needs Tc=283.5K to hit T_mid=296.0K, outside its documented window [295.3, 331.2]K -- dropped from this operating point's candidate set (not substituted with a duplicate Gd row).
+_material_candidates: Mn1-xCuxCoGe needs Tc=290.3K to hit T_mid=296.0K, outside its documented window [291.0, 316.0]K -- dropped from this operating point's candidate set (not substituted with a duplicate Gd row).
+ material co-optimization: 4 candidate(s) -- Gd, Gd5(SixGe1-x)4(-Ga) (tuned, Tc=285.3K), La(Fe,Si)13Hy (tuned, Tc=285.3K), Ga1-xCMn3+x (tuned, Tc=295.5K)
+WARNING: pop_size=20 is less than the number of reference directions ref_dirs=28.
+This might cause unwanted behavior of the algorithm. 
+Please make sure pop_size is equal or larger than the number of reference directions. 
+  Gd                                       17 Pareto-optimal design(s) found
+WARNING: pop_size=20 is less than the number of reference directions ref_dirs=28.
+This might cause unwanted behavior of the algorithm. 
+Please make sure pop_size is equal or larger than the number of reference directions. 
+  Gd5(SixGe1-x)4(-Ga) (tuned, Tc=285.3K)   12 Pareto-optimal design(s) found
+WARNING: pop_size=20 is less than the number of reference directions ref_dirs=28.
+This might cause unwanted behavior of the algorithm. 
+Please make sure pop_size is equal or larger than the number of reference directions. 
+  La(Fe,Si)13Hy (tuned, Tc=285.3K)         13 Pareto-optimal design(s) found
+WARNING: pop_size=20 is less than the number of reference directions ref_dirs=28.
+This might cause unwanted behavior of the algorithm. 
+Please make sure pop_size is equal or larger than the number of reference directions. 
+  Ga1-xCMn3+x (tuned, Tc=295.5K)           1 Pareto-optimal design(s) found
+
+Merged across 4 material candidate(s): 43 total designs -> 14 globally non-dominated design(s) after cross-material Pareto filtering.
+Wrote results/pareto_front_seed3.csv
+
+Best electrical COP      material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=1.047T f=0.739Hz mdot=0.4322kg/s mass=6.6kg d_p=1.3563mm bf=0.393  -> COP_elec=10.325, Qc=25286.25W, cost=$4005.3
+Best cooling capacity    material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=1.066T f=4.298Hz mdot=0.4877kg/s mass=4.86kg d_p=0.2514mm bf=0.391  -> COP_elec=8.463, Qc=35872.19W, cost=$3004.3
+Lowest cost              material=Ga1-xCMn3+x (tuned, Tc=295.5K) H=1.006T f=3.892Hz mdot=0.212kg/s mass=1.04kg d_p=0.723mm bf=0.509  -> COP_elec=0.0, Qc=0.0W, cost=$622.8
+Knee point (balanced)    material=La(Fe,Si)13Hy (tuned, Tc=285.3K) H=1.025T f=4.75Hz mdot=0.4705kg/s mass=2.12kg d_p=1.398mm bf=0.399  -> COP_elec=8.255, Qc=29703.39W, cost=$1263.4
+
+Material representation in the merged, globally non-dominated front:
+  La(Fe,Si)13Hy (tuned, Tc=285.3K)         13 design(s) (93%)
+  Ga1-xCMn3+x (tuned, Tc=295.5K)           1 design(s) (7%)
+
+particle_diameter spans 0.148-1.878 mm across the merged front -- the geometry-explicit pumping-power/effectiveness trade-off (see core/geometry_analysis.py, core/amr_cycle.py's wiring) is a real, active dimension of this search, not degenerate at either bound.
+Regenerator mass spans 1.04-7.29 kg across the merged front. The NTU thermal model captures the expected trade-off between additional regenerator material, cooling capacity, and material cost.
+
+=== Multiseed stability summary (3 seeds) ===
+best COP_electrical: mean=10.413  std=0.068  range=(np.float64(10.325), np.float64(10.49))
+knee-point COP_electrical: mean=9.200  std=0.768
+knee-point Qc: mean=31754.3W std=1478.3W
+knee-point cost: mean=$2289.2  std=$727.1
+knee-point material consistent across seeds: True (materials seen: ['La(Fe,Si)13Hy (tuned, Tc=285.3K)'])
+material share of the merged Pareto front, mean +/- std across seeds:
+  La(Fe,Si)13Hy (tuned, Tc=285.3K)          80.7% +/-  9.2%  (range 71-93%)
+  Gd5(SixGe1-x)4(-Ga) (tuned, Tc=285.3K)    10.6% +/-  7.7%  (range 0-18%)
+  Ga1-xCMn3+x (tuned, Tc=295.5K)             6.7% +/-  0.6%  (range 6-7%)
+  Gd                                         2.0% +/-  2.8%  (range 0-6%)
+
+HONEST FRAMING FOR THE PAPER: report every headline Pareto number (best COP, knee-point design, material-family share) as mean +/- std across these seeds, not a single-seed point value -- exactly the discipline this repo's own hysteresis_multiseed_stability.txt already applied to the hysteresis on/off question, extended here to plain seed-to-seed NSGA-III variance at fixed production settings. If knee_material_consistent_across_seeds is False, DO NOT report a single 'best material' headline claim without this caveat -- state the seed-to-seed material split explicitly instead.
