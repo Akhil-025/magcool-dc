@@ -1,0 +1,91 @@
+====================================================================================================
+ALTERNATIVE SOLID-STATE CALORIC TECHNOLOGIES vs. THIS REPO'S OWN VCC COP
+(literature/press COP claims vs. this repo's own comparison_table.csv VCC electrical COP at the nearest span)
+====================================================================================================
+
+Elastocaloric -- NiTi multimode regenerator (Qian et al. 2023)
+  claimed COP = 6.85  [SIMULATION/PROJECTION/CLAIM]
+  matched span = 20.0 K (no span given by source -- widest-span comparison used, most favorable case for the claim)
+  this repo's VCC electrical COP at that span = 6.11
+  -> BEATS VCC
+  source: Qian et al., Science 380, 6647 (2023), doi:10.1126/science.adg7043
+  caveat: PROJECTED regenerator-level figure IF more-efficient actuators and kinetic-energy recovery are added -- not yet demonstrated together in one measured device; span not pinned to a single value in the source text used here.
+
+Elastocaloric -- Elastocaloric can-cooler (Ehl et al. 2025)
+  claimed COP = 5.80  [SIMULATION/PROJECTION/CLAIM]
+  matched span = 9.0 K (source-pinned)
+  this repo's VCC electrical COP at that span = 13.59
+  -> does NOT beat VCC
+  source: Ehl et al., Frontiers in Materials 12 (2025), doi:10.3389/fmats.2025.1563997
+  caveat: SIMULATED system COP; paper's own text says this 'must be experimentally verified in future work' -- the physically built prototype only reached 3.5 K measured span vs. 8.7 K simulated.
+
+Barocaloric -- Neopentylglycol (NPG) plastic crystal, reverse Stirling cycle
+  claimed COP = 14.00  [SIMULATION/PROJECTION/CLAIM]
+  matched span = 5.0 K (source-pinned)
+  this repo's VCC electrical COP at that span = 24.46
+  -> does NOT beat VCC
+  source: 'Highly efficient mechanocaloric cooling using colossal barocaloric plastic crystals', ScienceDirect (2024)
+  caveat: MOLECULAR-DYNAMICS SIMULATION result. The same paper's actual hardware prototype demonstrated only a 3.8 K temperature drop and 900 J cooling energy with no reported end-to-end electrical COP -- the COP=14 figure has NOT been measured in physical hardware.
+
+Electrocaloric -- PST MLCC double-loop heat pump (Li et al. 2023)
+  claimed COP = 7.52  [MEASURED DEVICE]
+  matched span = 20.0 K (source-pinned)
+  this repo's VCC electrical COP at that span = 6.11
+  -> BEATS VCC
+  source: Li, W. et al., Science 382, 6669 (2023); cooling-power erratum (2025)
+  caveat: MEASURED end-to-end device COP (54% of Carnot, the paper's own abstract figure -- a EurekAlert press release instead quoted 64%, a discrepancy flagged rather than silently resolved). This is the strongest 'beats VCC' data point this search found for ANY caloric technology: it is an actual measured device, not a simulation or projection. But cooling power is only 2.1 W (the paper's ORIGINAL 4.2 W figure was itself halved by a 2025 erratum) -- trivial next to the kilowatt scale a real data-center loop needs, and scaling this up has not been demonstrated. PST is a lead-based ceramic: trades refrigerant GWP for a different toxicity/environmental concern, not a free lunch.
+
+----------------------------------------------------------------------------------------------------
+HONEST CONCLUSION: at least one literature claim exceeds this repo's own VCC COP at the matched span -- but every such claim found is a SIMULATION, PROJECTION, or un-independently-verified figure, not a measured end-to-end device COP. No technology examined here has an independently MEASURED device-level COP that beats VCC in the data-center 5-20 K span range. This is the same honest gap this repo already documents for its own AMR model, just for two additional technology families.
+----------------------------------------------------------------------------------------------------
+Elastocaloric parasitic_fraction_of_Qc calibration (least-squares against MEASURED literature benchmarks):
+  span=10.6K  lit_COP=3.70  model_COP=3.28  (Zhang et al., Nat. Commun. 14 (2023) 8323 (coil-bending, measured))
+  span=15.0K  lit_COP=2.95  model_COP=3.35  ('Real-time AI-optimized elastocaloric cooling', ScienceDirect (2025), measured COP=2.8-3.1 midpoint, span approximated -- see docstring)
+  -> calibrated parasitic_fraction_of_Qc = 0.1116 (RMS error = 0.410)
+Barocaloric parasitic_fraction_of_Qc calibration (against a SIMULATED, not measured, target -- see docstring):
+  span=2.4K  target_COP=5.50  model_COP=5.50  ('Modeling of an Elastocaloric Cooling System for Determining Efficiency' (ResearchGate, PDF), BC refrigerator sub-case, SIMULATED not measured, 1 mHz -- extremely low cycle rate, see docstring)
+  -> calibrated parasitic_fraction_of_Qc = 0.1381
+Electrocaloric (PST MLCC) COP_electrical vs. span (calibrated against ONE MEASURED device at 20.9 K -- every other row is an EXTRAPOLATION, see module docstring):
+  span=  5.0K  Carnot= 58.23  COP_electrical= 31.44  [FAR EXTRAPOLATION -- below any device evidence]
+  span=  6.0K  Carnot= 48.52  COP_electrical= 26.20  [FAR EXTRAPOLATION -- below any device evidence]
+  span=  7.0K  Carnot= 41.59  COP_electrical= 22.46  [FAR EXTRAPOLATION -- below any device evidence]
+  span=  8.0K  Carnot= 36.39  COP_electrical= 19.65  [FAR EXTRAPOLATION -- below any device evidence]
+  span=  9.0K  Carnot= 32.35  COP_electrical= 17.47  [FAR EXTRAPOLATION -- below any device evidence]
+  span= 10.0K  Carnot= 29.11  COP_electrical= 15.72  [FAR EXTRAPOLATION -- below any device evidence]
+  span= 11.0K  Carnot= 26.47  COP_electrical= 14.29  [FAR EXTRAPOLATION -- below any device evidence]
+  span= 12.0K  Carnot= 24.26  COP_electrical= 13.10  [FAR EXTRAPOLATION -- below any device evidence]
+  span= 13.0K  Carnot= 22.40  COP_electrical= 12.09  [extrapolated]
+  span= 14.0K  Carnot= 20.80  COP_electrical= 11.23  [extrapolated]
+  span= 15.0K  Carnot= 19.41  COP_electrical= 10.48  [extrapolated]
+  span= 16.0K  Carnot= 18.20  COP_electrical=  9.83  [extrapolated]
+  span= 17.0K  Carnot= 17.13  COP_electrical=  9.25  [extrapolated]
+  span= 18.0K  Carnot= 16.17  COP_electrical=  8.73  [extrapolated]
+  span= 19.0K  Carnot= 15.32  COP_electrical=  8.27  [extrapolated]
+  span= 20.0K  Carnot= 14.56  COP_electrical=  7.86  [extrapolated]
+
+====================================================================================================
+PHYSICS-MODEL SPAN SWEEP: this repo's own elastocaloric_cycle.py / barocaloric_cycle.py / electrocaloric_cycle.py vs. this repo's own VCC COP, same 5-20K span grid as comparison_table.csv
+(elastocaloric calibrated against TWO MEASURED literature system COPs; barocaloric calibrated against a SIMULATED, weaker-confidence target; electrocaloric calibrated against ONE MEASURED device COP at 20.9K, extrapolated elsewhere by holding its fraction-of-Carnot constant -- see each module's own docstring)
+====================================================================================================
+ span_K   VCC_COP  Elasto_COP  beats?   Baro_COP  beats?  Electro_COP  beats?
+    5.0     24.46        3.19      no       5.53      no        31.44   YES!!
+    6.0     20.38        3.21      no       5.54      no        26.20   YES!!
+    7.0     17.47        3.22      no       5.55      no        22.46   YES!!
+    8.0     15.29        3.24      no       5.56      no        19.65   YES!!
+    9.0     13.59        3.26      no       5.58      no        17.47   YES!!
+   10.0     12.23        3.27      no       5.59      no        15.72   YES!!
+   11.0     11.12        3.29      no       5.60      no        14.29   YES!!
+   12.0     10.19        3.30      no       5.61      no        13.10   YES!!
+   13.0      9.41        3.32      no       5.62      no        12.09    YES*
+   14.0      8.73        3.34      no       5.63      no        11.23    YES*
+   15.0      8.15        3.35      no       5.64      no        10.48    YES*
+   16.0      7.64        3.37      no       5.65      no         9.83    YES*
+   17.0      7.19        3.38      no       5.66      no         9.25    YES*
+   18.0      6.79        3.40      no       5.67      no         8.73    YES*
+   19.0      6.44        3.41      no       5.68      no         8.27    YES*
+   20.0      6.11        3.43      no       5.69      no         7.86    YES*
+(* = span is an EXTRAPOLATION beyond electrocaloric's single 20.9K measured calibration point; !! = FAR extrapolation below 13.0K, outside ANY electrocaloric device evidence -- see electrocaloric_cycle.py docstring)
+
+----------------------------------------------------------------------------------------------------
+HONEST CONCLUSION (physics model, span sweep): at least one span shows a calibrated caloric-technology model beating this repo's own VCC COP. Of the three, only electrocaloric does so here, and only because its single calibration point IS a measured device COP that genuinely beats VCC at its own measured span (20.9K) -- everywhere else in the table it is an untested extrapolation of that one point, not a second measurement. Cooling power at that measured point is 2.1 W, trivial next to data-center kW-scale needs.
+----------------------------------------------------------------------------------------------------

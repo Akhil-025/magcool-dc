@@ -1,0 +1,19 @@
+==========================================================================================
+PAPER-MINING PASS: field-DEPENDENT Tc-broadening, k*mu0*H, fit to
+Dan'kov et al. (1998)'s own qualitative field-broadening report
+(re-read directly from the paper's Fig. 7 discussion, now in Papers/)
+==========================================================================================
+Fitting k_K_per_T by least squares against the SAME 3 calibration points
+core/validation.py's run_validation() already uses (1, 2, 5 T):
+
+Fitted k_K_per_T = 0.000 K/T (implied sigma_Tc at 5T = 0.00 K, at 1T = 0.00 K).
+Worst-field |error| across the 3 fitted points: 42.3% (sharp, k=0) -> 42.3% (fitted k).
+
+--- Held-out cross-check 1: Dan'kov et al.'s own 7.5T point (Fig. 10 pixel-read, NOT used in the fit above) ---
+ mu0H=7.5T | lit=15.5K | sharp=16.680K (+7.6%) | fitted-k=16.680K (+7.6%)
+
+--- Held-out cross-check 2: Giguere et al.'s independent Gd range (5T, 7T; NOT used in the fit above) ---
+ mu0H=5.0T | Giguere range=10.5-11.5K | sharp=12.916K (+17.4% vs. mid) | fitted-k=12.916K (+17.4% vs. mid)
+ mu0H=7.0T | Giguere range=12.0-13.0K | sharp=15.974K (+27.8% vs. mid) | fitted-k=15.974K (+27.8% vs. mid)
+
+CONCLUSION: Fitting a field-dependent broadening k*mu0*H to the 3 calibration points did NOT improve on the sharp (k=0) model's worst-field error (42.3% either way) -- the least-squares fit converged to k_K_per_T=0.000, i.e. essentially no broadening is preferred by these 3 points even though it is qualitatively motivated by Dan'kov et al.'s own text. Reported honestly as a negative result: the direction of the mechanism is real and literature-sourced, but a linear k*mu0*H form calibrated to only 3 points does not resolve the field-dependent overestimate for this material.

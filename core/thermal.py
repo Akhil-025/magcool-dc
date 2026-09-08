@@ -583,7 +583,7 @@ def pumping_power_packed_bed_hypereg(mdot, particle_diameter=0.0005, porosity=0.
         "n_parallel_subregenerators": n_parallel_subregenerators,
         "P_pump_W_conventional_series": pumping_power_packed_bed(
             mdot, particle_diameter, porosity, bed_cross_section_area,
-            mass_regenerator, T_K, fluid=fluid_name)["P_pump_W"],
+            mass_regenerator, T_K, fluid=fluid_name, rho_solid=rho_solid)["P_pump_W"],
     }
 
 

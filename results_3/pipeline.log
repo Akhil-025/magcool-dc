@@ -922,7 +922,7 @@
 2026-09-07 19:02:25 [INFO   ] main:   mu0H_max_T             ST=0.0129
 2026-09-07 19:02:25 [INFO   ] main:   regen_effectiveness    ST=0.0123
 2026-09-07 19:02:25 [INFO   ] main:   parasitic_fraction     ST=0.0000
-2026-09-07 19:02:25 [INFO   ] main: Interpretation: with the state-dependent loss model (eddy ~ f²H²,
+2026-09-07 19:02:25 [INFO   ] main: Interpretation: with the state-dependent loss model (eddy ~ fï¿½Hï¿½,
 2026-09-07 19:02:25 [INFO   ] main: pump ~ mdot^2, base overhead ~ Qc) in place of the constant
 2026-09-07 19:02:25 [INFO   ] main: parasitic_fraction, mu0H_max/frequency/fluid_mdot now carry real
 2026-09-07 19:02:25 [INFO   ] main: sensitivity in COP_electrical, because raising frequency or field no
@@ -1109,7 +1109,7 @@
 2026-09-07 19:02:59 [INFO   ] main:        3.5          1327.6676   53106.70     157.48   53264.18     14.025      3797.87
 2026-09-07 19:02:59 [INFO   ] main:        4.0          2792.9718  111718.87     157.48  111876.35     15.301      7311.77
 2026-09-07 19:02:59 [INFO   ] main: Best field under this proxy: 0.5 T
-2026-09-07 19:02:59 [INFO   ] main: cost_per_K_$ minimized at 0.5 T under this fixed-MCM-mass, dollars-per-Kelvin-of-Gd's-own-peak-dTad proxy -- does NOT reproduce the qualitative ~2 T claim under this specific proxy (see run_magnet_geometry_analysis()'s own printed discussion of why: holding MCM mass fixed while only sweeping field ignores the system-level cooling-power/device-size tradeoffs a real design would also be making, which is plausibly the actual driver behind Bjørk's own reported optimum).
+2026-09-07 19:02:59 [INFO   ] main: cost_per_K_$ minimized at 0.5 T under this fixed-MCM-mass, dollars-per-Kelvin-of-Gd's-own-peak-dTad proxy -- does NOT reproduce the qualitative ~2 T claim under this specific proxy (see run_magnet_geometry_analysis()'s own printed discussion of why: holding MCM mass fixed while only sweeping field ignores the system-level cooling-power/device-size tradeoffs a real design would also be making, which is plausibly the actual driver behind Bjï¿½rk's own reported optimum).
 2026-09-07 19:02:59 [INFO   ] main: ------------------------------------------------------------------------------------------
 2026-09-07 19:02:59 [INFO   ] main: Geometric vs. flat-ratio magnet-mass comparison across core/optimize.py's own [1.0, 3.0] T search bounds:
 2026-09-07 19:02:59 [INFO   ] main:  mu0H=1.0T geometric=   25.412kg flat-ratio=   67.350kg ratio(geom/flat)=  0.38x
@@ -1497,9 +1497,9 @@
 2026-09-07 19:27:12 [INFO   ] main:  Saved -> results\figures\fig08_amr_vs_baselines_cop.png / .pdf
 2026-09-07 19:27:12 [INFO   ] main: [09 NTU regenerator effectiveness]
 2026-09-07 19:27:13 [INFO   ] main:  Saved -> results\figures\fig09_regenerator_effectiveness_ntu.png / .pdf
-2026-09-07 19:27:13 [INFO   ] main: [10 Geometry trade-off — packed bed]
+2026-09-07 19:27:13 [INFO   ] main: [10 Geometry trade-off ï¿½ packed bed]
 2026-09-07 19:27:14 [INFO   ] main:  Saved -> results\figures\fig10_geometry_optimum_packed_bed.png / .pdf
-2026-09-07 19:27:14 [INFO   ] main: [11 Geometry trade-off — parallel plate]
+2026-09-07 19:27:14 [INFO   ] main: [11 Geometry trade-off ï¿½ parallel plate]
 2026-09-07 19:27:16 [INFO   ] main:  Saved -> results\figures\fig11_geometry_optimum_parallel_plate.png / .pdf
 2026-09-07 19:27:16 [INFO   ] main: [12 Loss-model calibration + leave-one-out CV]
 2026-09-07 19:27:17 [INFO   ] main:  Saved -> results\figures\fig12_loss_model_calibration_fit.png / .pdf

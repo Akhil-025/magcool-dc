@@ -1219,7 +1219,9 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
             tuned_fn=lambda Tc: composition_tuned_material(Tc, apply_giguere_correction=False),
             tc_min=GD_FAMILY.tc_min, tc_max=GD_FAMILY.tc_max,
             reference_material=GD_FAMILY.reference_material,
-            fallback_material=GD_FAMILY.fallback_material)
+            fallback_material=GD_FAMILY.fallback_material,
+            density_kg_m3=GD_FAMILY.density_kg_m3,
+            sigma_e_S_per_m=GD_FAMILY.sigma_e_S_per_m)
 
     span_per_stage = total_span_K / n_stages
 
@@ -1245,6 +1247,8 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
         Tc_targets = [_target_composition_for_peak(t, mu0H_max, family) for t in mid_temps]
 
     stage_materials = []
+    stage_densities = []
+    stage_sigma_es = []
     stage_info = []
     for i, (T_mid_stage, Tc_target) in enumerate(zip(mid_temps, Tc_targets)):
         if family.tc_min <= Tc_target <= family.tc_max:
@@ -1252,6 +1256,8 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
             stage_info.append({"stage": i + 1, "T_mid_K": round(T_mid_stage, 1),
                                 "Tc_target_K": round(Tc_target, 1),
                                 "material": mat.name, "in_range": True})
+            stage_densities.append(family.density_kg_m3)
+            stage_sigma_es.append(family.sigma_e_S_per_m)
         else:
             mat = family.fallback_material
             stage_info.append({"stage": i + 1, "T_mid_K": round(T_mid_stage, 1),
@@ -1260,6 +1266,23 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
                                             f"{family.tc_min:.0f}-{family.tc_max:.0f}K "
                                             f"documented {family.name} range)",
                                 "in_range": False})
+            # BUGFIX (follow-up): a fallback stage is physically plain
+            # Gd (family.fallback_material), NOT a composition of `family` --
+            # so it must use GD_FAMILY's own density/conductivity (7900
+            # kg/m^3, 7.6e5 S/m), not `family`'s. Reusing family.density_kg_m3/
+            # sigma_e_S_per_m here (as every previous call in this function did,
+            # uniformly, regardless of per-stage fallback) silently fed the
+            # WRONG family's density into a Gd stage's own NTU/eddy-loss
+            # calculation whenever a graded cascade partially fell back --
+            # confirmed live for MNCUCOGE_FAMILY/MNFEPSI_FAMILY at this
+            # module's own T_cold=291K/span=10K ASHRAE point (every n_layers
+            # in run_layered_optimization_material_family_cross_product's
+            # 1-6 sweep triggers at least one fallback stage for those two
+            # families). GA1XCMN3X_FAMILY leaves density_kg_m3=None already
+            # (see GradedFamily's own docstring), so its fallback stages were
+            # already correct here by accident, not by design.
+            stage_densities.append(GD_FAMILY.density_kg_m3)
+            stage_sigma_es.append(GD_FAMILY.sigma_e_S_per_m)
         stage_materials.append(mat)
 
     n_fallback = sum(1 for s in stage_info if not s["in_range"])
@@ -1271,8 +1294,8 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
                         loss_model=_LOSS_MODEL, use_ntu_thermal_model=USE_NTU_THERMAL_MODEL,
                         cycle_type=cycle_type, particle_diameter=particle_diameter,
                         blow_fraction=blow_fraction, pump_motor_efficiency=pump_motor_efficiency,
-                        material_density_kg_m3=family.density_kg_m3,
-                        material_sigma_e_S_per_m=family.sigma_e_S_per_m)
+                        material_density_kg_m3=stage_densities[0],
+                        material_sigma_e_S_per_m=stage_sigma_es[0])
     r1 = stage1.run(T_local, span_per_stage)
     Qc_target = r1.Qc
     if Qc_target <= 0:
@@ -1291,8 +1314,8 @@ def run_graded_cascade(T_cold_K, total_span_K, n_stages, mu0H_max=2.0,
                            loss_model=_LOSS_MODEL, use_ntu_thermal_model=USE_NTU_THERMAL_MODEL,
                            cycle_type=cycle_type, particle_diameter=particle_diameter,
                            blow_fraction=blow_fraction, pump_motor_efficiency=pump_motor_efficiency,
-                           material_density_kg_m3=family.density_kg_m3,
-                           material_sigma_e_S_per_m=family.sigma_e_S_per_m)
+                           material_density_kg_m3=stage_densities[i],
+                           material_sigma_e_S_per_m=stage_sigma_es[i])
         r_i = stage.run(T_local, span_per_stage)
         if r_i.Qc > 0:
             scale = Qc_target / r_i.Qc
@@ -1507,7 +1530,9 @@ def validate_astronautics_graded_bed(apply_correction=None, cycle_type="brayton"
             return mat
         family = GradedFamily(name=base.name, tuned_fn=tuned_fn, tc_min=base.tc_min,
                                tc_max=base.tc_max, reference_material=base.reference_material,
-                               fallback_material=base.fallback_material)
+                               fallback_material=base.fallback_material,
+                               density_kg_m3=base.density_kg_m3,
+                               sigma_e_S_per_m=base.sigma_e_S_per_m)
 
     pool = None
     _blas_env_cm = None
@@ -1621,7 +1646,9 @@ def validate_magqueen_graded_bed(mass_total_kg=1.0, n_stages=10,
             return mat
         family = GradedFamily(name=base.name, tuned_fn=tuned_fn, tc_min=base.tc_min,
                                tc_max=base.tc_max, reference_material=base.reference_material,
-                               fallback_material=base.fallback_material)
+                               fallback_material=base.fallback_material,
+                               density_kg_m3=base.density_kg_m3,
+                               sigma_e_S_per_m=base.sigma_e_S_per_m)
 
     pool = None
     _blas_env_cm = None
@@ -1952,7 +1979,9 @@ def validate_risoe_dtu_graded_bed(n_stages=6, apply_correction=None,
                 return mat
             family = GradedFamily(name=base.name, tuned_fn=tuned_fn, tc_min=base.tc_min,
                                    tc_max=base.tc_max, reference_material=base.reference_material,
-                                   fallback_material=base.fallback_material)
+                                   fallback_material=base.fallback_material,
+                                   density_kg_m3=base.density_kg_m3,
+                                   sigma_e_S_per_m=base.sigma_e_S_per_m)
 
     pool = None
     _blas_env_cm = None
@@ -2047,7 +2076,9 @@ def validate_cooltech_graded_bed(n_stages=6, mass_total_kg=1.0,
                 return mat
             family = GradedFamily(name=base.name, tuned_fn=tuned_fn, tc_min=base.tc_min,
                                    tc_max=base.tc_max, reference_material=base.reference_material,
-                                   fallback_material=base.fallback_material)
+                                   fallback_material=base.fallback_material,
+                                   density_kg_m3=base.density_kg_m3,
+                                   sigma_e_S_per_m=base.sigma_e_S_per_m)
 
     r_probe = run_graded_cascade(T_cold_K, span_K, n_stages, mu0H_max=mu0H,
                                   mass_per_stage=mass_total_kg / n_stages, frequency=freq,

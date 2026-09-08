@@ -261,9 +261,13 @@ def run_robustness_check(design_span_K=10.0, off_design_spans_K=(5.0, 10.0, 15.0
     rows = []
     for span in off_design_spans_K:
         r_nano = run_cascade(T_cold_K, span, 1, material=nanocomposite,
-                              mu0H_max=mu0H_max, mass_per_stage=mass_per_stage)
+                              mu0H_max=mu0H_max, mass_per_stage=mass_per_stage,
+                              rho_solid=NANOCOMPOSITE_FAMILY.density_kg_m3,
+                              sigma_e=NANOCOMPOSITE_FAMILY.sigma_e_S_per_m)
         r_single = run_cascade(T_cold_K, span, 1, material=single_phase,
-                                mu0H_max=mu0H_max, mass_per_stage=mass_per_stage)
+                                mu0H_max=mu0H_max, mass_per_stage=mass_per_stage,
+                                rho_solid=LAFESIH_FAMILY.density_kg_m3,
+                                sigma_e=LAFESIH_FAMILY.sigma_e_S_per_m)
         nano_cop = r_nano["COP_cascade"] if r_nano["feasible"] else 0.0
         nano_qc = r_nano["Qc_W"] if r_nano["feasible"] else 0.0
         single_cop = r_single["COP_cascade"] if r_single["feasible"] else 0.0
