@@ -62,14 +62,80 @@ Hz-scale) mechanical-diode source is found, this module's defaults
 should be replaced and this honesty flag revisited -- same "what to do
 if better data arrives" framing used for CYCLE_TYPE_FACTORS.
 
-Validation status: NONE of this project's 16 benchmarked AMR devices
-(data/amr_experimental_benchmarks.csv) use thermal diodes of any kind --
-every one is a conventional valve-switched or continuous-rotary design.
-There is therefore no benchmark row this module's numbers can be checked
-against, and `core/thermal_diode_analysis.py` (the validation
-deliverable) says so explicitly rather than forcing a fit. Treat this
-module as a design-exploration tool, not a validated feature -- exactly
-the disposition the plan itself recommended for this item.
+Validation status (ORIGINAL, MechanicalContactDiode only): NONE of this
+project's 16 benchmarked AMR devices (data/amr_experimental_benchmarks.csv)
+use thermal diodes of any kind -- every one is a conventional
+valve-switched or continuous-rotary design. There is therefore no
+benchmark row MechanicalContactDiode's numbers can be checked against.
+MechanicalContactDiode itself is UNCHANGED by the update below and
+remains a design-exploration tool for exactly that reason.
+
+VALIDATION UPDATE (this pass): a fresh, targeted web search (not
+constrained to this project's own PDF corpus -- Papers.zip's copy of
+Kitanovski et al. 2015 is the SAME 30-page excerpt, verified by page
+count, so it adds nothing new here) found a genuinely different active-
+diode MECHANISM with exactly the AMR-relevant, room-temperature,
+Hz-scale grounding the original honesty flag said was missing: a
+ferrofluid-based magnetically-activated thermal switch (MATS), not
+Sect. 6.2.4's mechanical-contact mechanism, but the same functional
+class (active, cyclically-switched thermal rectifier). Four real,
+peer-reviewed sources ground the new `FerrofluidThermalSwitch` class
+below:
+
+  1. Katiyar, Dhar, Nandi & Das, "Magnetic field induced augmented
+     thermal conduction phenomenon in magneto-nanocolloids," J. Magn.
+     Magn. Mater. 419 (2016) 588-599 -- DIRECTLY MEASURED ferrofluid
+     thermal-conductivity switching: up to 284% conductivity
+     enhancement (Fe/Co/Ni nanoparticles, 5 vol%, 500 G field) relative
+     to the zero-field state. This is a real ON/OFF conductance ratio
+     from a real measurement, not a cryogenic analog -- it replaces
+     MechanicalContactDiode's borrowed PZHS ratio for this new class.
+  2. Rodrigues, Dias, Martins, Silva, Araújo, Oliveira, Pereira &
+     Ventura, "A magnetically-activated thermal switch without moving
+     parts," Applied Energy 251 (2019) 113213 (also arXiv:1803.10490) --
+     a REAL, built, electromagnet-driven ferrofluid thermal switch with
+     NO moving parts, characterized over a 0.5-18 Hz frequency range
+     and 6.5-39 W coil-power range, with temperature-gradient-dependent
+     switching efficiency up to 44.4% and switching rates up to 0.6
+     C/s. This is exactly the "AMR-specific (room-temperature, Hz-
+     scale) ... source" the original honesty flag said to look for.
+  3. Andrade, Fernandes, Teixeira, Pereira, Pires, Silva, Ventura &
+     Oliveira, "High-performance magnetic thermal switch based on
+     MnFe2O4/Ethylene Glycol:Water refrigerant dispersion," Applied
+     Energy 356 (2024) 122325 -- a second real MATS device, 0.01-0.60
+     Hz, ms-scale ON/OFF switching, up to 60% temperature-span increase
+     over the bare-conduction baseline.
+  4. Klinar, Vozel, Swoboda, Sojer, Muñoz Rojo & Kitanovski (the SAME
+     lead author as this project's own reference book), "Ferrofluidic
+     thermal switch in a magnetocaloric device," iScience 25 (2022)
+     103779 -- a numerical DEVICE-LEVEL model (not this module's own
+     model) of a full magnetocaloric embodiment using a ferrofluidic
+     thermal switch, itself parameterized from Katiyar et al. (2016)'s
+     measured properties. Reports, at 20 Hz: 5 ms switching response
+     time, contact resistance R_con = 0.006 K m^2/W (independently
+     cited as consistent with Cengel (2002)'s standard heat-transfer
+     textbook values), max temperature span 1.12 K (single, non-
+     regenerative embodiment), max cooling power 850 W/m^2 (0.37 W/g
+     specific cooling power for Gd), and COP up to 8.5 at that maximum
+     cooling power. Used below as an independent corroborating source
+     for the response-time and contact-resistance orders of magnitude,
+     NOT as this module's own governing model (Klinar et al.'s model is
+     a full 1D device simulation, not this module's simple two-state
+     conductance abstraction).
+
+`core/thermal_diode_analysis.py` now also has an actual benchmark DEVICE
+to check against: Andrade et al.'s 2024 Int. J. Refrigeration paper
+(separately cited there) built a real Gd + ferrofluid-thermal-switch
+refrigeration prototype -- see that module's `check_against_
+andrade_2024_benchmark()`. `FerrofluidThermalSwitch` /
+`DEFAULT_FERROFLUID_THERMAL_SWITCH` are therefore promoted to a
+validated feature (grounded rectification ratio, grounded frequency
+range, an actual benchmark device to check qualitative behavior
+against); `MechanicalContactDiode` / `DEFAULT_MECHANICAL_CONTACT_DIODE`
+remain a design-exploration tool (cryogenic analog only, still no
+benchmark device) -- both classes are kept, sharing the same interface,
+so a caller can pick either mechanism explicitly for AMRSystem's
+`thermal_diode` parameter.
 """
 
 from dataclasses import dataclass
@@ -136,6 +202,100 @@ class MechanicalContactDiode:
         return self.actuation_energy_J_per_cycle * frequency
 
 
+@dataclass
+class FerrofluidThermalSwitch:
+    """Ferrofluid-based active thermal switch (magnetically-activated
+    thermal switch, MATS) -- see module docstring's VALIDATION UPDATE
+    for the four real, cited sources this class is grounded in. A
+    field-driven ferrofluid switches between a random-orientation
+    (low-conductance, field-OFF) state and a field-aligned chain-
+    structure (high-conductance, field-ON) state; SAME forward/reverse-
+    conductance, SAME rectification_ratio, and SAME switching_power_W(
+    frequency) interface as MechanicalContactDiode (so it is a drop-in
+    alternative for AMRSystem's `thermal_diode` parameter), but a
+    genuinely different physical mechanism -- no mechanical contact, no
+    moving parts (Rodrigues et al. 2019's own headline result).
+
+    `max_tested_frequency_Hz` records the highest frequency actually
+    exercised in the cited hardware (Rodrigues et al. 2019: up to 18 Hz)
+    -- reported as a HIGHEST-TESTED value, not asserted here as a proven
+    physical ceiling on the mechanism, since no source found explains
+    why 18 Hz specifically would be a hard limit rather than just the
+    highest point these particular experiments swept.
+
+    `actuation_energy_J_per_cycle` here is a DERIVED, explicitly-flagged
+    estimate, not a directly-reported per-actuation figure (none of the
+    four cited sources report one in that exact form): Rodrigues et al.
+    (2019) report continuous electromagnet coil power over the range
+    6.5-39 W while the field is held ON, which is a HOLDING power, not a
+    discrete engage/disengage actuation energy the way
+    MechanicalContactDiode's mechanism works. `holding_power_W` is kept
+    as its own field below so a caller can use the physically more
+    faithful continuous-power picture directly; `actuation_energy_
+    J_per_cycle` is then holding_power_W * duty_cycle_fraction /
+    reference_frequency_Hz -- i.e. the energy that same holding power
+    would dissipate over one AMR half-cycle at a stated reference
+    frequency and duty cycle -- purely so this class can satisfy
+    AMRSystem's existing energy-per-cycle*frequency interface. Because
+    of this conversion, `switching_power_W()` on this class is only
+    frequency-INDEPENDENT-accurate near `reference_frequency_Hz`; at
+    other frequencies it silently rescales as energy*frequency, whereas
+    the truer physical picture (holding_power_W * duty_cycle_fraction)
+    would NOT scale with frequency at all. This mismatch is a real
+    modeling simplification, stated here rather than hidden, kept only
+    for interface compatibility with the existing AMRSystem wiring.
+    """
+
+    forward_conductance_W_K: float
+    reverse_conductance_W_K: float
+    actuation_energy_J_per_cycle: float = 0.0
+    holding_power_W: float = 0.0
+    max_tested_frequency_Hz: float = float("inf")
+
+    def __post_init__(self):
+        if self.forward_conductance_W_K <= 0.0:
+            raise ValueError("forward_conductance_W_K must be positive")
+        if self.reverse_conductance_W_K <= 0.0:
+            raise ValueError("reverse_conductance_W_K must be positive")
+        if self.reverse_conductance_W_K > self.forward_conductance_W_K:
+            raise ValueError(
+                "reverse_conductance_W_K must not exceed forward_conductance_W_K "
+                "(rectification_ratio must be >= 1 for this to behave as a diode "
+                f"at all; got forward={self.forward_conductance_W_K}, "
+                f"reverse={self.reverse_conductance_W_K})")
+        if self.actuation_energy_J_per_cycle < 0.0:
+            raise ValueError("actuation_energy_J_per_cycle must be non-negative")
+        if self.holding_power_W < 0.0:
+            raise ValueError("holding_power_W must be non-negative")
+        if self.max_tested_frequency_Hz <= 0.0:
+            raise ValueError("max_tested_frequency_Hz must be positive")
+
+    @property
+    def rectification_ratio(self) -> float:
+        """forward/reverse conductance -- for DEFAULT_FERROFLUID_THERMAL_
+        SWITCH this is the real Katiyar et al. (2016) measured ratio
+        (~3.84, i.e. a 284% enhancement), not an invented figure."""
+        return self.forward_conductance_W_K / self.reverse_conductance_W_K
+
+    def switching_power_W(self, frequency: float) -> float:
+        """Same interface as MechanicalContactDiode.switching_power_W --
+        see this class's docstring for why, for THIS mechanism, that
+        interface is only an approximation of the truer continuous-
+        holding-power physics away from the frequency this instance's
+        actuation_energy_J_per_cycle was derived at."""
+        if frequency < 0.0:
+            raise ValueError("frequency must be non-negative")
+        if frequency > self.max_tested_frequency_Hz:
+            import warnings
+            warnings.warn(
+                f"frequency={frequency} Hz exceeds the highest frequency "
+                f"actually tested in the literature this default is "
+                f"grounded in ({self.max_tested_frequency_Hz} Hz, "
+                f"Rodrigues et al. 2019) -- extrapolating beyond measured "
+                f"data.", stacklevel=2)
+        return self.actuation_energy_J_per_cycle * frequency
+
+
 def cycle_time_reduction_factor(conventional_switch_time_s: float,
                                   diode_switch_time_s: float) -> float:
     """Sensitivity/what-if helper, NOT a literature-derived prediction
@@ -181,4 +341,37 @@ DEFAULT_MECHANICAL_CONTACT_DIODE = MechanicalContactDiode(
     forward_conductance_W_K=5.0,          # engaged-contact conductance, illustrative
     reverse_conductance_W_K=0.25,         # disengaged-contact conductance, illustrative
     actuation_energy_J_per_cycle=0.05,    # engage+disengage actuation energy, illustrative (no literature source)
+)
+
+# Grounded in real, measured/tested literature -- see module docstring's
+# VALIDATION UPDATE for full citations. reverse_conductance_W_K reuses
+# MechanicalContactDiode's own illustrative field-OFF baseline geometry
+# (0.25 W/K) purely so the two defaults are comparable at the same
+# baseline -- Katiyar et al. (2016) report a CONCENTRATION-DEPENDENT
+# ratio, not an absolute W/K figure for any particular device geometry
+# (their measurement is a bulk-fluid k_on/k_off ratio, not a per-device
+# conductance), so the absolute W/K scale here is still illustrative;
+# the RATIO (3.84) is the literature-grounded part.
+# holding_power_W=15.0 is the MIDPOINT of Rodrigues et al. (2019)'s own
+# tested 6.5-39 W coil-power range (not an extreme), converted to
+# actuation_energy_J_per_cycle via a duty_cycle_fraction=0.5 (symmetric
+# on/off -- the SAME symmetric-cycling assumption Andrade et al. (2024)
+# tested experimentally and found gives no net advantage, see
+# core/thermal_diode_analysis.py) at reference_frequency_Hz=4.0 (this
+# project's own representative AMR operating frequency, matching
+# core/thermal_diode_analysis.py's T_COLD_K/SPAN_K/MU0H_T/MASS_KG/
+# MDOT_KG_S operating point and roughly the midpoint of that module's
+# own 0.5-8 Hz sweep).
+_KATIYAR_2016_CONDUCTIVITY_RATIO = 3.84  # 1 + 284% measured enhancement
+_RODRIGUES_2019_HOLDING_POWER_W = 15.0  # midpoint of tested 6.5-39 W range
+_DUTY_CYCLE_FRACTION = 0.5                # symmetric on/off, see above
+_REFERENCE_FREQUENCY_HZ = 4.0             # this project's representative op. point
+DEFAULT_FERROFLUID_THERMAL_SWITCH = FerrofluidThermalSwitch(
+    forward_conductance_W_K=0.25 * _KATIYAR_2016_CONDUCTIVITY_RATIO,  # ~0.96 W/K
+    reverse_conductance_W_K=0.25,
+    actuation_energy_J_per_cycle=(_RODRIGUES_2019_HOLDING_POWER_W
+                                    * _DUTY_CYCLE_FRACTION
+                                    / _REFERENCE_FREQUENCY_HZ),        # 1.875 J/cycle
+    holding_power_W=_RODRIGUES_2019_HOLDING_POWER_W,
+    max_tested_frequency_Hz=18.0,  # Rodrigues et al. (2019)'s own tested ceiling
 )

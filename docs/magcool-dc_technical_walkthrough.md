@@ -1103,17 +1103,20 @@ this lever is best read via the Pareto front rather than in isolation.
 
 ---
 
-## 18. Alternative working-body architectures (design-exploration only)
+## 18. Alternative working-body architectures
 
-Two directions were explored without any benchmark device in this repo's
-corpus to validate against — both are stated as design-exploration tools,
-not validated features, consistent with the honesty-flag convention used
-throughout this document.
+Two directions were explored, both originally as design-exploration tools
+with no benchmark device in this repo's corpus to validate against. A
+later pass (Phase 38) found a real benchmark device for one of the two
+thermal-diode mechanisms and graduated it; the rest remain
+design-exploration tools, consistent with the honesty-flag convention
+used throughout this document.
 
-### 18.1 Mechanical-contact thermal diode — `thermal_diode.py`, `thermal_diode_analysis.py`
+### 18.1 Thermal diode, two mechanisms — `thermal_diode.py`, `thermal_diode_analysis.py`
 
-Motivated by Kitanovski et al. (2015) Ch. 6, whose pages aren't in this
-project's copy of the book (Section 6 of `Literature_Review.md`).
+**`MechanicalContactDiode` (still design-exploration).** Motivated by
+Kitanovski et al. (2015) Ch. 6, whose pages aren't in this project's copy
+of the book (Section 6 of `Literature_Review.md`).
 `check_frequency_ceiling_claim()` first checked the plan's own premise
 directly: `AMRSystem` has **no internal frequency ceiling** for a diode to
 relax — the only bound anywhere is `optimize.py`'s unexplained 5.0 Hz
@@ -1125,6 +1128,24 @@ small cost-only accounting, since no closed-form relation for how
 digitize (so no offsetting heat-transfer benefit is modeled). Net effect is
 therefore ≤ the no-diode baseline by construction; this is not a claim that
 real thermal diodes are a net negative.
+
+**`FerrofluidThermalSwitch` (VALIDATED, Phase 38).** Grounded in a real,
+built, electromagnet-driven ferrofluid thermal switch with no moving parts
+(Rodrigues et al. 2019, *Applied Energy* 251, 113213: 0.5–18 Hz frequency
+range, up to 44.4% switching efficiency) rather than the cryogenic analog
+`MechanicalContactDiode` relies on. `check_against_andrade_2024_benchmark()`
+checks this repo's model against a real, built Gd + ferrofluid-thermal-switch
+refrigeration prototype (Andrade et al. 2024, *Int. J. Refrigeration* 164,
+210-217): under symmetric magnetization cycling, that device shows no
+advantage over bare Gd — the same qualitative finding this repo's model
+produces by construction (no offsetting heat-transfer benefit is modeled,
+so `COP_electrical` with a diode ≤ the no-diode baseline at every operating
+point). This is **agreement on a negative result**, not a validated
+positive quantitative match to the paper's own separately-reported 60%
+asymmetric-cycling span improvement (a 1-D numerical result in that paper,
+not itself hardware-measured, and outside what this repo's `AMRSystem`
+mechanics can represent). See `Literature_Review.md` Section 2 for the
+full citation trail.
 
 ### 18.2 Magnetocaloric fluids (ferrofluid/MR suspension) — `fluid_mce_cycle.py`, `fluid_mce_analysis.py`
 
@@ -1150,6 +1171,220 @@ cooling (86.6) and vapor-compression (179.1) baselines at this span. **The
 real headline is the span, not this specific COP comparison**: it holds
 only at the ferrofluid system's own tiny achievable span, which solid AMR
 could trivially also hit, with far more Qc.
+
+**Phase 38 update:** the Krieger–Dougherty viscosity parameters used above
+are now grounded in a real magnetite-ferrofluid measurement (Susan-Resiga,
+Bica & Vékás), rather than an unverified textbook default, and a follow-up
+literature search corroborated (not merely repeated) the finding that no
+magnetocaloric-fluid-as-*working-body* refrigeration benchmark exists
+anywhere in the accessible literature — every real ferrofluid
+magnetocaloric device found uses the fluid as a *thermal switch* instead
+(Section 18.1 above). The rheology grounding and this negative finding are
+treated as validated conclusions; the Qc/COP numbers above remain
+design-exploration output, not benchmark-checked.
+
+---
+
+## 19. Alternative solid-state caloric technologies — `barocaloric_cycle.py`, `electrocaloric_cycle.py`, `alternative_caloric_comparison.py`
+
+Added to ask whether ANY caloric cooling technology — not just this
+repo's own magnetocaloric/AMR model — beats vapor-compression, using
+published literature figures plus this repo's own physics models,
+checked against `results/comparison_table.csv`'s own VCC COP numbers
+(`main.py` step 17, additive-only, writes
+`results/alternative_caloric_vs_vcc.txt`).
+
+**Barocaloric** (`core/barocaloric_material.py`, `core/barocaloric_cycle.py`):
+a Clausius–Clapeyron model of the pressure-driven order-disorder
+transition in neopentylglycol (NPG), the original "colossal barocaloric
+effect" plastic crystal (Li, B. et al., *Nature* 567, 506-510 (2019):
+|ΔS|≈389 J/(kg K) at 45.0 MPa). `run_cycle(span_K=10.0)` reports
+`COP_electrical=24.4`, `W_parasitic_per_kg=0.0` (no pumping-power term is
+modeled for this cycle). **Honesty flag**: unlike the elastocaloric
+reference line, no independently-measured end-to-end device COP exists to
+calibrate against — the only NPG-specific device figure found (COP=5.5 at
+1 mHz, 2.4 K span) is itself a different group's *simulation*, not
+hardware.
+
+**Electrocaloric** (`core/electrocaloric_cycle.py`): works top-down from
+papers' own reported device-level span/power/COP figures (Meng 2020, Li
+2023 + 2025 erratum) rather than a per-stage material model, since no
+independently-verified ΔS-vs-field curve was located for the exact PST
+MLCC batches used. `run_cycle(span_K=10.0)` reports `COP_electrical=15.7`
+but flags `is_extrapolated=True, is_far_extrapolation=True` — the fitted
+scaling law is being extrapolated well beyond the papers' own measured
+span range at this repo's representative 10 K point, stated explicitly
+rather than silently extended.
+
+---
+
+## 20. Hybrid solid-state magnetic regenerator (HMR) — `hybrid_solid_state_regenerator.py`
+
+Implements Lin, Wang, Dai, Qiao, Zhou, Zhao, Hu & Shen, *The Innovation
+(Camb)* 5(4):100645 (2024): alternating solid HTCM/MCM slices replace the
+working fluid this repo's entire `AMRSystem`/`loss_model.py` stack
+assumes, removing pumping/dead-volume losses entirely — a different
+parasitic-loss channel (inter-layer friction) takes their place. Found via
+a literature search run specifically because the previously-tried lever
+(`core/nanocomposite_material.py`'s material blending) was confirmed NOT
+to raise COP at a design point, only off-design robustness.
+
+`compare_to_vcc()` reports an ideal-limit comparison (frictionless
+thermodynamics only). `compare_to_vcc_realistic()`, evaluated at this
+repo's representative point (T_cold=291.15 K, span=10 K), is the more
+honest number: once air-gap contact friction, a rotary-drivetrain term,
+and baseline overhead are added, HMR's best real electrical COP
+(**8.13** at 1.0 Hz) is **0.66×** vapor-compression's real installed-system
+COP (**12.23**) — this architecture does NOT close the electrical-COP gap
+at this operating point once those previously-excluded real loss channels
+are included on equal footing with VCC's own real number. Citing
+`compare_to_vcc()`'s more favorable ideal-limit ratio alone, without the
+realistic comparison, would overstate the case (`main.py` step 19).
+
+---
+
+## 21. Real-world commercial validation — `commercial_landscape.py`, `beverage_cooler_validation.py`, `heat_pump_validation.py`
+
+Three checks against real, deployed or published magnetocaloric hardware
+— market segments where this technology is no longer purely
+theoretical, unlike this repo's own primary data-center application,
+which has no deployed magnetic-cooling competitor to check against.
+
+**Commercial/state-of-the-art landscape** (`main.py` step 16):
+`write_commercial_landscape_report()` records Magnotherm's "Stellar"
+(~125 kW, announced 2025-2026, data-center-marketed) and Cooltech
+Applications' data-center-oriented unit (12.5 kW, claimed COP 5-6) as
+structured, source-flagged vendor/press claims — explicitly NOT
+re-validated against a datasheet, since neither vendor publishes one —
+and disambiguates them from unrelated "magnetic-bearing chiller"
+naming-collision systems (Johnson Controls YDAM, Munters Circlemiser:
+ordinary vapor-compression/desiccant technology, magnetic bearings only).
+This repo's own model's COP_electrical (2.43) is reported directly
+alongside Cooltech's claim, without adjustment either way.
+
+**Beverage-cooler cross-check** (`main.py` step 15b) — two independent
+real deployments, with genuinely divergent results:
+- **Magnotherm Eclipse / REWE pilot**: `run_eclipse_directional_check()`,
+  run at the pilot's own operating point (T_cold=277.65 K, span=17.5 K),
+  predicts this repo's model would need **279% more** energy than the
+  incumbent R290 unit (AMR_COP_electrical=1.76 vs. VCC_COP=6.66) —
+  flatly contradicting the press-reported **15% saving**. An unresolved
+  divergence, reported directly rather than reconciled.
+- **Polaris** (Liang et al. 2025, first CE-certified magnetic beverage
+  cooler, same core architecture this repo's model assumes):
+  `run_polaris_second_law_validation()` finds much closer agreement —
+  model second-law efficiency 6.34% vs. the paper's own reported 5.40%
+  at the same operating point (T_cold=277.65 K, span=15 K, field=0.8 T).
+
+**Heat-pump architecture check** (`main.py` step 15c):
+`run_ames_lab_architecture_check()` compares against Slaughter, Griffith,
+Czernuszewicz & Pecharsky (Ames National Laboratory, *Applied Energy*
+377, 124696 (2025)): the paper's own headline result is a whole-device
+specific power density (SPD) improvement from 5.9 W/kg to 81.3 W/kg (114
+W/kg projected ceiling) through magnetic-source redesign, at the same
+core architecture (single-material Gd, packed-particle-bed AMR) this
+repo's model already assumes. This repo's model's own specific cooling
+power (220.6 W/kg, MCM mass only — not directly comparable to the
+paper's whole-device figure) is reported alongside it. Explicitly a
+weight/power-density match claim, not a COP-beating claim.
+
+---
+
+## 22. Where does this repo's own model beat conventional cooling? — `regime_crossover_analysis.py`
+
+The direct, systematic answer to "where, if anywhere, does this repo's
+OWN model show magnetic cooling beating conventional cooling" — not by
+picking one favorable point, but by a wide search using only this repo's
+own already-tested functions (`main.py` step 15d).
+`run_cop_crossover_search()` swept span (3-30 K) against vapor-compression
+second-law efficiency (0.25-0.55, small residential-grade compressors
+through well-optimized chilled-water) and a broad grid of this repo's own
+AMR design freedoms (mass_regenerator, frequency, fluid_mdot, mu0H_max).
+**No crossover found** at any combination, including against
+vapor-compression's own least-favorable setting — e.g. at span=10 K, this
+repo's own best AMR_COP_electrical (4.60) does not beat VCC even at
+η=0.25 (COP=7.12). Consistent with every real-world check in Section 21:
+none of them find magnetocaloric cooling beating conventional cooling on
+COP either, only on narrower metrics.
+
+---
+
+## 23. Working-fluid selection, calibration-uncertainty propagation, and NSGA-III seed stability — `fluid_selection_optimization.py`, `uncertainty_propagation.py`, `pareto_multiseed_stability.py`
+
+**Fluid selection** (`main.py` step 18): sweeps every fluid in
+`core/fluids.py`'s `FLUID_LIBRARY` through the same NTU thermal model +
+calibrated loss model + geometry-explicit pumping every other production
+result uses, re-optimizing `mdot` per fluid, to justify
+`core.fluids.DEFAULT_FLUID` (water) as the recommended realistic choice
+on a genuine apples-to-apples COP_electrical/Qc basis rather than raw
+{ρ, cp, μ, k} property values alone. Additive-only — does not change any
+existing `AMRSystem` call site's fluid default.
+
+**Calibration-uncertainty propagation** (`main.py` step 16):
+`write_uncertainty_report()` runs a 2000-draw Monte Carlo over ±15%
+assumed calibration-input noise (a reasoned assumption, not a
+source-derived measurement uncertainty — none of the 3 CORE calibration
+papers report device-level error bars). At span=10 K, mu0H=2 T:
+COP_electrical mean=2.06, std=0.28, 90% CI=[1.67, 2.57]; across the full
+5-20 K sweep the CI band widens sharply as span increases (e.g. span=14K:
+mean=0.75, 90% CI=[0.49, 1.52]), and beyond 15 K the model's own COP goes
+to NaN (outside the validated envelope). A genuine, previously-undocumented
+finding surfaced while testing this module: the Monte Carlo `Qc`
+confidence band is architecturally near-zero-width, because cooling
+capacity in this codebase doesn't depend on the calibrated loss
+coefficients — only `COP_electrical` does. Only the
+`COP_electrical_p05`/`p95` columns carry real calibration uncertainty; the
+`Qc_p05`/`p95` columns are not informative.
+
+**NSGA-III seed-to-seed stability on the main Pareto front**
+(`main.py` step 16): `run_pareto_multiseed_stability_check()` reruns
+`optimize.run_optimization()` at full production settings
+(pop_size=40, n_gen=25) across 5 independent seeds, reporting variance
+on best COP_electrical, the knee-point design, and each material
+family's share of the merged front — extending the same seed-stability
+discipline `hysteresis_sensitivity.py`'s multiseed follow-up already
+applied to the ON/OFF hysteresis axis (Section 13.1) to the more basic
+question of whether the main search itself is seed-stable. Implemented
+and tested, but no production 5-seed run has been executed and recorded
+in this document as of this writing — treat single-seed headline numbers
+cited elsewhere in this repo's `results/` outputs as not yet
+seed-verified until this check is actually run.
+
+---
+
+## 24. Water usage and annualized/PUE framing — `water_usage.py`, `pue_annualized.py`
+
+Two additions answering questions this repo's single-design-point
+`comparison_table.csv` doesn't (`main.py` step 16):
+
+**PUE framing**: converts a cooling-system COP into its cooling-only
+contribution to PUE (PUE_cooling_only = 1 + P_cooling/P_IT), the metric a
+data-center engineering audience actually uses rather than COP alone. At
+illustrative default COPs: AMR COP=4.63 → PUE_cooling_only=1.216; VCC
+COP=3.20 → 1.312; liquid cooling COP=4.00 → 1.250.
+
+**Annualized/part-load comparison**: a coarse 6-climate-bin approximation
+(ASHRAE zone 4A-like) finds AMR's annual bin-weighted effective COP
+(6.07) is computed over only 45% of annual hours — the remaining 55%
+imply a span exceeding this repo's validated 20 K AMR envelope and are
+excluded rather than forced through a model known not to extrapolate
+there. Liquid cooling receives an economizer-mode credit below 18°C that
+neither AMR nor VCC receives (annual effective COP 22.77) — explicitly
+**not** an 8760-hour TMY simulation, adequate only to check whether the
+single-design-point conclusion survives a representative annual profile.
+
+**Water usage (WUE)**: converts each technology's already-computed COP
+into an annual water-consumption figure via Water Usage Effectiveness.
+At a 100 kW-IT facility with default rejection-class assignments: AMR
+(dry-air-cooled) and liquid cooling (closed-loop) both show
+WUE=0.05 L/kWh_IT (annual water ≈30,660 L) vs. vapor-compression
+(evaporative-tower) at WUE=1.80 L/kWh_IT (≈1.10M L). **Honest framing**:
+this compares technology-CLASS WUE references (rejection-strategy
+choice), not a like-for-like measurement at one real facility — AMR's
+advantage here comes from being assignable to a dry heat-rejection loop
+(enabled by, not uniquely guaranteed by, its refrigerant-free
+architecture), not from the magnetocaloric cycle itself using less water
+under the same rejection strategy as a compressor cycle would.
 
 ---
 

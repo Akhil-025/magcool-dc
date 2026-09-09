@@ -5,6 +5,8 @@ from core.fluid_mce_analysis import (
     fixed_span_comparison,
     compare_to_solid_amr_and_liquid_cooling,
     run_fluid_mce_analysis,
+    literature_search_for_working_body_benchmark,
+    FERROFLUID_LITERATURE_SEARCH_2024_2025,
 )
 
 
@@ -76,3 +78,39 @@ def test_run_fluid_mce_analysis_writes_file(tmp_path):
 def test_run_fluid_mce_analysis_no_file_write_when_out_path_none():
     result = run_fluid_mce_analysis(out_path=None, verbose=False)
     assert "PHASE 20" in result["text"]
+
+
+# ---- Literature search for a working-body benchmark (VALIDATION UPDATE) ----
+
+def test_literature_search_reports_no_working_body_benchmark():
+    finding = literature_search_for_working_body_benchmark(verbose=False)
+    assert finding["working_body_benchmark_found"] is False
+    assert finding["every_paper_uses_ferrofluid_as"] == "thermal switch / heat-transfer medium"
+    assert len(finding["papers_checked"]) == len(FERROFLUID_LITERATURE_SEARCH_2024_2025)
+
+
+def test_literature_search_reports_span_collapse_cross_check():
+    finding = literature_search_for_working_body_benchmark(verbose=False)
+    assert finding["this_modules_own_max_span_over_phi_sweep_K"] >= 0.0
+    assert finding["representative_target_span_K"] > 0.0
+    assert 0.0 <= finding["max_span_as_fraction_of_representative"]
+    # not asserting the specific boolean value of
+    # span_collapse_consistent_with_literature_absence here -- that is a
+    # genuine finding, not a fixed property of the interface -- only that
+    # the field is present and derived from the two span numbers above.
+    assert finding["span_collapse_consistent_with_literature_absence"] == (
+        finding["max_span_as_fraction_of_representative"] < 0.25)
+
+
+def test_literature_search_includes_krieger_dougherty_grounding():
+    finding = literature_search_for_working_body_benchmark(verbose=False)
+    grounding = finding["krieger_dougherty_rheology_grounding"]
+    assert "Susan-Resiga" in grounding["source"]
+    assert grounding["this_module_uses_matching_defaults"] is True
+
+
+def test_literature_search_papers_all_flagged_non_working_body():
+    for paper in FERROFLUID_LITERATURE_SEARCH_2024_2025:
+        assert "source" in paper and "ferrofluid_role" in paper
+        assert "working body" not in paper["ferrofluid_role"].lower() or \
+               "not" in paper["ferrofluid_role"].lower()

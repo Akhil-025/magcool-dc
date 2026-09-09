@@ -3191,3 +3191,184 @@ mdot values (rather than re-deriving from the current default at request
 time, as `regime_crossover_analysis.py` and `MCE_Value_Proposition.md`
 both do) should be treated as needing a re-check if it's ever revisited —
 flagged here rather than silently assumed unaffected.
+
+## Phase 38 — thermal-diode and fluid-MCE ferrofluid explorations: graduating what can honestly graduate, not both
+
+Motivation. Phase 18 (`core/thermal_diode.py`) and Phase 20
+(`core/fluid_mce_cycle.py`) were both explicitly left as
+design-exploration tools, not validated features, for the same
+structural reason: this project's copy of Kitanovski et al. (2015) is a
+30-page front-matter/Chapter-1-only excerpt, missing both Ch. 6
+(pp. 211-268, active thermal diodes) and Ch. 5 (pp. 167-209,
+magnetocaloric fluids), and no benchmark device existed in either
+module's corpus to check numbers against. This pass asked, for each
+module separately (not assuming the answer would be the same for both):
+has new literature since Phase 18/20 closed that gap, and if so, can the
+module honestly graduate to "validated feature"? A fresh, targeted web
+search — not constrained to this project's own PDF corpus; Papers.zip's
+own copy of Kitanovski et al. (2015) was independently re-checked by
+page count and confirmed to be the SAME 30-page excerpt, so it adds
+nothing new to either module's original honesty flag — found real,
+peer-reviewed, AMR-relevant literature for the thermal-diode mechanism,
+and confirmed (rather than merely repeated) the absence of any
+working-body benchmark for the fluid-MCE mechanism. The two modules
+therefore diverge in disposition this pass, and that divergence is the
+headline result, not an oversight.
+
+### core/thermal_diode.py + core/thermal_diode_analysis.py — graduates to a validated feature (for a NEW mechanism, not the old one)
+
+Four real sources ground a genuinely different active-diode mechanism
+than Sect. 6.2.4's mechanical-contact diode — a ferrofluid-based
+magnetically-activated thermal switch (MATS), same functional class
+(active, cyclically-switched thermal rectifier), no moving parts:
+
+  1. Katiyar, Dhar, Nandi & Das, J. Magn. Magn. Mater. 419 (2016)
+     588-599 — directly measured ferrofluid thermal-conductivity
+     switching, up to 284% enhancement (rectification_ratio = 3.84, a
+     real measured value, not invented).
+  2. Rodrigues, Dias, Martins, Silva, Araújo, Oliveira, Pereira &
+     Ventura, Applied Energy 251 (2019) 113213 — a real, built,
+     electromagnet-driven ferrofluid thermal switch with no moving
+     parts, tested 0.5-18 Hz, 6.5-39 W coil power. This is exactly the
+     "AMR-specific, room-temperature, Hz-scale" source Phase 18's
+     original honesty flag said was missing.
+  3. Andrade, Fernandes, Teixeira, Pereira, Pires, Silva, Ventura &
+     Oliveira, Applied Energy 356 (2024) 122325 — a second real MATS
+     device, 0.01-0.60 Hz, ms-scale switching.
+  4. Klinar, Vozel, Swoboda, Sojer, Muñoz Rojo & Kitanovski (the SAME
+     lead author as this project's own reference book), iScience 25
+     (2022) 103779 — a numerical device-level model corroborating
+     response-time and contact-resistance orders of magnitude, not used
+     as this module's own governing model.
+
+New `FerrofluidThermalSwitch` class (`core/thermal_diode.py`), sharing
+`MechanicalContactDiode`'s exact interface (`rectification_ratio`,
+`switching_power_W(frequency)`) so it is a drop-in alternative for
+`AMRSystem`'s `thermal_diode` parameter, with a
+`max_tested_frequency_Hz` field that emits a `UserWarning` when a caller
+extrapolates past Rodrigues et al.'s own tested 18 Hz ceiling rather
+than silently doing so. `DEFAULT_FERROFLUID_THERMAL_SWITCH`:
+`rectification_ratio=3.84` (Katiyar et al. 2016, real), `holding_power_W
+=15.0` (midpoint of Rodrigues et al.'s tested 6.5-39 W range),
+`max_tested_frequency_Hz=18.0` (Rodrigues et al.'s own tested ceiling).
+
+A real benchmark DEVICE also now exists and is checked against directly:
+Andrade, Fernandes, Silva, Teixeira, Pereira, Duarte, Pires, Ventura &
+Oliveira, Int. J. Refrigeration 164 (2024) 210-217 — an actual built
+refrigeration prototype coupling a 7g Gd ingot with a ferrofluid thermal
+switch. Its own reported finding: no COP/span advantage under symmetric
+cycling; up to 60% span improvement under asymmetric cycling (a 1D
+numerical-model result in the same paper, NOT itself hardware-measured).
+New `ANDRADE_2024_BENCHMARK` dict and
+`check_against_andrade_2024_benchmark()`
+(`core/thermal_diode_analysis.py`) check this repo's own model against
+the SYMMETRIC-cycling half only — the half `AMRSystem` (no
+asymmetric-cycle mechanics) can actually represent — and find
+qualitative agreement (both this model, by construction of a cost-only
+accounting with no offsetting heat-transfer benefit, and the real device
+show no net advantage under symmetric cycling). The asymmetric-cycle 60%
+claim is explicitly flagged as NOT reproduced by this repo's model — a
+stated scope gap, not a silently dropped result.
+
+Disposition: `FerrofluidThermalSwitch` / `DEFAULT_FERROFLUID_THERMAL_SWITCH`
+are promoted to a validated feature (grounded rectification ratio,
+grounded frequency range, an actual benchmark device to check
+qualitative behavior against). `MechanicalContactDiode` /
+`DEFAULT_MECHANICAL_CONTACT_DIODE` (Sect. 6.2.4's DIFFERENT, mechanical-
+contact mechanism) are UNCHANGED and remain design-exploration — the new
+literature grounds a different mechanism, not the old one, and does not
+retroactively validate it. Both classes are kept, sharing the same
+interface, so a caller picks either mechanism explicitly.
+
+Tests: `tests/test_thermal_diode.py` gained
+`FerrofluidThermalSwitch`-specific tests (rectification ratio matches
+Katiyar et al.'s 3.84, interface parity with `MechanicalContactDiode`,
+validation of all constructor guards, frequency-extrapolation warning).
+`tests/test_thermal_diode_analysis.py` gained tests for
+`ANDRADE_2024_BENCHMARK`'s digitized fields and for
+`check_against_andrade_2024_benchmark()`'s qualitative-agreement finding,
+plus confirms the ferrofluid-switch sweep still never beats the no-diode
+baseline (same cost-only-accounting structural property already tested
+for `MechanicalContactDiode`).
+
+### core/fluid_mce_cycle.py + core/fluid_mce_analysis.py — does NOT graduate to a validated feature; rheology grounding and the negative finding itself do
+
+An extended web search, deliberately broader than Phase 20's original
+two adjacent results, specifically checked for ANY magnetocaloric-fluid-
+as-WORKING-BODY refrigeration device with a reported Qc/COP figure. It
+still found none. What it did find is that every real ferrofluid-based
+magnetocaloric device in the literature — the same four sources grounding
+the new `FerrofluidThermalSwitch` class above, plus Andrade et al. (2023,
+Applied Energy) — uses the ferrofluid as a heat-transfer/thermal-switch
+medium, never as the working refrigerant itself. This is reported as a
+genuine finding this pass's own broader search corroborates, not merely
+repeats, and it is read together with this module's own prior computed
+result (mixture-heat-capacity dilution plus no regeneration collapses
+usable span to a small fraction of a realistic target span at every
+tested particle loading) as at least CONSISTENT with a real physical
+reason for the literature gap — not proof of it.
+
+One real, positive, but narrower finding: Susan-Resiga, Socoliuc, Boros,
+Borbáth, Marinica, Han & Vékás, J. Colloid Interface Sci. 373 (2012)
+110-115, measured the viscosity of a transformer-oil-based MAGNETITE
+nanofluid (the same particle material this module already defaults to)
+across phi = 0.8-21%, zero field, and report the Krieger-Dougherty
+formula fits their data "very well" with fitted structural parameters
+close to plain spherical-particle theory. New
+`krieger_dougherty_grounded_in_susan_resiga_2012()`
+(`core/fluid_mce_cycle.py`) confirms this module's exact default
+parameters (`DEFAULT_PHI_MAX=0.63`, `DEFAULT_INTRINSIC_VISCOSITY=2.5`)
+match what that real measurement supports — this grounds the suspension
+VISCOSITY physics only, says nothing about magnetocaloric performance,
+and does not extend to the field-dependent case (their measurement, like
+this module's `krieger_dougherty_viscosity()`, is zero-field only).
+
+New `literature_search_for_working_body_benchmark()`
+(`core/fluid_mce_analysis.py`) documents the extended search
+(`FERROFLUID_LITERATURE_SEARCH_2024_2025`, 6 papers checked, each with
+its actual role recorded), reports the negative working-body-benchmark
+finding directly, and cross-checks it against this module's own
+volume-fraction sweep (the best-case usable span over the full phi
+sweep, up to `phi_max=0.63`, still comes out well under the
+representative 10K data-center target span).
+
+Disposition: `FerrofluidMCESystem`'s own POSITIVE, quantitative Qc/COP
+predictions remain unvalidated design-exploration output — same tier as
+Phase 20 left them, now with a broader, not narrower, search behind that
+conclusion. What IS now validated: (1) the suspension rheology (Krieger-
+Dougherty with this module's exact defaults, grounded in a real
+magnetite measurement) and (2) the negative finding itself (no
+working-body benchmark exists anywhere in the literature checked,
+consistent with this module's own span-collapse result). Do NOT read
+this module's Qc/COP numbers as calibrated; DO read its span-collapse
+finding and the absence of a working-body benchmark as validated
+conclusions in their own right.
+
+Tests: `tests/test_fluid_mce_cycle.py` gained
+`krieger_dougherty_grounded_in_susan_resiga_2012()` tests (citation
+fields, tested-phi-range upper bound, default-parameter match).
+`tests/test_fluid_mce_analysis.py` gained
+`literature_search_for_working_body_benchmark()` tests (negative finding
+reported correctly, span-collapse cross-check derived consistently from
+the two span numbers rather than hardcoded, Krieger-Dougherty grounding
+surfaced in the returned dict, and every checked paper carries a
+recorded, non-working-body role).
+
+What this pass deliberately did NOT do, and why: it did not force
+`FerrofluidMCESystem` to graduate alongside `FerrofluidThermalSwitch`
+just because they share underlying citations — the two mechanisms
+(working body vs. heat-transfer/thermal-switch medium) are structurally
+different claims, and only one of them has a benchmark device to check
+against. It did not add an offsetting heat-transfer-benefit model to
+`MechanicalContactDiode` or thread `thermal_diode` through
+`cascade.py` — both remain out of scope for the same reasons Phase 18's
+own "did NOT do" list already gave. It did not update `main.py`'s
+executive summary to add a new step for this pass's two analysis
+functions — `main.py` already runs `thermal_diode_analysis.py` and
+`fluid_mce_analysis.py` in full (Phase 18/20's own integration points),
+and both new functions (`check_against_andrade_2024_benchmark()`,
+`literature_search_for_working_body_benchmark()`) are already called
+from within `run_thermal_diode_analysis()` / `run_fluid_mce_analysis()`
+respectively, so their findings already appear in
+`results/thermal_diode_analysis.txt` / `results/fluid_mce_analysis.txt`
+without any further wiring.

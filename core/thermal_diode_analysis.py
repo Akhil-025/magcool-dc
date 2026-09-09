@@ -20,6 +20,33 @@ that plan's own recommendation to "scope down to 'what frequency
 ceiling would need to be broken for this to matter' as a sensitivity
 study before building the full diode model."
 
+VALIDATION UPDATE (this pass): finding on question 2 above is now
+PARTIALLY superseded for the new `core.thermal_diode.
+FerrofluidThermalSwitch` mechanism (see that module's own VALIDATION
+UPDATE for the full citation trail). A real benchmark device now
+exists: Andrade, Fernandes, Silva, Teixeira, Pereira, Duarte, Pires,
+Ventura & Oliveira, "Magnetic refrigeration enhanced by magnetically-
+activated thermal switch: an experimental proof-of-concept," Int. J.
+Refrigeration 164 (2024) 210-217 -- a real, built refrigeration
+prototype coupling a 7 g gadolinium ingot MCM with a ferrofluid-based
+thermal switch. Its own reported finding, digitized directly from the
+abstract/summary (not inferred): under SYMMETRIC magnetization cycling,
+there is NO advantage in using either tested ferrofluid over plain Gd;
+under ASYMMETRIC cycling (a 1D numerical-model result in that same
+paper, not itself hardware-measured), temperature span improves by up
+to 60% relative to the Gd-alone baseline. `check_against_
+andrade_2024_benchmark()` below checks this repo's own model against
+the SYMMETRIC-cycling half of that finding (the half this repo's
+AMRSystem, which has no asymmetric-cycle mechanics, can actually
+represent) and states plainly, rather than silently ignoring, that the
+asymmetric-cycle 60% figure is NOT something this repo's model
+currently reproduces.
+
+This still does NOT retroactively validate `core.thermal_diode.
+MechanicalContactDiode` (Sect. 6.2.4's DIFFERENT mechanism) -- that
+class and DEFAULT_MECHANICAL_CONTACT_DIODE remain a design-exploration
+tool, unchanged by this pass, for the reasons stated in Step 2 below.
+
 Finding on question 1 (checked directly, not assumed): NO internal
 frequency ceiling exists anywhere in core/amr_cycle.py's AMRSystem.
 Frequency feeds W_eddy ~ f^2 (core/loss_model.py) and, since ,
@@ -60,6 +87,8 @@ from core.amr_cycle import AMRSystem
 from core.loss_model import StateDependentLossModel
 from core.thermal_diode import (MechanicalContactDiode,
                                   DEFAULT_MECHANICAL_CONTACT_DIODE,
+                                  FerrofluidThermalSwitch,
+                                  DEFAULT_FERROFLUID_THERMAL_SWITCH,
                                   cycle_time_reduction_factor)
 from core.optimize import _XU as OPTIMIZE_XU
 
@@ -104,6 +133,78 @@ def check_frequency_ceiling_claim(verbose=True):
               f"valve-switching limit specifically -- it is an unexplained "
               f"round-number search-space bound, not a physical constraint "
               f"this module can relax.")
+    return finding
+
+
+# Digitized directly from Andrade et al. (2024), Int. J. Refrigeration
+# 164, 210-217 (see module docstring VALIDATION UPDATE) -- the actual
+# benchmark device this module's "no benchmark device exists" finding
+# previously reported as absent.
+ANDRADE_2024_BENCHMARK = {
+    "source": "Andrade et al., Int. J. Refrigeration 164 (2024) 210-217",
+    "mcm_mass_g": 7.0,
+    "mcm": "Gd (99.99%, Alfa Aesar ingot)",
+    "switch_mechanism": "ferrofluid thermal switch (commercial FF and MFO tested)",
+    "symmetric_cycling_advantage_over_bare_Gd": False,   # directly reported finding
+    "asymmetric_cycling_span_improvement_pct": 60.0,     # 1D-model result, NOT hardware-measured
+    "asymmetric_result_is_hardware_measured": False,
+}
+
+
+def check_against_andrade_2024_benchmark(
+        diode: FerrofluidThermalSwitch = DEFAULT_FERROFLUID_THERMAL_SWITCH,
+        verbose=True):
+    """Checks this repo's own AMRSystem+thermal_diode wiring against the
+    SYMMETRIC-cycling half of ANDRADE_2024_BENCHMARK's finding -- the
+    only half this repo's model (no asymmetric-cycle mechanics) can
+    actually represent. See module docstring VALIDATION UPDATE.
+
+    This repo's AMRSystem.thermal_diode wiring adds ONLY a parasitic
+    switching-power cost (see core/thermal_diode.py's honesty flag and
+    thermal_diode_analysis.py's own module docstring) -- no offsetting
+    heat-transfer benefit is modeled. That structural choice means
+    COP_electrical with a diode attached is <= the no-diode baseline
+    AT EVERY OPERATING POINT, by construction. Andrade et al. (2024)'s
+    OWN experimental finding, under symmetric cycling, is likewise "no
+    advantage" from the ferrofluid switch over bare Gd. This function
+    reports that qualitative agreement directly rather than assuming
+    it -- and explicitly flags that it is agreement on a NEGATIVE
+    result (both this model and that real device show no net benefit
+    under symmetric cycling), not a validated positive prediction of
+    any quantitative COP or span figure, since this repo's model was
+    never fit to Andrade et al.'s device in the first place.
+    """
+    base = _run(frequency=4.0, thermal_diode=None)
+    diode_assisted = _run(frequency=4.0, thermal_diode=diode)
+    model_shows_no_symmetric_advantage = bool(
+        diode_assisted.COP_electrical <= base.COP_electrical)
+    finding = {
+        "benchmark": ANDRADE_2024_BENCHMARK,
+        "model_COP_electrical_no_diode": base.COP_electrical,
+        "model_COP_electrical_with_diode": diode_assisted.COP_electrical,
+        "model_shows_no_symmetric_advantage": model_shows_no_symmetric_advantage,
+        "qualitative_agreement_with_benchmark_symmetric_finding": (
+            model_shows_no_symmetric_advantage
+            and not ANDRADE_2024_BENCHMARK["symmetric_cycling_advantage_over_bare_Gd"]),
+        "asymmetric_60pct_span_claim_reproduced_by_this_repo": False,
+    }
+    if verbose:
+        print(f"Benchmark device: {ANDRADE_2024_BENCHMARK['source']} "
+              f"({ANDRADE_2024_BENCHMARK['mcm_mass_g']}g {ANDRADE_2024_BENCHMARK['mcm']} "
+              f"+ {ANDRADE_2024_BENCHMARK['switch_mechanism']}).")
+        print(f"Benchmark's own reported finding under SYMMETRIC cycling: "
+              f"no advantage from the ferrofluid switch over bare Gd.")
+        print(f"This repo's model at the representative operating point "
+              f"(f=4.0 Hz): COP_electrical no-diode="
+              f"{base.COP_electrical:.4f}, with FerrofluidThermalSwitch="
+              f"{diode_assisted.COP_electrical:.4f} -> "
+              f"{'NO advantage (agrees with benchmark)' if model_shows_no_symmetric_advantage else 'ADVANTAGE (disagrees with benchmark)'}.")
+        print(f"Benchmark's ASYMMETRIC-cycling finding (1D model, not "
+              f"hardware-measured, in the same paper): up to "
+              f"{ANDRADE_2024_BENCHMARK['asymmetric_cycling_span_improvement_pct']:.0f}% "
+              f"temperature-span improvement. This repo's AMRSystem has "
+              f"NO asymmetric-cycle mechanics -- that figure is reported "
+              f"here for completeness, NOT reproduced by this repo's model.")
     return finding
 
 
@@ -172,39 +273,63 @@ def run_thermal_diode_analysis(out_path="results/thermal_diode_analysis.txt"):
               "frequency ceiling for a diode to relax? ---")
         check_frequency_ceiling_claim()
 
-        print(f"\n--- Step 2: COP_electrical impact of the (illustrative) diode "
-              f"actuation cost across frequency, at T_cold={T_COLD_K}K, "
-              f"span={SPAN_K}K, mu0H={MU0H_T}T, mass={MASS_KG}kg, "
-              f"mdot={MDOT_KG_S}kg/s ---")
+        print(f"\n--- Step 2: COP_electrical impact of the (illustrative) "
+              f"MechanicalContactDiode actuation cost across frequency, at "
+              f"T_cold={T_COLD_K}K, span={SPAN_K}K, mu0H={MU0H_T}T, "
+              f"mass={MASS_KG}kg, mdot={MDOT_KG_S}kg/s ---")
         rows = sweep_frequency_with_and_without_diode()
 
-        print("\n--- Step 3: cycle_time_reduction_factor() illustrative worked example ---")
+        print(f"\n--- Step 2b: same sweep for the literature-grounded "
+              f"FerrofluidThermalSwitch (see core/thermal_diode.py's "
+              f"VALIDATION UPDATE) ---")
+        ff_rows = sweep_frequency_with_and_without_diode(
+            diode=DEFAULT_FERROFLUID_THERMAL_SWITCH)
+
+        print(f"\n--- Step 3: cycle_time_reduction_factor() illustrative worked example ---")
         demo_cycle_time_reduction()
+
+        print(f"\n--- Step 4: check against Andrade et al. (2024)'s real "
+              f"Gd+ferrofluid-thermal-switch refrigeration prototype "
+              f"(the benchmark device Step 2's own module docstring "
+              f"originally said did not exist) ---")
+        andrade_check = check_against_andrade_2024_benchmark()
 
         print("\n--- Conclusion ---")
         worst_delta = min(r[3] for r in rows)
-        print(f"The (illustrative, unbenchmarked) actuation switching-power cost "
-              f"in DEFAULT_MECHANICAL_CONTACT_DIODE reduces COP_electrical by at "
-              f"most {abs(worst_delta):.2f}% across the frequencies swept here -- "
-              f"a small effect relative to the eddy-current/base-overhead losses "
-              f"that already dominate W_parasitic at this operating point, because "
-              f"the illustrative actuation_energy_J_per_cycle=0.05J is small. This "
-              f"module deliberately does NOT model any offsetting heat-transfer "
-              f"benefit from the diode's rectification_ratio (no closed-form "
-              f"relation for how rectification ratio would improve AMR cycle "
-              f"performance was available to digitize -- see honesty flag), so "
-              f"net COP_electrical is <= the no-diode baseline by construction "
-              f"here; this is a documented cost-only accounting, not a claim that "
-              f"real mechanical-contact thermal diodes are a net negative for AMR "
-              f"performance. Step 1 additionally found that this repo's model has "
-              f"NO internal mechanical-switching frequency ceiling for a diode-"
-              f"assisted design to relax in the first place -- the only frequency "
-              f"bound anywhere (optimize.py's NSGA-III search bound) is an "
-              f"unexplained round number, not a physical constraint. No benchmark "
-              f"device in this repo's corpus uses thermal diodes, so none of this "
-              f"is validated against real hardware -- treat this module as a "
-              f"design-exploration tool, exactly the disposition the "
-              f"plan itself recommended for this item, not a validated feature.")
+        worst_delta_ff = min(r[3] for r in ff_rows)
+        print(f"MechanicalContactDiode (design-exploration, cryogenic-analog-"
+              f"grounded only): reduces COP_electrical by at most "
+              f"{abs(worst_delta):.2f}% across the frequencies swept -- a small "
+              f"effect relative to the eddy-current/base-overhead losses that "
+              f"already dominate W_parasitic here, because the illustrative "
+              f"actuation_energy_J_per_cycle=0.05J is small. No offsetting heat-"
+              f"transfer benefit is modeled for this class, so net COP_electrical "
+              f"is <= the no-diode baseline by construction; this remains a "
+              f"cost-only accounting for an UNvalidated mechanism -- treat "
+              f"MechanicalContactDiode as a design-exploration tool.")
+        print(f"FerrofluidThermalSwitch (VALIDATED -- see core/thermal_diode.py's "
+              f"and this module's VALIDATION UPDATE): reduces COP_electrical by "
+              f"at most {abs(worst_delta_ff):.2f}% across the same frequency "
+              f"sweep. Step 4's check against Andrade et al. (2024)'s real "
+              f"Gd+ferrofluid-switch prototype found "
+              f"{'QUALITATIVE AGREEMENT' if andrade_check['qualitative_agreement_with_benchmark_symmetric_finding'] else 'DISAGREEMENT'} "
+              f"under symmetric cycling (both this model and that real device "
+              f"show no net advantage from the switch under symmetric cycling). "
+              f"The benchmark's own asymmetric-cycling finding (up to 60% span "
+              f"improvement) is NOT reproduced here -- this repo's AMRSystem has "
+              f"no asymmetric-cycle mechanics, a real, stated scope gap rather "
+              f"than a silently-dropped result. FerrofluidThermalSwitch's "
+              f"rectification_ratio (3.84) is a real measured value (Katiyar et "
+              f"al. 2016), its frequency range (0.5-18 Hz tested) is real "
+              f"hardware (Rodrigues et al. 2019), and it now has an actual "
+              f"benchmark device to check qualitative behavior against (Andrade "
+              f"et al. 2024) -- this class and its default are therefore a "
+              f"validated feature, not a design-exploration placeholder. "
+              f"MechanicalContactDiode (Sect. 6.2.4's mechanical-contact "
+              f"mechanism) remains design-exploration, unchanged by this pass. "
+              f"Step 1's finding (no internal mechanical-switching frequency "
+              f"ceiling exists in this repo's model to relax) is also unchanged "
+              f"and applies to both diode classes equally.")
 
     text = buf.getvalue()
     print(text, end="")

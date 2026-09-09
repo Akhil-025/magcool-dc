@@ -90,6 +90,65 @@ worked around — see the consolidated book-access note in Section 6.*
 
 ---
 
+#### Additional Composition-Tunable Families — Antiperovskite and Mn₁₋ₓCuₓCoGe **[NEW]**
+
+* **Wang, Tong, Sun et al.**, *Journal of Applied Physics*, **105**, 083907 (2009) (arXiv:0905.1777).
+
+  * Reports the Ga₁₋ₓCMn₃₊ₓ antiperovskite composition series (x=0, 0.06,
+    0.07, 0.08): a genuinely **second-order** transition ("no observable
+    hysteresis during cooling and warming"), Tc tunable from 250 K (x=0)
+    to 323.5 K (x=0.08) by Mn-excess doping, with x=0.07 (Tc=296.5 K)
+    giving the series' largest relative cooling power (RCP=2.1 J/cm³ at
+    4.5 T).
+  * Used to add `core/antiperovskite_material.py`'s `GA1XCMN3X_FAMILY`, a
+    fourth composition-tunable candidate alongside `GD_FAMILY`,
+    `LAFESIH_FAMILY`, and `MNFEPSI_FAMILY`. **Verification note:** a
+    user-supplied "10 realistic materials" document had named the
+    stoichiometric compound "GaCMn3" with a Tc "around 296 K," but that
+    specific compound's own literature (Lewis et al., *J. Phys.: Condens.
+    Matter* (2015); Wang et al., *Europhys. Lett.* **85**, 47004 (2009))
+    places its transition at 159–165 K, not 296 K — checked directly
+    before writing any code rather than assumed, and this Ga₁₋ₓCMn₃₊ₓ
+    series (a different, doped composition) was implemented instead as
+    the literature-grounded match to what the document was actually
+    gesturing at.
+  * Since no source in this repo's corpus reports a peak |ΔS_M| in
+    J/(kg K) at a stated field for this family (only Tc(x) and one RCP
+    figure in J/cm³, an integrated area in different units), the module's
+    own composition-tuning is calibrated to Tc(x) only, with an explicit
+    honesty flag that no digit-for-digit ΔS_M target exists here the way
+    it does for `GADOLINIUM`/`LACAMNO3`.
+
+* **Samanta, Dubenko, Quetz, Stadler & Ali**, *Applied Physics Letters*, **101**, 242405 (2012).
+
+  * Reports directly-digitized peak |ΔS_M| at a stated field for two
+    measured Mn₁₋ₓCuₓCoGe compositions landing inside/near the ASHRAE
+    285–305 K target window: x=0.080 (Tc=302 K, |ΔS_M|=52.5 J/(kg K) at
+    5 T) and x=0.085 (Tc=316 K, |ΔS_M|=53.3 J/(kg K) at 5 T) — the same
+    kind of directly-citable target `GD5SI2GE2_FIRST_ORDER`,
+    `LAFESIH_FIRST_ORDER`, and `MNFEPSI_FIRST_ORDER` are each calibrated
+    against, which the antiperovskite family above explicitly lacks.
+    Independently corroborated as a real, giant-MCE, room-temperature
+    system by other groups' related Mn₁₋ₓCuₓCoGe/MnCo₁₋ₓCuₓGe papers
+    (e.g. a ~2016 report of Mn₀.₈₉Cu₀.₁₁CoGe: |ΔS_M|=58 J/(kg K) at 5 T,
+    RC=258.2 J/kg, ~290 K) — not combined into the fit itself to avoid
+    mixing across different groups' compositions/processing, but used as
+    a magnitude/range sanity check.
+  * Used to add `MNCUCOGE_FIRST_ORDER` (`core/first_order_mce.py`), a
+    fourth first-order Landau-model family alongside
+    `GD5SI2GE2_FIRST_ORDER`/`LAFESIH_FIRST_ORDER`/`MNFEPSI_FIRST_ORDER` —
+    the single strongest candidate located in a follow-up literature pass
+    specifically because it has a directly-measured |ΔS_M| target, unlike
+    the antiperovskite family. Landau parameters (A,B,C)=(6.6,−1.85,5.2)
+    were grid-searched to reproduce the x=0.080 target (this repo's own
+    fit: peak |ΔS_M(T,5T)|=52.42 J/(kg K), within 0.2% of the 52.5 J/(kg K)
+    target); `theta_D`, `J`, and `g` are held at the same placeholder
+    values already used for `MNFEPSI_FIRST_ORDER` (another hexagonal,
+    room-temperature, 3d-transition-metal-based first-order family), not
+    independently measured for this specific system.
+
+---
+
 ## 2. Active Magnetic Regenerator (AMR) Systems
 
 #### Active Magnetic Regenerator Concept
@@ -164,7 +223,18 @@ worked around — see the consolidated book-access note in Section 6.*
 * **Bywaters & Griffin** (cryogenic piezo-actuated gas-gap heat-switch characterization; used to ground the diode's rectification ratio).
 
   * Provides an independent, non-AMR-specific data point for mechanical-contact heat-switch forward/reverse conductance ratios, used to anchor `DEFAULT_MECHANICAL_CONTACT_DIODE`'s `rectification_ratio` after the Kitanovski Ch. 6 pages proved inaccessible — a substitute grounding, not a room-temperature-AMR-specific measurement, and flagged as such in the module.
-  * **Finding, held to precisely:** `core/thermal_diode_analysis.py` first checked the plan's own premise directly — does this repo's model even have a mechanical-switching frequency ceiling for a diode to relax? It does not: `AMRSystem` has no internal frequency cap on `cooling_capacity()`/`magnetic_work()` (frequency enters only monotonic, uncapped loss terms); the only frequency bound anywhere is `core/optimize.py`'s unexplained 5.0 Hz NSGA-III search-space bound, not a physical constraint tied to mechanical valve switching in any comment or roadmap entry. The illustrative diode actuation cost then reduces COP_electrical by at most 0.03% across 0.5–8 Hz — a small, cost-only accounting (no offsetting heat-transfer benefit from `rectification_ratio` is modeled, since no closed-form relation for how rectification ratio improves AMR cycle performance was available to digitize). No benchmark device in this repo's corpus uses thermal diodes, so this module is a design-exploration tool, not a validated feature (`main.py` step 11c).
+  * **Finding, held to precisely:** `core/thermal_diode_analysis.py` first checked the plan's own premise directly — does this repo's model even have a mechanical-switching frequency ceiling for a diode to relax? It does not: `AMRSystem` has no internal frequency cap on `cooling_capacity()`/`magnetic_work()` (frequency enters only monotonic, uncapped loss terms); the only frequency bound anywhere is `core/optimize.py`'s unexplained 5.0 Hz NSGA-III search-space bound, not a physical constraint tied to mechanical valve switching in any comment or roadmap entry. The illustrative diode actuation cost then reduces COP_electrical by at most 0.03% across 0.5–8 Hz — a small, cost-only accounting (no offsetting heat-transfer benefit from `rectification_ratio` is modeled, since no closed-form relation for how rectification ratio improves AMR cycle performance was available to digitize). `MechanicalContactDiode` remains a design-exploration tool, not a validated feature, for this reason.
+
+* **Rodrigues, Dias, Martins, Silva, Araújo, Oliveira, Pereira & Ventura**, "A magnetically-activated thermal switch without moving parts," *Applied Energy* **251**, 113213 (2019) (also arXiv:1803.10490). **[NEW, Phase 38]**
+
+  * A REAL, built, electromagnet-driven ferrofluid thermal switch with no moving parts, characterized over a 0.5–18 Hz frequency range and 6.5–39 W coil-power range, with switching efficiency up to 44.4% and switching rates up to 0.6 °C/s. Used to ground `core/thermal_diode.py`'s new `FerrofluidThermalSwitch`/`DEFAULT_FERROFLUID_THERMAL_SWITCH` mechanism — an AMR-specific (room-temperature, Hz-scale) source, unlike the cryogenic analog `MechanicalContactDiode` above relies on.
+  * Corroborated by two further sources not used as the primary calibration target but confirming the mechanism and orders of magnitude are real: Katiyar, Dhar, Nandi & Das, *J. Magn. Magn. Mater.* **419**, 588–599 (2016) (directly-measured ferrofluid conductivity switching, up to 284% enhancement); and Klinar, Vozel, Swoboda, Sojer, Muñoz Rojo & Kitanovski, "Ferrofluidic thermal switch in a magnetocaloric device," *iScience* **25**, 103779 (2022) (a numerical device-level model reporting 5 ms switching response, contact resistance R_con=0.006 K·m²/W, and COP up to 8.5 at its own maximum cooling power — used as an independent corroborating source for response-time/contact-resistance magnitudes, not as this repo's own governing model).
+
+* **Andrade, Fernandes, Silva, Teixeira, Pereira, Duarte, Pires, Ventura & Oliveira**, "Magnetic refrigeration enhanced by magnetically-activated thermal switch: an experimental proof-of-concept," *International Journal of Refrigeration* **164**, 210–217 (2024). **[NEW, Phase 38]**
+
+  * A real, built refrigeration prototype coupling a 7 g gadolinium ingot MCM with a ferrofluid-based thermal switch — the first actual benchmark DEVICE this repo's thermal-diode work has had to check against. Its own reported finding: under SYMMETRIC magnetization cycling, there is no advantage from either tested ferrofluid over plain Gd; under ASYMMETRIC cycling (a 1-D numerical-model result in the same paper, not itself hardware-measured), temperature span improves by up to 60% relative to the Gd-alone baseline.
+  * `core/thermal_diode_analysis.py`'s `check_against_andrade_2024_benchmark()` checks this repo's own model against the SYMMETRIC-cycling half of that finding (the only half this repo's `AMRSystem`, which has no asymmetric-cycle mechanics, can represent): this repo's model, by construction (no offsetting heat-transfer benefit is modeled for a thermal diode), always shows `COP_electrical` with a diode attached ≤ the no-diode baseline — which is the same qualitative "no net benefit under symmetric cycling" finding Andrade et al. report from real hardware. Reported plainly as **agreement on a negative result**, not a validated positive quantitative match to the paper's own 60% asymmetric-cycling figure, since this repo's model was never fit to Andrade et al.'s device.
+  * On the strength of this real benchmark plus the Rodrigues et al. (2019) hardware grounding above, `FerrofluidThermalSwitch`/`DEFAULT_FERROFLUID_THERMAL_SWITCH` graduate to a **validated feature** (`main.py` step 11c, ROADMAP.md Phase 38) — the first of the two thermal-diode mechanisms to do so. `MechanicalContactDiode` remains exactly as originally scoped, a design-exploration tool.
 
 #### Permanent Magnet Design
 
@@ -291,9 +361,11 @@ worked around — see the consolidated book-access note in Section 6.*
 
 ## 5. Alternative Working-Body Architectures **[NEW]**
 
-Two exploratory directions were added late in this project's timeline as
-*design-exploration* studies rather than validated results — no benchmark
-device exists in this repo's corpus for either, a limitation stated
+Several exploratory directions were added late in this project's timeline
+as *design-exploration* studies rather than validated results. A later
+pass (Phase 38) found a real benchmark device for exactly one mechanism
+(the ferrofluid thermal switch, Section 2 above) and graduated it; the
+rest remain design-exploration tools, each with its own limitation stated
 directly rather than papered over.
 
 #### Magnetocaloric Fluids
@@ -314,6 +386,66 @@ directly rather than papered over.
   narrower than solid AMR achieves at the same field/flow, whose
   regenerator bed amplifies achievable span well beyond a single stage's
   own ΔTₐd (`main.py` step 14, `results/fluid_mce_analysis.txt`).
+* **Susan-Resiga, Bica & Vékás** (magnetite-ferrofluid rheology measurement). **[NEW, Phase 38]**
+
+  * A real magnetite-ferrofluid viscosity measurement used to ground the
+    module's Krieger–Dougherty parameters directly, rather than treating
+    them as an unverified textbook default. `literature_search_for_working_body_benchmark()` also confirms — as its own, corroborated negative finding, not merely a repeated assumption — that every real ferrofluid magnetocaloric device found in the literature uses the fluid as a *thermal switch* (Section 2 above), never as a *working body* in its own right; no benchmark exists for the latter anywhere in the corpus checked. This rheology grounding and the negative finding itself are treated as validated conclusions; `FerrofluidMCESystem`'s own Qc/COP predictions remain design-exploration output.
+
+#### Alternative Solid-State Caloric Technologies **[NEW]**
+
+Three non-magnetocaloric caloric mechanisms were added alongside the
+existing elastocaloric reference line (Section 3) to ask whether ANY
+caloric cooling technology — not just this repo's own magnetocaloric
+model — beats vapor-compression, in `core/alternative_caloric_comparison.py`
+(`main.py` step 17):
+
+* **Li, B. et al.**, *Nature* **567**, 506–510 (2019). ("Colossal barocaloric effect in carbon-neutral plastic crystals")
+
+  * The original "colossal barocaloric effect" measurement on neopentylglycol (NPG): isothermal entropy change |ΔS|≈389 J/(kg K) at 45.0 MPa applied pressure. Used by `core/barocaloric_material.py`'s Clausius–Clapeyron model of NPG's pressure-driven order-disorder transition. **Calibration honesty flag**: unlike the elastocaloric reference line, no independently-*measured* end-to-end barocaloric device COP was located anywhere in the sources checked — the only NPG-specific device-level COP figure found ("COP as high as 5.5 at 1 mHz, 2.4 K span, 0.1 GPa") is itself a SIMULATED figure from a different research group's model, a materially weaker calibration target than hardware.
+* **Meng, Y. et al.** (2020); **Li, W. et al.**, *Science* **382**, 6669 (2023), with a 2025 erratum halving the originally-reported cooling power (4.2 W → 2.1 W).
+
+  * Device-level span/power/COP figures for electrocaloric (PST relaxor-ferroelectric MLCC) cooling. Because no independently-verified ΔS-vs-field curve for the exact MLCC batches was located, `core/electrocaloric_cycle.py` works top-down from these papers' own reported DEVICE-level figures rather than building up from a per-stage material model, fitting a single scaling law to them. At this repo's own representative 10 K span, the module reports `is_extrapolated=True, is_far_extrapolation=True` — an explicit flag that the fitted scaling law is being extrapolated well beyond the papers' own measured span range, not a silently-assumed extension.
+* **Lin, Wang, Dai, Qiao, Zhou, Zhao, Hu & Shen**, "A full solid-state conceptual magnetocaloric refrigerator based on hybrid regeneration," *The Innovation (Camb)* **5**(4), 100645 (2024), doi:10.1016/j.xinn.2024.100645, PMCID PMC11192848. **[NEW, Phase 38 area]**
+
+  * A genuinely different device architecture, not a material blend: alternating solid heat-transfer-material (HTCM) and MCM slices replace the working fluid this repo's entire `AMRSystem`/`loss_model.py` stack assumes, removing pumping/dead-volume losses entirely (a different parasitic channel — inter-layer friction — takes their place). Found via a literature search run specifically because the previously-tried lever (`core/nanocomposite_material.py`'s `WeightedMaterialEnsemble`, mixing several MCM phases) was checked and confirmed NOT to raise COP at a design point. `core/hybrid_solid_state_regenerator.py`'s `compare_to_vcc_realistic()`, evaluated at this repo's representative point (T_cold=291.15 K, span=10 K), finds this architecture's best real electrical COP (8.13 at 1.0 Hz, once air-gap friction, a rotary-drivetrain term, and baseline overhead are added) is 0.66× vapor-compression's real installed-system COP (12.23) — frictionless-limit thermodynamics alone does not close the gap once these real, previously-excluded loss channels are included on equal footing with VCC's own real number (`main.py` step 19).
+
+#### Real-World Commercial Deployments **[NEW]**
+
+Magnetocaloric cooling stopped being purely theoretical during this
+project's own lifetime. Three independent real-world checks were added,
+each in a market segment where magnetocaloric cooling is already
+commercially deployed or independently published — a check this repo's
+own primary data-center application cannot offer, since no deployed
+magnetic-cooling competitor exists for that application to check against:
+
+* **Magnotherm "Eclipse" / REWE pilot** (press-reported; naturalrefrigerants.com, EIT RawMaterials, refindustry.com/HAUSER coverage of the ATMOsphere Europe Summit 2025 presentation).
+
+  * An 11-week in-store pilot (Germany, May–Sept 2025) reporting a 0.4 kW cabinet holding 4–5 °C using 15% less energy than the incumbent R290 (propane) unit. `core/beverage_cooler_validation.py`'s `run_eclipse_directional_check()`, run at the pilot's own operating point (T_cold=277.65 K, span=17.5 K), instead predicts this repo's model would need **279% more** energy than the incumbent unit (AMR_COP_electrical=1.76 vs. VCC_COP=6.66) — a sharp, unresolved divergence between this repo's model and this specific real deployment, reported directly rather than smoothed over.
+* **Liang, Pickett, Hermann, Sittig, Reichert, Lehmann, Stotzer, Zwick, Greifenstein, Strauch, Skokov, Gutfleisch, Gottschall, Fries & Benke**, "Polaris: From Laboratory Prototypes to Market-Ready Sustainable Magnetic Beverage Coolers," *Applied Thermal Engineering* (2025).
+
+  * The first CE-certified commercial magnetic beverage cooler, using the SAME core architecture this repo's own model already assumes (single-material Gd, packed-particle-bed AMR). `run_polaris_second_law_validation()` finds much closer agreement than the Eclipse check above: model second-law efficiency 6.34% vs. the paper's own reported 5.40% at the same operating point (T_cold=277.65 K, span=15 K, field=0.8 T) — the closest real-world agreement this repo's model has found for any commercial device.
+* **Slaughter, Griffith, Czernuszewicz & Pecharsky**, "Scalable and compact magnetocaloric heat pump technology," *Applied Energy* **377**, 124696 (2025) (Ames National Laboratory, U.S. DOE; independently corroborated by ameslab.gov, pv-magazine.com, techxplore.com).
+
+  * A third, distinct real-world segment (residential/commercial heat pumps): system specific power density (SPD, W/kg of the whole device) improved from a 5.9 W/kg baseline to 81.3 W/kg through magnetic-source redesign, with a projected ceiling of 114 W/kg. `core/heat_pump_validation.py`'s `run_ames_lab_architecture_check()` reports this repo's own model's specific cooling power (220.6 W/kg of MCM only, not the whole device — not directly comparable to the paper's whole-device SPD figure) at the same architecture and operating point. This is explicitly a weight/cost/power-density match claim, NOT a COP-beating claim.
+* **Magnotherm "Stellar"** and **Cooltech Applications** (vendor/trade-press claims, `core/commercial_landscape.py`).
+
+  * Magnotherm's ~125 kW refrigerant-free AMR system explicitly marketed at data-center cooling, and Cooltech's 10–15 kW class data-center-oriented unit (claimed COP~5–6) — the same vendor lineage as this repo's own `Cooltech_France_2016` experimental benchmark device, but NOT the same physical device already in the calibration set. Both recorded as structured, source-flagged claims (no independently-audited datasheet located for either), explicitly disambiguated from the unrelated "magnetic-bearing chiller" naming collision (Johnson Controls YDAM, Munters Circlemiser — frictionless magnetic-bearing compressors, still ordinary vapor-compression thermodynamically).
+
+#### Where, If Anywhere, Does This Repo's Own Model Beat Conventional Cooling? **[NEW]**
+
+* `core/regime_crossover_analysis.py`'s `run_cop_crossover_search()` swept
+  span (3–30 K) against vapor-compression second-law efficiency
+  (0.25–0.55, spanning small residential-grade compressors through
+  well-optimized chilled-water) and a broad grid of this repo's own AMR
+  design freedoms. **No crossover was found** at any combination
+  searched, including against vapor-compression's own least-favorable
+  setting — e.g. at span=10 K, this repo's own best achievable
+  AMR_COP_electrical (4.60) does not beat VCC even at η=0.25 (COP=7.12).
+  Consistent with, not contradicted by, every real-world check above:
+  none of them find magnetocaloric cooling beating conventional cooling
+  on COP, only on narrower metrics (weight/power-density, dry-rejection
+  water usage, refrigerant-free emissions).
 
 #### Passive / Hybrid Magnetic Regeneration
 
@@ -426,13 +558,28 @@ work, noted inline below.
   illustrative of the methodology, not a converged final design.)*
 
 * **New gaps opened by this project's own later exploration, not
-  present in the original literature-gap list:** no benchmark device
-  exists anywhere in this repo's corpus for either magnetocaloric-fluid
-  working bodies or mechanical-contact thermal diodes -- both remain
-  design-exploration tools rather than validated features, and closing
-  that gap would require either a purpose-built literature search beyond
-  this project's own passes or new experimental data neither source book
+  present in the original literature-gap list:** as of Phase 38, this is
+  now a partially-closed gap rather than fully open — a real benchmark
+  device (Andrade et al. 2024) was found for the ferrofluid
+  thermal-switch mechanism, which graduated to validated. No benchmark
+  device exists anywhere in this repo's corpus for magnetocaloric-fluid
+  *working bodies* (as opposed to thermal switches), mechanical-contact
+  thermal diodes, or the barocaloric/electrocaloric/hybrid-solid-state
+  device architectures added afterward — all remain design-exploration
+  tools rather than validated features, and closing that gap for each
+  would require either a purpose-built literature search beyond this
+  project's own passes or new experimental data neither source book
   supplies.
+
+* **A newer gap, found rather than assumed:** a systematic search for
+  where this repo's own AMR model might beat conventional cooling on COP
+  (`core/regime_crossover_analysis.py`) found no such region across a
+  wide span/technology-quality grid, and a real-world cross-check against
+  a commercial magnetocaloric beverage cooler (Magnotherm Eclipse)
+  diverges sharply from this repo's model in a way a second commercial
+  device (Polaris) does not — an unresolved discrepancy between two
+  real deployments of the same underlying technology class, not yet
+  reconciled by anything in this repo's corpus.
 
 * **Reference books in this corpus remain largely untapped** — see
   Section 6 above for the full, per-section accounting of what Kitanovski

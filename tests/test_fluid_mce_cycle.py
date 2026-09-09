@@ -8,6 +8,8 @@ from core.fluid_mce_cycle import (
     pumping_power_pipe_flow,
     FerrofluidMCESystem,
     DEFAULT_PHI_MAX,
+    DEFAULT_INTRINSIC_VISCOSITY,
+    krieger_dougherty_grounded_in_susan_resiga_2012,
 )
 from core.mce_material import GADOLINIUM
 
@@ -117,3 +119,19 @@ def test_ferrofluid_characteristic_curve_length_matches_spans():
 def test_carrier_water_only():
     with pytest.raises(ValueError):
         suspension_effective_properties(0.1, carrier="oil")
+
+
+# ---- Krieger-Dougherty grounding (VALIDATION UPDATE) ----
+
+def test_krieger_dougherty_grounding_reports_susan_resiga_2012():
+    grounding = krieger_dougherty_grounded_in_susan_resiga_2012()
+    assert "Susan-Resiga" in grounding["source"]
+    assert grounding["particle_material"].startswith("magnetite")
+    assert grounding["phi_range_tested"][1] == pytest.approx(0.21)
+
+
+def test_krieger_dougherty_grounding_confirms_matching_defaults():
+    grounding = krieger_dougherty_grounded_in_susan_resiga_2012()
+    assert grounding["this_module_uses_matching_defaults"] is True
+    assert DEFAULT_PHI_MAX == pytest.approx(0.63)
+    assert DEFAULT_INTRINSIC_VISCOSITY == pytest.approx(2.5)

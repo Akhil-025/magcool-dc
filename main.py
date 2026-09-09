@@ -54,8 +54,13 @@ in the repository in one pass, in dependency order, so a single
         geometry co-optimization, per-material-family fronts merged post-hoc)
     11b. Hysteresis sensitivity (ON/OFF Pareto-front A/B check)
         (core/hysteresis_sensitivity.py)
-    11c. Thermal-diode sensitivity study, mechanical-contact active thermal
-        diode (core/thermal_diode.py, core/thermal_diode_analysis.py)
+    11c. Thermal-diode sensitivity study (core/thermal_diode.py,
+        core/thermal_diode_analysis.py). Two mechanisms, two dispositions
+        (Phase 38): MechanicalContactDiode remains a cost-only, unbenchmarked
+        design-exploration tool; FerrofluidThermalSwitch is now a VALIDATED
+        feature (rectification_ratio=3.84 measured, Rodrigues et al. 2019
+        hardware-grounded frequency range, checked against a real Andrade
+        et al. 2024 Gd+ferrofluid-switch refrigeration prototype)
     11d. Magnet-geometry (Halbach-cylinder) field-vs-mass cost model
         (core/magnet_geometry.py)
     11e. Magnet-geometry Pareto sensitivity, production-settings multi-seed
@@ -76,8 +81,14 @@ in the repository in one pass, in dependency order, so a single
         (results/design_recommendations.txt)
     14. Magnetocaloric fluids (ferrofluid/MR suspension) as an alternative
         working-body class (core/fluid_mce_cycle.py, core/fluid_mce_analysis.py)
-        -- design-exploration/comparison tool, not a validated
-        feature (see that module's own honesty flags)
+        -- its Qc/COP predictions remain a design-exploration tool, not a
+        validated feature: an extended Phase 38 literature search still found
+        no magnetocaloric-fluid-as-working-body refrigeration benchmark
+        anywhere. Two narrower things DID graduate this pass: the suspension
+        viscosity model (Krieger-Dougherty, grounded in a real magnetite-
+        ferrofluid measurement) and the negative finding itself (every real
+        ferrofluid magnetocaloric device found in the literature uses the
+        fluid as a thermal switch, never as a working body -- see step 11c)
     15. Passive/hybrid magnetic regenerator: does loading a conventional
         (vapor-compression) gas cycle's internal regenerator with a
         magnetocaloric material's own Curie-point heat-capacity anomaly
@@ -257,6 +268,19 @@ AMR benchmark device in this repo's corpus uses thermal diodes, so this
 step is explicitly a design-exploration tool rather than a validated
 result -- see ROADMAP.md's thermal-diode entry for the full scoping
 discussion and what was deliberately not built.
+
+A later pass (Phase 38, see ROADMAP.md) revisited this and split the
+disposition in two: MechanicalContactDiode above remains exactly as
+described -- cost-only, unbenchmarked, design-exploration. But a second
+mechanism, FerrofluidThermalSwitch, was added to core/thermal_diode.py
+and DID graduate to a validated feature: its rectification_ratio
+(3.84) and frequency range are grounded in real hardware (Rodrigues et
+al. 2019), and step 11c's new check_against_andrade_2024_benchmark()
+checks this repo's model against a real Andrade et al. (2024)
+Gd+ferrofluid-switch refrigeration prototype. Step 11c therefore now
+runs both mechanisms and reports two dispositions, not one -- see
+core/thermal_diode.py's VALIDATION UPDATE and ROADMAP.md's Phase 38
+entry for the full writeup.
 
 Following that (see ROADMAP.md), core/magnet_geometry.py was added: a
 standard, closed-form idealized-Halbach-cylinder relation for magnet mass
@@ -1365,8 +1389,11 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
         ("11b. Hysteresis sensitivity: does the thermal-hysteresis loss change the "
          "earlier material-selection result? (core/hysteresis_sensitivity.py)",
          None),  # handled specially below, result (hysteresis_result) captured for the executive summary
-        ("11c. Thermal-diode cost-only sensitivity (upper bound on switching-power "
-         "overhead, NOT a net-benefit finding): mechanical-contact active thermal diode "
+        ("11c. Thermal-diode sensitivity study, two mechanisms/two dispositions "
+         "(Phase 38): MechanicalContactDiode remains cost-only sensitivity (upper "
+         "bound on switching-power overhead, NOT a net-benefit finding); "
+         "FerrofluidThermalSwitch is now VALIDATED (hardware-grounded rectification "
+         "ratio and frequency range, checked against Andrade et al. 2024) "
          "(core/thermal_diode.py, core/thermal_diode_analysis.py)",
          lambda: thermal_diode_analysis.run_thermal_diode_analysis()),
         ("11d. Magnet-geometry (Halbach-cylinder) field-vs-mass cost model "
@@ -1993,17 +2020,22 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
     else:
         logger.info("  - unavailable (stage failed or was skipped)")
 
-    logger.info("Thermal-diode cost-only sensitivity (upper bound on switching-power "
-                "overhead, not a net-benefit finding): mechanical-contact active thermal "
-                "diode (step 11c)")
+    logger.info("Thermal-diode sensitivity study, two mechanisms/two dispositions "
+                "(Phase 38) (step 11c)")
     if _ok("11c."):
-        logger.info("  - Cost-only, unbenchmarked design-exploration study (see "
-                    "results/thermal_diode_analysis.txt and core/thermal_diode.py's docstring "
-                    "honesty flag): confirms this repo's model has no internal mechanical-"
-                    "switching frequency ceiling for a diode to relax, and quantifies the "
-                    "small COP_electrical cost of an illustrative diode actuation-switching-"
-                    "power term -- no benchmark device in this repo's corpus uses thermal "
-                    "diodes, so this is not a validated feature")
+        logger.info("  - MechanicalContactDiode: still cost-only, unbenchmarked "
+                    "design-exploration (see results/thermal_diode_analysis.txt and "
+                    "core/thermal_diode.py's docstring honesty flag): confirms this "
+                    "repo's model has no internal mechanical-switching frequency "
+                    "ceiling for a diode to relax, and quantifies the small "
+                    "COP_electrical cost of an illustrative diode actuation-switching-"
+                    "power term -- no benchmark device in this repo's corpus uses this "
+                    "mechanism, so it is not a validated feature")
+        logger.info("  - FerrofluidThermalSwitch: now VALIDATED -- "
+                    "rectification_ratio=3.84 and its frequency range are grounded in "
+                    "real hardware (Rodrigues et al. 2019), and this repo's model was "
+                    "checked against a real Andrade et al. (2024) Gd+ferrofluid-switch "
+                    "refrigeration prototype (see results/thermal_diode_analysis.txt)")
     else:
         logger.info("  - unavailable (stage failed or was skipped)")
 

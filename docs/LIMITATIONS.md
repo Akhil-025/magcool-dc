@@ -353,6 +353,152 @@ see that module's own "known limitations" docstring.
   (reference implementation, not imported by `core/` or `main.py`, not
   tested).
 
+### 1.8 Barocaloric and electrocaloric device models rest on much weaker calibration than the magnetocaloric model
+`core/barocaloric_cycle.py` (NPG plastic crystal) and
+`core/electrocaloric_cycle.py` (PST relaxor-ferroelectric MLCC) were added
+alongside the existing elastocaloric line in
+`core/alternative_caloric_comparison.py`, but neither has an
+independently-**measured** end-to-end device COP to calibrate against, unlike
+elastocaloric (Qian et al. 2023 measured system COP) or this repo's own
+AMR model (`data/amr_experimental_benchmarks.csv`):
+- **Barocaloric**: the only NPG-specific device-level COP figure found is a
+  **simulated** value from a different research group's own model (COP=5.5
+  at 1 mHz, 2.4K span, 0.1GPa) -- calibrating against another group's
+  simulation is a materially weaker check than calibrating against
+  hardware. `run_cycle(span_K=10.0)` reports `COP_electrical=24.4` at this
+  repo's own representative span, with `W_parasitic_per_kg=0.0` (no
+  pumping-power term modeled for this cycle at all) -- reported directly
+  rather than assumed away.
+- **Electrocaloric**: this module works top-down from PAPERS' OWN
+  reported device-level span/power/COP figures (Meng 2020, Li 2023 +2025
+  erratum) rather than bottom-up from an independently-verified
+  Delta_S-vs-field curve, because that per-stage entropy/field data was not
+  located for the exact MLCC batches used. `run_cycle(span_K=10.0)` returns
+  `is_extrapolated=True, is_far_extrapolation=True` at this repo's
+  representative 10K span -- the fitted scaling law is being extrapolated
+  well beyond the papers' own measured span range, and the module reports
+  this flag explicitly on every call rather than silently extrapolating.
+- Source: `core/barocaloric_cycle.py` and `core/electrocaloric_cycle.py`
+  module docstrings (CALIBRATION HONESTY FLAG sections);
+  `core/alternative_caloric_comparison.py`, `main.py` step 17.
+
+### 1.9 Thermal-diode / magnetocaloric-fluid explorations: one mechanism graduated to validated, three did not (Phase 38)
+Of the two thermal-diode mechanisms and the magnetocaloric-fluid
+working-body architecture added as design-exploration tools
+(`core/thermal_diode.py`, `core/fluid_mce_cycle.py`), a later pass found a
+real benchmark device for exactly one of them and graduated it; the other
+two remain exactly as originally scoped:
+- **`FerrofluidThermalSwitch` (VALIDATED, Phase 38):** rectification_ratio
+  (3.84) and frequency range are grounded in real hardware (Rodrigues et
+  al. 2019), and `check_against_andrade_2024_benchmark()`
+  (`core/thermal_diode_analysis.py`) checks this repo's model against a
+  real Andrade et al. (2024) Gd+ferrofluid-switch refrigeration
+  prototype -- agreement is qualitative/directional (a negative,
+  no-symmetric-cycling-advantage result), not a validated quantitative
+  match to Andrade's own reported asymmetric-cycling span figure.
+- **`MechanicalContactDiode` (still NOT validated):** cost-only sensitivity
+  study; no offsetting heat-transfer benefit from rectification is
+  modeled (no closed-form Sect. 6.2.4 relation was available to digitize),
+  and no benchmark device in this repo's corpus uses this specific
+  mechanism.
+- **`FerrofluidMCESystem` (still NOT validated):** an extended Phase 38
+  literature search still found no magnetocaloric-fluid-as-working-body
+  refrigeration benchmark anywhere. Two narrower things did graduate: the
+  Krieger-Dougherty rheology grounding (a real magnetite-ferrofluid
+  measurement, Susan-Resiga et al. 2012) and the negative finding itself
+  (every real ferrofluid magnetocaloric device found uses the fluid as a
+  thermal switch, never a working body). The module's own headline
+  quantitative finding -- fluid dilution plus no regeneration collapses
+  usable span to a fraction of a Kelvin at realistic loadings -- remains a
+  design-exploration result, not benchmark-checked.
+- Source: `core/thermal_diode.py`, `core/fluid_mce_cycle.py` module
+  docstrings (VALIDATION UPDATE sections); ROADMAP.md Phase 38 entry;
+  `main.py` step 11c / step 14.
+
+### 1.10 Hybrid solid-state regenerator (HMR): frictionless-limit thermodynamics alone does not close the gap to vapor-compression
+`core/hybrid_solid_state_regenerator.py` implements Lin et al. (2024)'s
+solid-solid heat-transfer architecture (alternating HTCM/MCM slices,
+no working fluid, no pumping/dead-volume losses -- a genuinely different
+parasitic-loss channel, inter-layer friction, replaces them).
+`compare_to_vcc_realistic()` at this repo's representative point
+(T_cold=291.15K, span=10K) finds HMR's best real electrical COP (8.13 at
+1.0 Hz, once air-gap friction, a rotary-drivetrain term, and baseline
+overhead are added) is **0.66x** vapor-compression's real installed-system
+COP (12.23) -- i.e. this architecture does NOT close the electrical-COP
+gap at this operating point once the previously-excluded real loss
+channels are included on equal footing with VCC's own real number. A
+separate, more favorable `compare_to_vcc()` ideal-limit function exists in
+the same module and omits drivetrain/baseline overhead entirely -- citing
+that number alone without the realistic comparison above would overstate
+the case.
+- Source: `core/hybrid_solid_state_regenerator.py`'s
+  `compare_to_vcc_realistic()`; `main.py` step 19.
+
+### 1.11 Beverage-cooler real-world cross-check: model diverges sharply from one of two reported deployments
+`core/beverage_cooler_validation.py` checks this repo's own AMR model
+against two independent, real commercial magnetocaloric beverage-cooling
+deployments -- the one market segment where magnetocaloric cooling is
+already commercially deployed, giving a real-world check this repo's
+primary data-center application cannot offer:
+- **Magnotherm Eclipse (REWE pilot):** `run_eclipse_directional_check()`
+  predicts this repo's model would need **-279%** more energy than the
+  incumbent R290 unit at the pilot's own operating point (T_cold=277.65K,
+  span=17.5K, AMR_COP_electrical=1.76 vs. VCC_COP=6.66) -- flatly
+  contradicting the press-reported **+15%** energy saving. This is a real,
+  unresolved divergence between this repo's model and a real deployment,
+  reported directly rather than smoothed over; possible explanations
+  (proprietary architecture differences, a materially different
+  operating point than assumed, or a genuine model gap) are not
+  distinguished here.
+- **Polaris (CE-certified beverage cooler, Liang et al. 2025):**
+  `run_polaris_second_law_validation()` finds much closer agreement --
+  model second-law efficiency 6.34% vs. the paper's own reported 5.40% at
+  the same architecture (single-material Gd, packed-particle-bed AMR,
+  T_cold=277.65K, span=15K) -- the closest real-world agreement this
+  repo's model has found for any commercial device.
+- The two checks point in different directions at the same technology
+  class; this is stated as an open discrepancy, not resolved in favor of
+  either reading.
+- Source: `core/beverage_cooler_validation.py`; `main.py` step 15b.
+
+### 1.12 No span/technology region found where this repo's own AMR model beats conventional cooling (regime-crossover null result)
+`core/regime_crossover_analysis.py`'s `run_cop_crossover_search()` swept
+span (3-30K) against vapor-compression second-law efficiency (0.25-0.55,
+covering everything from small residential-grade compressors to
+well-optimized chilled-water) and a broad grid of this repo's own AMR
+design freedoms. Result: **no crossover found** at any combination,
+including against vapor-compression's own least-favorable (eta=0.25)
+setting -- e.g. at span=10K, this repo's own best AMR_COP_electrical
+(4.60) does not beat VCC even at eta=0.25 (COP=7.12). This null result is
+consistent with (not contradicted by) every other real-world check in
+this repo (`beverage_cooler_validation.py`, `heat_pump_validation.py`,
+`hybrid_solid_state_regenerator.py`'s realistic HMR comparison above) --
+none of them find magnetocaloric cooling beating conventional cooling on
+COP either, only on weight/power-density (heat-pump check) or narrower
+non-COP metrics (dry-rejection water usage, refrigerant-free emissions).
+- Source: `core/regime_crossover_analysis.py`; `main.py` step 15d.
+
+### 1.13 NSGA-III seed-to-seed stability on the MAIN Pareto front is now checkable, but no settled verdict is recorded yet
+`core/pareto_multiseed_stability.py` reruns `optimize.run_optimization()`
+at full production `pop_size=40, n_gen=25` across 5 independent seeds and
+reports variance on the specific headline numbers a paper would cite
+(best COP_electrical, knee-point design, each material family's share of
+the merged front) -- extending the same seed-stability discipline
+`hysteresis_sensitivity.py`'s own multiseed follow-up already applied to
+the ON/OFF hysteresis axis (Item 1.5 above, where the original
+reduced-setting reversal was found NOT stable) to the more basic
+"would a different NSGA-III seed move the number" question for the main
+front. This module is implemented, tested, and wired into `main.py` step
+16, but **no production 5-seed run has yet been executed and its result
+recorded in this ledger** -- a full run was not completed as part of this
+consolidation pass (each seed reruns the same NSGA-III search step 11
+already runs once, at production settings). Treat every single-seed
+headline number already cited elsewhere in this repo's `results/` outputs
+(e.g. "100% La(Fe,Si)13Hy" -style material-share claims) as **not yet
+seed-verified** until this check has actually been run and its verdict
+folded in here.
+- Source: `core/pareto_multiseed_stability.py`; `main.py` step 16.
+
 ---
 
 ## 2. Calibration-data provenance (now resolved, documented for the record)
@@ -493,6 +639,12 @@ committed content before this phase's own changes could be packaged.
 - **India/data-center-specific techno-economics.** `pue_annualized.py`
   and `water_usage.py` exist and are tested, but have not been run with
   actual Indian climate-zone data or commercial electricity tariffs.
+- **Commercial-landscape figures are unaudited vendor/press claims.**
+  `core/commercial_landscape.py`'s `COMMERCIAL_SYSTEMS` dataset (Magnotherm
+  Stellar, Cooltech's data-center-oriented unit) is sourced entirely from
+  vendor announcements and trade press -- no independently-audited
+  datasheet was located for either system, and this is stated explicitly
+  in the module's own output rather than presented as verified.
 - **Regeneration of stale `results/*.txt` diagnostic files** listed in
   Section 2.1 above.
 - **Papers/ subfolders not yet mined**: `Reviews/`, `Data center

@@ -2,6 +2,8 @@ import pytest
 
 from core.thermal_diode import (MechanicalContactDiode,
                                   DEFAULT_MECHANICAL_CONTACT_DIODE,
+                                  FerrofluidThermalSwitch,
+                                  DEFAULT_FERROFLUID_THERMAL_SWITCH,
                                   cycle_time_reduction_factor)
 
 
@@ -72,3 +74,85 @@ def test_cycle_time_reduction_factor_rejects_invalid_inputs():
         cycle_time_reduction_factor(1.0, -0.1)
     with pytest.raises(ValueError):
         cycle_time_reduction_factor(0.5, 0.6)  # diode slower than conventional
+
+
+# ---- FerrofluidThermalSwitch (VALIDATION UPDATE) ----
+
+def test_default_ferrofluid_switch_rectification_ratio_matches_katiyar_2016():
+    # 284% measured conductivity enhancement -> ratio of 3.84, Katiyar et
+    # al. (2016) -- see module docstring VALIDATION UPDATE.
+    assert DEFAULT_FERROFLUID_THERMAL_SWITCH.rectification_ratio == pytest.approx(3.84)
+
+
+def test_ferrofluid_switch_shares_diode_interface():
+    switch = FerrofluidThermalSwitch(forward_conductance_W_K=10.0,
+                                       reverse_conductance_W_K=2.0)
+    assert switch.rectification_ratio == pytest.approx(5.0)
+    assert switch.switching_power_W(0.0) == 0.0
+
+
+def test_ferrofluid_switch_reverse_conductance_may_not_exceed_forward():
+    with pytest.raises(ValueError):
+        FerrofluidThermalSwitch(forward_conductance_W_K=1.0,
+                                  reverse_conductance_W_K=2.0)
+
+
+def test_ferrofluid_switch_conductances_must_be_positive():
+    with pytest.raises(ValueError):
+        FerrofluidThermalSwitch(forward_conductance_W_K=0.0,
+                                  reverse_conductance_W_K=0.0)
+
+
+def test_ferrofluid_switch_negative_actuation_energy_rejected():
+    with pytest.raises(ValueError):
+        FerrofluidThermalSwitch(forward_conductance_W_K=5.0,
+                                  reverse_conductance_W_K=0.5,
+                                  actuation_energy_J_per_cycle=-1.0)
+
+
+def test_ferrofluid_switch_negative_holding_power_rejected():
+    with pytest.raises(ValueError):
+        FerrofluidThermalSwitch(forward_conductance_W_K=5.0,
+                                  reverse_conductance_W_K=0.5,
+                                  holding_power_W=-1.0)
+
+
+def test_ferrofluid_switch_max_tested_frequency_must_be_positive():
+    with pytest.raises(ValueError):
+        FerrofluidThermalSwitch(forward_conductance_W_K=5.0,
+                                  reverse_conductance_W_K=0.5,
+                                  max_tested_frequency_Hz=0.0)
+
+
+def test_ferrofluid_switch_switching_power_scales_linearly_with_frequency():
+    switch = FerrofluidThermalSwitch(forward_conductance_W_K=5.0,
+                                       reverse_conductance_W_K=0.5,
+                                       actuation_energy_J_per_cycle=0.1)
+    assert switch.switching_power_W(2.0) == pytest.approx(0.2)
+    assert switch.switching_power_W(4.0) == pytest.approx(2 * switch.switching_power_W(2.0))
+
+
+def test_ferrofluid_switch_switching_power_rejects_negative_frequency():
+    switch = FerrofluidThermalSwitch(forward_conductance_W_K=5.0,
+                                       reverse_conductance_W_K=0.5)
+    with pytest.raises(ValueError):
+        switch.switching_power_W(-1.0)
+
+
+def test_ferrofluid_switch_warns_above_max_tested_frequency():
+    switch = FerrofluidThermalSwitch(forward_conductance_W_K=5.0,
+                                       reverse_conductance_W_K=0.5,
+                                       actuation_energy_J_per_cycle=0.1,
+                                       max_tested_frequency_Hz=18.0)
+    with pytest.warns(UserWarning):
+        switch.switching_power_W(20.0)
+    # within the tested range, no warning:
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        switch.switching_power_W(10.0)  # should not raise/warn
+
+
+def test_default_ferrofluid_switch_default_frequency_within_tested_range():
+    assert DEFAULT_FERROFLUID_THERMAL_SWITCH.max_tested_frequency_Hz == pytest.approx(18.0)
+    assert DEFAULT_FERROFLUID_THERMAL_SWITCH.holding_power_W > 0.0
