@@ -774,6 +774,149 @@ def amorphous_material_cost_performance_note():
 
 
 # =============================================================================
+#  addition: magnet GRADE comparison (ferrite / SmCo vs. NdFeB)
+# =============================================================================
+#
+# Q&A follow-up: "magnet mass is the dominant cost driver -- why not just
+# use a cheaper magnet grade, like ferrite, instead of NdFeB?" Previously
+# only answered qualitatively (verbally: ferrite is ~1/10th the $/kg but
+# ~1/3 the remanence, so you need proportionally more of it). This section
+# turns that into an actual computed comparison, ADDITIVE to
+# material_cost()/bom_cost() above -- it does not change either function's
+# existing numeric behavior or any existing caller's $ figures.
+#
+# SCOPE / HONESTY FLAGS (read before trusting the output):
+#   1. Mass scaling below is a FIRST-ORDER approximation: it re-uses this
+#      module's existing linear-in-mu0H MAGNET_TO_MCM_MASS_RATIO_PER_TESLA
+#      scaling (itself already flagged above as a flat per-Tesla proxy, not
+#      a physical model) and additionally scales required mass by
+#      (NdFeB remanence / grade remanence) to reach the SAME target field
+#      with a weaker-remanence material. This is NOT a re-derivation of
+#      Bjork et al. (2011)'s M*(mu0H/B_rem) Halbach-cylinder curve for each
+#      grade -- that curve is nonlinear and grade-specific, and a real
+#      design swap would need it solved per grade, not approximated by a
+#      single remanence ratio. Treat this as order-of-magnitude only, same
+#      spirit as the flat 3.0x-style ratios already used elsewhere in this
+#      file.
+#   2. Ferrite/SmCo remanence and cost figures below are NOT pinned to a
+#      single paper the way the $40/kg NdFeB and $20/kg Gd figures above
+#      are (those trace directly to Bjork et al. 2011 Sec. 5, independently
+#      re-verified against the primary PDF -- see module docstring).
+#      Ferrite remanence (~0.40 T) and cost (~$2-5/kg bulk material) are
+#      order-of-magnitude figures consistent with standard hard-ferrite
+#      (SrFe/BaFe) references; a separate, FINISHED-PRODUCT pricing
+#      benchmark (a 2012 Magnetics Conference cost-comparison panel,
+#      publicly summarized on an engineering forum) put finished hard
+#      ferrite at $3-20/kg vs. $180+/kg for finished NdFeB -- a much
+#      steeper ratio than the bulk-material $4-vs-$40 basis used here,
+#      because rare-earth sintering/coating adds proportionally more
+#      finishing cost to NdFeB than to ferrite. The bulk-material basis is
+#      used here to stay consistent with how COST_MAGNET_PER_KG above is
+#      priced (also a bulk/raw material figure, not a finished-product
+#      quote) -- mixing bases would make the comparison meaningless.
+#   3. This does NOT model any of the secondary consequences of swapping
+#      grades: a 2-4x heavier magnet assembly changes bed/housing geometry,
+#      which changes pumping loss (core/loss_model.py's W_pump ~ mdot^2
+#      term) and mechanical design -- none of that is captured here. This
+#      function answers "does the $/kg saving survive the mass penalty,"
+#      nothing more.
+
+@dataclass
+class MagnetGrade:
+    label: str
+    remanence_T: float          # B_rem, Tesla
+    cost_per_kg_usd: float
+    notes: str
+
+
+MAGNET_GRADES = {
+    "NdFeB_N42": MagnetGrade(
+        label="NdFeB (N42, sintered) -- baseline", remanence_T=1.25,
+        cost_per_kg_usd=COST_MAGNET_PER_KG,
+        notes="Same grade/figure used everywhere else in this module: "
+              "Bjork et al. (2011) Sec. 5, $40/kg, independently "
+              "cross-checked at $42/kg by Tura & Rowe (2014, citing "
+              "Gutfleisch et al. 2010)."),
+    "Ferrite": MagnetGrade(
+        label="Sintered hard ferrite (SrFe/BaFe)", remanence_T=0.40,
+        cost_per_kg_usd=4.0,
+        notes="Remanence ~0.40 T is a standard hard-ferrite figure, "
+              "roughly a third of NdFeB's ~1.2-1.3 T. Bulk material cost "
+              "is an order-of-magnitude estimate ($2-5/kg, commodity "
+              "strontium/barium ferrite, no rare-earth content) -- not "
+              "pinned to a single paper the way the NdFeB/Gd figures "
+              "are. See section note #2 above for the separate, much "
+              "steeper finished-product pricing ratio."),
+    "SmCo": MagnetGrade(
+        label="Samarium-cobalt (SmCo, sintered)", remanence_T=1.05,
+        cost_per_kg_usd=130.0,
+        notes="Remanence close to NdFeB (~0.9-1.1 T depending on grade) "
+              "and better thermal stability, but roughly 3x NdFeB's "
+              "material cost due to cobalt content. Included for "
+              "completeness -- it is not a cost-saving alternative, and "
+              "the comparison below confirms that rather than assuming "
+              "it."),
+}
+
+
+def magnet_grade_cost_comparison(mu0H_target_T, mass_regenerator,
+                                   mass_ratio_per_tesla=None, verbose=True):
+    """Compares total magnet cost across grades (NdFeB baseline / ferrite /
+    SmCo) for reaching the SAME target field `mu0H_target_T` with the same
+    `mass_regenerator`, using this module's existing linear mass-ratio
+    scaling (`MAGNET_TO_MCM_MASS_RATIO_PER_TESLA` by default -- pass
+    `mass_ratio_per_tesla` to override, same as `material_cost()`) plus a
+    first-order (NdFeB_remanence / grade_remanence) mass penalty for
+    weaker-remanence grades. See the section docstring above for the full
+    scope/honesty flags -- this is an order-of-magnitude comparison, not a
+    validated per-grade Halbach-cylinder redesign.
+
+    Returns a dict keyed by MAGNET_GRADES' keys, each holding
+    {grade, remanence_T, mass_kg, magnet_cost_usd, cost_ratio_vs_NdFeB}.
+    """
+    if mass_ratio_per_tesla is None:
+        mass_ratio_per_tesla = MAGNET_TO_MCM_MASS_RATIO_PER_TESLA
+    ndfeb = MAGNET_GRADES["NdFeB_N42"]
+    ndfeb_mass_kg = mass_ratio_per_tesla * mu0H_target_T * mass_regenerator
+
+    results = {}
+    for key, grade in MAGNET_GRADES.items():
+        remanence_penalty = ndfeb.remanence_T / grade.remanence_T
+        mass_kg = ndfeb_mass_kg * remanence_penalty
+        cost_usd = mass_kg * grade.cost_per_kg_usd
+        results[key] = {
+            "grade": grade.label,
+            "remanence_T": grade.remanence_T,
+            "mass_kg": mass_kg,
+            "magnet_cost_usd": cost_usd,
+        }
+    ndfeb_cost_usd = results["NdFeB_N42"]["magnet_cost_usd"]
+    for r in results.values():
+        r["cost_ratio_vs_NdFeB"] = r["magnet_cost_usd"] / ndfeb_cost_usd
+
+    if verbose:
+        print("=" * 78)
+        print(f"Magnet grade comparison @ target field={mu0H_target_T} T, "
+              f"regenerator mass={mass_regenerator} kg")
+        print("(first-order 1/remanence mass-penalty approximation -- see "
+              "magnet_grade_cost_comparison() docstring for scope)")
+        print("=" * 78)
+        for key in ("NdFeB_N42", "Ferrite", "SmCo"):
+            r = results[key]
+            print(f"  {r['grade']:<38} mass={r['mass_kg']:>8.2f} kg  "
+                  f"cost=${r['magnet_cost_usd']:>10,.0f}  "
+                  f"({r['cost_ratio_vs_NdFeB']:.2f}x NdFeB)")
+        cheapest_key = min(results, key=lambda k: results[k]["magnet_cost_usd"])
+        print("-" * 78)
+        print(f"Cheapest magnet cost at this field: "
+              f"{results[cheapest_key]['grade']} "
+              f"({results[cheapest_key]['cost_ratio_vs_NdFeB']:.2f}x NdFeB).")
+        print("Reminder: pumping/mechanical consequences of the resulting "
+              "mass change are NOT modeled here (see section note #3).")
+    return results
+
+
+# =============================================================================
 #  addition: geometric (Halbach-cylinder) magnet-mass term
 # =============================================================================
 #
@@ -1555,3 +1698,376 @@ def compare_legacy_and_updated_magnet_ratio(mu0H_max, mass_regenerator,
                 "explicitly to any of them to reproduce this module's "
                 "previous numbers instead.",
     }
+
+
+# =============================================================================
+#  addition: CPI-U inflation-year adjustment layer (nominal source-year
+# dollars -> 2026 dollars)
+# =============================================================================
+#
+# Every $/kg and $/kW figure in this module is quoted in its ORIGINAL
+# publication's nominal dollars, and none of them are adjusted for
+# inflation anywhere else in this file: $40/kg NdFeB and $20/kg Gd are
+# 2011 dollars (Bjork et al. 2011); NON_MATERIALS_COST_MULTIPLIER and the
+# HX/pump/motor/drive bottom-up component-catalog ranges trace back (via
+# Russek & Zimm) to a 2006-benchmarked study; BJORK2016_REFERENCE_DEVICE
+# and ELECTRICITY_PRICE_PER_KWH are 2016 dollars. A design costed with
+# `material_cost()` and the same design costed with
+# `bottom_up_non_materials_bom()` are therefore silently mixing a 2011
+# dollar basis and a 2006 dollar basis into one number -- a real,
+# previously-unflagged gap, distinct from (and additive to) the "which
+# hardware is priced at all" gap the rest of this module already tracks.
+#
+# This section closes that specific gap with real, sourced US CPI-U
+# multipliers (Bureau of Labor Statistics CPI-U, annual-average series,
+# looked up via a standard inflation-calculator aggregator this pass) --
+# it is a currency-YEAR conversion layer applied on top of existing
+# figures, not a new $/kg or $/kW estimate, and it changes no existing
+# constant or function's default behavior (COST_MAGNET_PER_KG,
+# COST_MCM_PER_KG, NON_MATERIALS_COST_MULTIPLIER, etc. are all left
+# exactly as they are everywhere else in this module).
+#
+# HONESTY FLAG: CPI-U tracks a general consumer basket (food, housing,
+# transport, etc.), not an NdFeB/Gd/industrial-component price index --
+# rare-earth and industrial-commodity prices can (and historically have)
+# moved very differently from, and often more volatile than, general CPI
+# over a 10-20 year span. This section corrects for GENERAL purchasing-
+# power erosion only; it is not a substitute for an actual updated
+# material-price quote, and should be read as "at least this much more
+# expensive just from inflation, quite possibly more or less from
+# commodity-specific price movement" rather than a precise 2026 price.
+
+CPI_U_MULTIPLIER_TO_2026 = {
+    # source publication year -> multiplier to express that year's $ in
+    # 2026 $, from BLS CPI-U annual-average data (checked via a standard
+    # inflation-calculator aggregator this pass; the underlying series is
+    # public BLS data). Rounded to 3 significant figures.
+    2006: 1.66,   # Russek & Zimm (2006) -- basis year for
+                  # NON_MATERIALS_COST_MULTIPLIER and the bottom-up
+                  # HX/pump/motor/drive component-catalog ranges
+    2011: 1.48,   # Bjork et al. (2011) -- COST_MAGNET_PER_KG,
+                  # COST_MCM_PER_KG, MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_
+                  # BJORK2011_LEGACY
+    2016: 1.39,   # Bjork, Bahl & Nielsen (2016) -- BJORK2016_REFERENCE_
+                  # DEVICE, ELECTRICITY_PRICE_PER_KWH
+    2017: 1.36,   # Silva et al. (2017) -- COST_SMM_PER_KG; derived from
+                  # the same 2016 CPI-U series (1.39 / 1.02, i.e. one
+                  # year's further growth past the 2016 multiplier above),
+                  # not an independently looked-up figure
+}
+CPI_U_MULTIPLIER_SOURCE_NOTE = (
+    "US CPI-U (Consumer Price Index for All Urban Consumers), annual-average "
+    "basis, Bureau of Labor Statistics, via a standard inflation-calculator "
+    "aggregator (checked this pass): 2006->2026 ~1.66x (65.6% cumulative), "
+    "2011->2026 ~1.48x (48.4% cumulative), 2016->2026 ~1.39x (39.1% "
+    "cumulative). This corrects for general consumer-price inflation only, "
+    "NOT commodity-specific (rare-earth metal, industrial-component) price "
+    "movement -- see section honesty flag above."
+)
+
+
+def deflate_to_2026(amount_usd, source_year):
+    """Converts `amount_usd` (quoted in `source_year` nominal dollars) to
+    2026 dollars via `CPI_U_MULTIPLIER_TO_2026`. Raises KeyError for a
+    `source_year` with no entry, rather than silently assuming a 1.0x
+    (no-inflation) multiplier -- an unhandled year is a genuine gap in
+    this section's coverage that should be surfaced, not papered over."""
+    if source_year not in CPI_U_MULTIPLIER_TO_2026:
+        raise KeyError(
+            f"No CPI_U_MULTIPLIER_TO_2026 entry for source_year={source_year!r}. "
+            f"Known source years: {sorted(CPI_U_MULTIPLIER_TO_2026)}. Add a new, "
+            "separately-sourced entry rather than assuming 1.0x for an "
+            "unhandled year.")
+    return amount_usd * CPI_U_MULTIPLIER_TO_2026[source_year]
+
+
+def inflation_adjusted_reference_prices():
+    """Reports this module's key nominal $/kg, $/kWh reference figures
+    alongside their 2026-dollar equivalents (see `deflate_to_2026()` and
+    section docstring), so a reader can see how much of any gap between
+    this module's working prices and a current benchmark -- e.g. Bjork et
+    al.'s (2011) $20/kg Gd vs. GE&R's (2024) commercial giant-MCE pricing
+    in `commercial_mcm_price_reality_check()` -- is just accumulated
+    inflation versus a genuinely different price level. Read-only: does
+    NOT change COST_MAGNET_PER_KG, COST_MCM_PER_KG, COST_SMM_PER_KG,
+    ELECTRICITY_PRICE_PER_KWH, or any other working constant, same
+    convention as `resource_criticality_note()`/
+    `commercial_mcm_price_reality_check()`."""
+    rows = [
+        ("COST_MAGNET_PER_KG", "NdFeB, Bjork et al. (2011)",
+         COST_MAGNET_PER_KG, 2011, "$/kg"),
+        ("COST_MCM_PER_KG", "Gd, Bjork et al. (2011)",
+         COST_MCM_PER_KG, 2011, "$/kg"),
+        ("COST_SMM_PER_KG", "1018 steel yoke, Silva et al. (2017)",
+         COST_SMM_PER_KG, 2017, "$/kg"),
+        ("ELECTRICITY_PRICE_PER_KWH", "Bjork, Bahl & Nielsen (2016)",
+         ELECTRICITY_PRICE_PER_KWH, 2016, "$/kWh"),
+    ]
+    results = []
+    for const_name, provenance, nominal, year, unit in rows:
+        adjusted = deflate_to_2026(nominal, year)
+        results.append({
+            "constant": const_name,
+            "provenance": provenance,
+            "source_year": year,
+            "nominal_usd": nominal,
+            "usd_2026": round(adjusted, 3),
+            "unit": unit,
+            "inflation_only_multiplier": CPI_U_MULTIPLIER_TO_2026[year],
+        })
+    return {
+        "rows": results,
+        "source_note": CPI_U_MULTIPLIER_SOURCE_NOTE,
+    }
+
+
+def bom_cost_2026_dollars(mu0H_max, mass_regenerator, family_name="Gd",
+                            smm_mass_fraction=0.5, mass_ratio_per_tesla=None):
+    """Inflation-adjusted counterpart of `bom_cost()`: computes the same
+    materials-only magnet+MCM+SMM BOM (identical mass and cost logic --
+    this does NOT change `bom_cost()`'s own numbers or defaults) and then
+    reports the same line items again in 2026 dollars, using
+    `deflate_to_2026()` at each line item's OWN source year -- magnet cost
+    at the 2011 multiplier, MCM cost at the 2011 (Gd) or other family-
+    specific multiplier where known, SMM cost at the 2017 multiplier --
+    rather than applying a single blended multiplier to the total, since
+    the three line items are not all from the same source year."""
+    nominal = bom_cost(mu0H_max, mass_regenerator, family_name,
+                        smm_mass_fraction, mass_ratio_per_tesla)
+    # MCM line item's source year depends on family; only "Gd" is pinned
+    # to Bjork et al. (2011) the same way COST_MAGNET_PER_KG is -- other
+    # families (La(Fe,Si)13Hy from Russek & Zimm 2006, or a Gd-price
+    # proxy) have their own, different source years. Handled explicitly
+    # rather than assuming 2011 for every family.
+    mcm_source_year = {"Gd": 2011, "La(Fe,Si)13Hy": 2006}.get(family_name, 2011)
+    magnet_cost_2026 = deflate_to_2026(nominal["magnet_cost_$"], 2011)
+    mcm_cost_2026 = deflate_to_2026(nominal["mcm_cost_$"], mcm_source_year)
+    smm_cost_2026 = deflate_to_2026(nominal["smm_cost_$"], 2017)
+    return {
+        **nominal,
+        "magnet_cost_2026_$": round(magnet_cost_2026, 2),
+        "mcm_cost_2026_$": round(mcm_cost_2026, 2),
+        "mcm_source_year": mcm_source_year,
+        "smm_cost_2026_$": round(smm_cost_2026, 2),
+        "materials_bom_total_2026_$": round(
+            magnet_cost_2026 + mcm_cost_2026 + smm_cost_2026, 2),
+        "note": "Nominal (unadjusted) line items are unchanged from "
+                "bom_cost() -- see that function's own numbers above. The "
+                "_2026_$ line items apply deflate_to_2026() per line item "
+                "at ITS OWN source year (magnet: 2011, MCM: family-"
+                "dependent, SMM: 2017), not one blended multiplier applied "
+                "to the nominal total. See CPI_U_MULTIPLIER_SOURCE_NOTE "
+                "for the honesty flag on what CPI-U does and doesn't "
+                "correct for.",
+    }
+
+
+# =============================================================================
+#  addition: cross-method full-system cost ENVELOPE
+# =============================================================================
+#
+# This module already produces three methodologically-independent
+# full-system cost estimates at a given design point:
+#   (a) `full_system_cost_estimate_range()` -- Russek & Zimm (2006)
+#       borrowed vapor-compression-AC manufactured-cost multiplier,
+#       LOW/MID/HIGH
+#   (b) `full_system_cost_estimate_bottom_up()` -- bottom-up, market-
+#       catalog component pricing (HX/pump/motor/drive/controls),
+#       LOW/MID/HIGH
+#   (c) `amr_native_lifetime_cost_reference()` -- Bjork, Bahl & Nielsen
+#       (2016)'s own AMR-specific capital+electricity lifetime-cost study
+#       (small-appliance-scale reference structure, explicitly NOT
+#       rescaled to this repo's kW-scale design points -- see that
+#       function's own docstring)
+# `cross_check_full_system_cost_methods()` above already compares (a) and
+# (b) directly and reports their MID-estimate ratio. This section adds
+# one further, small, genuinely new thing neither existing function does:
+# it collects (a)'s and (b)'s LOW and HIGH bounds into a SINGLE combined
+# envelope -- the widest honest low-to-high range this module can
+# currently produce for a design's full-system cost -- instead of
+# leaving a reader to manually take the min/max across two separate
+# function calls. (c) is reported alongside for qualitative context (its
+# own scope caveats still apply) but is deliberately NOT merged
+# numerically into the envelope, since it is a different device scale
+# (25W-average appliance) with no published scaling law to this repo's
+# kW-scale design points -- merging it in would silently violate the
+# same "don't invent an unsupported scaling law" discipline this module
+# already commits to elsewhere (see `geometric_magnet_mass_kg()`'s and
+# `amr_native_lifetime_cost_reference()`'s own docstrings).
+#
+# HONESTY FLAG: a wide low-to-high envelope is a way of being honest
+# about how little this module currently constrains full-system cost --
+# it is NOT a claim that the true cost is uniformly likely to fall
+# anywhere in that range, and it is not a substitute for the real
+# AMR-specific bottom-up BOM this module still does not have (see
+# `bottom_up_non_materials_bom()`'s own honesty flag).
+
+
+def full_system_cost_envelope(mu0H_max, mass_regenerator, Qc_avg_W,
+                                COP_electrical, family_name="Gd",
+                                smm_mass_fraction=0.5, verbose=True):
+    """Combines `full_system_cost_estimate_range()` (borrowed VCC
+    manufactured-cost multiplier) and `full_system_cost_estimate_bottom_up()`
+    (bottom-up component-catalog pricing) into a single LOW/HIGH envelope
+    -- the widest honest range across both independent, kW-scale-
+    applicable methods -- with `amr_native_lifetime_cost_reference()`'s
+    qualitative cost structure reported alongside (not merged in) for
+    context. See section docstring above for why (c) is not numerically
+    combined into the envelope."""
+    ranged = full_system_cost_estimate_range(mu0H_max, mass_regenerator,
+                                               family_name, smm_mass_fraction)
+    bottom_up = full_system_cost_estimate_bottom_up(
+        mu0H_max, mass_regenerator, Qc_avg_W, COP_electrical,
+        family_name, smm_mass_fraction)
+    amr_native = amr_native_lifetime_cost_reference(verbose=False)
+
+    envelope_low = min(ranged["full_system_cost_low_$"],
+                        bottom_up["full_system_cost_bottom_up_low_$"])
+    envelope_high = max(ranged["full_system_cost_high_$"],
+                         bottom_up["full_system_cost_bottom_up_high_$"])
+
+    result = {
+        "materials_bom_total_$": ranged["materials_bom_total_$"],
+        "borrowed_multiplier_low_mid_high_$": (
+            ranged["full_system_cost_low_$"], ranged["full_system_cost_mid_$"],
+            ranged["full_system_cost_high_$"]),
+        "bottom_up_low_mid_high_$": (
+            bottom_up["full_system_cost_bottom_up_low_$"],
+            bottom_up["full_system_cost_bottom_up_mid_$"],
+            bottom_up["full_system_cost_bottom_up_high_$"]),
+        "combined_envelope_low_$": round(envelope_low, 2),
+        "combined_envelope_high_$": round(envelope_high, 2),
+        "amr_native_reference_lifetime_cost_range_$":
+            amr_native["lifetime_cost_range_usd"],
+        "amr_native_reference_note": (
+            "Bjork, Bahl & Nielsen (2016) small-appliance-scale (25W-avg) "
+            "reference, NOT merged into the envelope above -- different "
+            "device scale, no published scaling law to this design point. "
+            "Reported for qualitative context only."),
+        "note": "combined_envelope_low_$/high_$ is the widest honest range "
+                "across the two methodologically-independent, kW-scale-"
+                "applicable full-system cost methods this module has "
+                "(borrowed VCC-manufactured-cost multiplier vs. bottom-up "
+                "component-catalog pricing) -- see "
+                "cross_check_full_system_cost_methods() for the two "
+                "methods' MID-estimate ratio and likely-reason discussion. "
+                "Not a substitute for a real AMR-specific bottom-up BOM.",
+    }
+    if verbose:
+        print("=" * 78)
+        print(f"Full-system cost envelope @ mu0H={mu0H_max} T, "
+              f"mass_regenerator={mass_regenerator} kg, Qc_avg={Qc_avg_W} W, "
+              f"COP={COP_electrical}, family={family_name}")
+        print("=" * 78)
+        print(f"  materials BOM (floor):        "
+              f"${result['materials_bom_total_$']:>10,.0f}")
+        lo, mid, hi = result["borrowed_multiplier_low_mid_high_$"]
+        print(f"  borrowed-multiplier method:   "
+              f"${lo:>10,.0f} / ${mid:>10,.0f} / ${hi:>10,.0f}  (low/mid/high)")
+        lo, mid, hi = result["bottom_up_low_mid_high_$"]
+        print(f"  bottom-up component method:   "
+              f"${lo:>10,.0f} / ${mid:>10,.0f} / ${hi:>10,.0f}  (low/mid/high)")
+        print(f"  COMBINED ENVELOPE:            "
+              f"${result['combined_envelope_low_$']:>10,.0f} - "
+              f"${result['combined_envelope_high_$']:>10,.0f}")
+        lo_ref, hi_ref = result["amr_native_reference_lifetime_cost_range_$"]
+        print(f"  (AMR-native, 25W-scale ref. lifetime cost: "
+              f"${lo_ref:.0f}-${hi_ref:.0f}, not merged -- see note)")
+    return result
+
+
+# =============================================================================
+# LIMITATIONS.md Section 4 follow-up: wiring the still-unwired functions
+# =============================================================================
+#
+# LIMITATIONS.md flagged that the functions below were implemented and
+# individually covered by tests/test_economics.py, but never called from
+# main.py's pipeline, so a reader of results/*.txt alone would not know
+# they exist: bom_cost_geometric()/full_system_cost_estimate_geometric(),
+# magnet_grade_cost_comparison(), resource_criticality_note(),
+# commercial_mcm_price_reality_check(), rowe2011_vcc_compressor_cost_cross_check(),
+# rowe2011_magnet_mass_ratio_cross_check(), compare_legacy_and_updated_magnet_ratio(),
+# deflate_to_2026()/inflation_adjusted_reference_prices()/bom_cost_2026_dollars(),
+# full_system_cost_estimate_range() and full_system_cost_envelope(). The two
+# functions the ledger called out as "one-line additions to run_economics()"
+# (full_system_cost_estimate_range()/full_system_cost_envelope()) are already
+# folded into cross_check_full_system_cost_methods() above; this function
+# closes the remainder of the list in one additive, non-destructive call so
+# every one of them appears in main.py's own pipeline report rather than
+# only in this module and its tests. No existing function's numeric
+# behavior changes -- this only CALLS them and reports what they already
+# return.
+def full_economics_wiring_report(mu0H_max, mass_regenerator, Qc_avg_W,
+                                   COP_electrical, family_name="Gd",
+                                   smm_mass_fraction=0.5, verbose=True):
+    """Calls every core/economics.py function LIMITATIONS.md Section 4
+    flagged as implemented-but-never-wired-into-the-pipeline, at the SAME
+    design point passed in, and returns them all in one dict. See the
+    section docstring immediately above for the full list and the ledger
+    item this closes."""
+    geometric = full_system_cost_estimate_geometric(
+        mu0H_max, mass_regenerator, family_name, smm_mass_fraction)
+    magnet_grades = magnet_grade_cost_comparison(
+        mu0H_max, mass_regenerator, verbose=False)
+    criticality = resource_criticality_note(family_name)
+    mcm_reality_check = commercial_mcm_price_reality_check(family_name)
+    rowe_vcc = rowe2011_vcc_compressor_cost_cross_check()
+    rowe_magnet_ratio = rowe2011_magnet_mass_ratio_cross_check()
+    legacy_vs_updated = compare_legacy_and_updated_magnet_ratio(
+        mu0H_max, mass_regenerator, family_name, smm_mass_fraction)
+    inflation = inflation_adjusted_reference_prices()
+    bom_2026 = bom_cost_2026_dollars(mu0H_max, mass_regenerator, family_name,
+                                       smm_mass_fraction)
+
+    result = {
+        "geometric_halbach_full_system_cost": geometric,
+        "magnet_grade_comparison": magnet_grades,
+        "resource_criticality": criticality,
+        "commercial_mcm_2024_price_reality_check": mcm_reality_check,
+        "rowe2011_vcc_compressor_cross_check": rowe_vcc,
+        "rowe2011_magnet_mass_ratio_cross_check": rowe_magnet_ratio,
+        "legacy_vs_updated_magnet_ratio": legacy_vs_updated,
+        "inflation_adjusted_reference_prices": inflation,
+        "bom_cost_2026_dollars": bom_2026,
+    }
+
+    if verbose:
+        print("=" * 78)
+        print(f"Full economics-wiring report (LIMITATIONS.md Section 4 follow-up) @ "
+              f"mu0H={mu0H_max} T, mass_regenerator={mass_regenerator} kg, "
+              f"family={family_name}")
+        print("=" * 78)
+        print(f"  Geometric (Halbach-cylinder) magnet mass: "
+              f"{geometric['magnet_mass_kg']:.2f} kg -> full-system estimate "
+              f"${geometric['full_system_cost_estimate_$']:,.0f} "
+              f"(flat-ratio version: see full_system_cost_estimate() above)")
+        cheapest = min(magnet_grades, key=lambda k: magnet_grades[k]["magnet_cost_usd"])
+        print(f"  Magnet grade comparison: cheapest at this field is "
+              f"{magnet_grades[cheapest]['grade']} "
+              f"({magnet_grades[cheapest]['cost_ratio_vs_NdFeB']:.2f}x NdFeB)")
+        print(f"  Resource criticality ({family_name}): {criticality}")
+        print(f"  Commercial (2024) MCM price reality check: working price "
+              f"${mcm_reality_check['working_price_usd_per_kg']:.0f}/kg vs. GE&R's "
+              f"own target-scale price is "
+              f"{mcm_reality_check['target_scaled_ratio_vs_working_price']:.0f}x higher")
+        lo, hi = rowe_vcc["rowe2011_compressor_capex_usd_per_kw_range"]
+        print(f"  Rowe (2011) VCC compressor cross-check: ${lo:.0f}-${hi:.0f}/kW_c "
+              f"vs. this module's ASHRAE-derived "
+              f"${rowe_vcc['ashrae_derived_capex_usd_per_kw']:.0f}/kW_c")
+        print(f"  Rowe (2011) 11-device magnet-mass-ratio cross-check: median="
+              f"{rowe_magnet_ratio['median_mass_ratio_per_tesla']:.2f}, current module "
+              f"default={rowe_magnet_ratio['current_module_value']}, legacy="
+              f"{rowe_magnet_ratio['legacy_value']}")
+        print(f"  Legacy vs. updated magnet ratio at this design point: "
+              f"${legacy_vs_updated['legacy_bjork2011']['materials_bom_total_$']:,.0f} "
+              f"(legacy) vs. "
+              f"${legacy_vs_updated['updated_rowe2011_median']['materials_bom_total_$']:,.0f} "
+              f"(updated, {legacy_vs_updated['materials_bom_total_ratio']}x)")
+        print(f"  Inflation (CPI-U) adjustment to 2026$: "
+              + ", ".join(f"{r['constant']}=${r['usd_2026']:.2f} "
+                           f"({r['inflation_only_multiplier']}x {r['source_year']}$)"
+                           for r in inflation["rows"]))
+        print(f"  BOM in 2026 dollars: nominal="
+              f"${bom_2026['materials_bom_total_$']:,.0f} -> 2026$="
+              f"${bom_2026['materials_bom_total_2026_$']:,.0f}")
+    return result

@@ -1,2 +1,3 @@
 -r requirements.txt
 pytest>=7.0
+openpyxl>=3.1  # reads data/MagCool_DC_BOM.xlsx, tests/test_bom_xlsx_reconciliation.py only

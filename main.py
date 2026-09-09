@@ -79,6 +79,14 @@ in the repository in one pass, in dependency order, so a single
         consolidates steps 3c/7b/8d/9b/11's already-computed results into
         one ranked, actionable "how do I raise AMR electrical COP" report
         (results/design_recommendations.txt)
+    13b. Economics at the NSGA-III knee-point design (core/economics.py's
+        run_economics_at_knee_point()) -- LIMITATIONS.md Section 4 follow-up:
+        step 5's economics above runs at a fixed illustrative 2T/5kg/Gd point
+        because step 13's recommended design isn't computed until after step
+        5 runs; this reruns the same BOM/full-system-cost/LCOC/cross-check/
+        envelope functions at the ACTUAL recommended knee-point design, per
+        LIMITATIONS.md's own suggested fix, so a normal `python main.py` run
+        reproduces the design point `data/MagCool_DC_BOM.xlsx` was built from
     14. Magnetocaloric fluids (ferrofluid/MR suspension) as an alternative
         working-body class (core/fluid_mce_cycle.py, core/fluid_mce_analysis.py)
         -- its Qc/COP predictions remain a design-exploration tool, not a
@@ -758,6 +766,114 @@ def run_economics(representative_row):
                 f"cross_check_full_system_cost_methods()'s docstring for the likely reason "
                 f"(retail-manufactured cost vs. bare-component-parts pricing) and why this "
                 f"repo reports both rather than picking one.")
+
+    # LIMITATIONS.md Section 4 follow-up: full_system_cost_envelope() was
+    # flagged as implemented, tested, and "a one-line addition to
+    # run_economics()" but never actually called from the pipeline --
+    # wired in here, combining the two methods above into a single
+    # LOW/HIGH envelope alongside the AMR-native lifetime-cost reference.
+    envelope = economics.full_system_cost_envelope(
+        mu0H_T, mass_kg, Qc_avg_W=representative_row["AMR_Qc_W"],
+        COP_electrical=amr_cop, family_name="Gd", verbose=False)
+    logger.info("")
+    logger.info(f"  Combined full-system cost ENVELOPE (widest honest range across both "
+                f"methods above): ${envelope['combined_envelope_low_$']:,.0f} - "
+                f"${envelope['combined_envelope_high_$']:,.0f}")
+
+    # LIMITATIONS.md Section 4 follow-up: every one of the remaining
+    # implemented-but-never-wired economics.py functions (geometric magnet
+    # mass, magnet-grade comparison, resource criticality, the current
+    # commercial MCM price reality check, Rowe (2011)'s two independent
+    # cross-checks, the legacy-vs-updated magnet-ratio comparison, and the
+    # CPI-U 2026-dollar adjustment) is now called here, at the same design
+    # point, so it shows up in this pipeline's own results/*.txt output
+    # instead of only in economics.py and its tests.
+    economics.full_economics_wiring_report(
+        mu0H_T, mass_kg, Qc_avg_W=representative_row["AMR_Qc_W"],
+        COP_electrical=amr_cop, family_name="Gd")
+
+
+def run_economics_at_knee_point(knee_point):
+    """Step 13b: LIMITATIONS.md Section 4 follow-up -- step 5's economics
+    above runs at a fixed illustrative design point (2T, 5kg Gd), NOT at
+    the actual NSGA-III knee-point design step 13 (design_recommendations.py)
+    recommends, because step 5 runs before step 13 in main.py's pipeline
+    order and the recommended design isn't available yet when it runs.
+    LIMITATIONS.md's own suggested fix was "rerunning run_economics() a
+    second time at the step-13 knee point"; this function is that second
+    run, called after step 13 so `knee_point` (the same dict
+    design_recommendations.summarize_field_flow_lever() computes) is
+    available. This is what makes `data/MagCool_DC_BOM.xlsx` -- assembled
+    by hand, out-of-band, at a prior run's knee point -- reproducible by a
+    normal `python main.py` run instead of only by calling economics.py's
+    functions directly.
+
+    Degrades gracefully (skips, logs why) if the knee point isn't
+    available (step 11's Pareto front failed/was skipped) or doesn't carry
+    a recognized material family, matching this repo's convention for
+    every other lever in design_recommendations.py."""
+    if not knee_point:
+        logger.info("Knee-point design unavailable (step 11's Pareto front failed or was "
+                    "skipped) -- skipping economics-at-knee-point.")
+        return None
+
+    mu0H_T = knee_point["mu0H_max_T"]
+    mass_kg = knee_point["mass_regenerator_kg"]
+    family_name = knee_point.get("material", "Gd")
+    amr_cop = knee_point["COP_electrical"]
+    Qc_avg_W = knee_point["Qc_W"]
+    logger.info(f"Design point: H={mu0H_T} T, mass={mass_kg} kg, material={family_name} "
+                f"(the SAME NSGA-III knee-point design step 13 recommends, "
+                f"COP_elec={amr_cop}, Qc={Qc_avg_W} W) -- NOT step 5's illustrative "
+                "2T/5kg/Gd point above.")
+
+    if family_name not in economics.MCM_COST_PER_KG_BY_FAMILY:
+        logger.info(f"  Note: {family_name!r} has no economics.py MCM_COST_PER_KG_BY_FAMILY "
+                    f"entry -- bom_cost() falls back to Gd's $/kg for the MCM line item "
+                    f"(see that function's own fallback convention); every other line item "
+                    f"is unaffected.")
+
+    bom = economics.bom_cost(mu0H_T, mass_kg, family_name=family_name)
+    full_system = economics.full_system_cost_estimate(mu0H_T, mass_kg, family_name=family_name)
+    lcoc = economics.levelized_cost_of_cooling(
+        mu0H_T, mass_kg, Qc_avg_W=Qc_avg_W, COP_electrical=amr_cop, family_name=family_name)
+    logger.info(f"  Materials BOM: magnet ${bom['magnet_cost_$']:.0f} "
+                f"({bom['magnet_mass_kg']:.2f}kg) + MCM ${bom['mcm_cost_$']:.0f} + "
+                f"SMM yoke ${bom['smm_cost_$']:.0f} ({bom['smm_mass_kg']:.2f}kg) "
+                f"= ${bom['materials_bom_total_$']:.0f} total")
+    logger.info(f"  Full-system cost ESTIMATE (materials BOM x "
+                f"{full_system['non_materials_multiplier']:.0f}x): "
+                f"${full_system['full_system_cost_estimate_$']:,.0f}")
+    logger.info(f"  Levelized cost of cooling: "
+                f"${lcoc['levelized_cost_of_cooling_$_per_kwh']:.4f}/kWh_cooling")
+
+    cross_check = economics.cross_check_full_system_cost_methods(
+        mu0H_T, mass_kg, Qc_avg_W=Qc_avg_W, COP_electrical=amr_cop, family_name=family_name)
+    bm = cross_check["borrowed_multiplier_method"]
+    bu = cross_check["bottom_up_component_method"]
+    logger.info(f"  Two independent full-system cost methods at this SAME knee-point design: "
+                f"borrowed-multiplier low=${bm['low_$']:,.0f} mid=${bm['mid_$']:,.0f} "
+                f"high=${bm['high_$']:,.0f}  |  bottom-up low=${bu['low_$']:,.0f} "
+                f"mid=${bu['mid_$']:,.0f} high=${bu['high_$']:,.0f} "
+                f"({cross_check['borrowed_vs_bottom_up_mid_ratio']:.1f}x MID disagreement)")
+
+    envelope = economics.full_system_cost_envelope(
+        mu0H_T, mass_kg, Qc_avg_W=Qc_avg_W, COP_electrical=amr_cop,
+        family_name=family_name, verbose=False)
+    logger.info(f"  Combined full-system cost envelope at this knee-point design: "
+                f"${envelope['combined_envelope_low_$']:,.0f} - "
+                f"${envelope['combined_envelope_high_$']:,.0f}")
+
+    return {
+        "design_point": {"mu0H_max_T": mu0H_T, "mass_regenerator_kg": mass_kg,
+                          "family_name": family_name, "COP_electrical": amr_cop,
+                          "Qc_avg_W": Qc_avg_W},
+        "bom": bom,
+        "full_system_cost_estimate": full_system,
+        "levelized_cost_of_cooling": lcoc,
+        "cross_check_full_system_cost_methods": cross_check,
+        "full_system_cost_envelope": envelope,
+    }
 
 
 def run_full_system_cost_by_material():
@@ -1444,6 +1560,16 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
          None),  # handled specially below, reuses steps 7/7b/9/9b/11's results
         ("13. Design-recommendations synthesis (core/design_recommendations.py)",
          None),  # handled specially below, consumes steps 3c/7b/8d/9b/11's results
+        ("13b. Economics at the NSGA-III knee-point design (core/economics.py's "
+         "run_economics_at_knee_point() -- LIMITATIONS.md Section 4 follow-up: "
+         "step 5's economics ran only at a fixed illustrative 2T/5kg/Gd point "
+         "because step 13's recommended design isn't available until after it "
+         "runs; this second, later economics pass reruns the same BOM/full-"
+         "system-cost/LCOC/cross-check/envelope functions at the ACTUAL "
+         "recommended knee-point design instead, per LIMITATIONS.md's own "
+         "suggested fix)",
+         None),  # handled specially below, reruns step 13's knee point through
+                 # economics.py rather than depending on a threaded return value
         ("14. Magnetocaloric fluids (ferrofluid/MR suspension) as an alternative "
          "working-body class (core/fluid_mce_cycle.py, core/fluid_mce_analysis.py, "
          ")",
@@ -1612,6 +1738,7 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
     curie_shift_v2_result = None
     astronautics_giguere_result = None
     override_check_result = None
+    economics_at_knee_point_result = None
 
     for name, fn in stages:
         _banner(name)
@@ -1734,6 +1861,18 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
                         cycle_type_result=cycle_type_result,
                         thermal_diode_rows=thermal_diode_rows,
                     )
+                elif name.startswith("13b."):
+                    # Cheap (sub-second), non-printing, non-file-writing
+                    # recomputation of the same knee-point dict step 13 already
+                    # derived from `pareto_rows` -- same convention as step 13's
+                    # own passive_regen_base/elastocaloric_result recomputation
+                    # above, so this stage doesn't need design_recommendations.
+                    # build_report()'s return value threaded all the way through
+                    # the stages loop.
+                    _, _knee_data = design_recommendations.summarize_field_flow_lever(
+                        pareto_rows or [])
+                    economics_at_knee_point_result = run_economics_at_knee_point(
+                        _knee_data.get("knee_point"))
                 elif name.startswith("14."):
                     fluid_mce_result = fluid_mce_analysis.run_fluid_mce_analysis()
                 elif name.startswith("15."):
@@ -1819,7 +1958,7 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
                               magnet_geometry_result, fluid_mce_result,
                               passive_regen_result, failures, curie_shift_v2_result,
                               astronautics_giguere_result, layered_pareto_rows,
-                              magnet_geometry_multiseed_result, layered_cross_product_rows,
+                              magnet_geometry_multiseed_result, layered_cross_product_rows, economics_at_knee_point_result,
                               fluid_selection_result, hmr_result)
 
 
@@ -1828,7 +1967,7 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
                               hysteresis_result, magnet_geometry_result, fluid_mce_result,
                               passive_regen_result, failures, curie_shift_v2_result, 
                               astronautics_giguere_result, layered_pareto_rows, 
-                              magnet_geometry_multiseed_result, layered_cross_product_rows,
+                              magnet_geometry_multiseed_result, layered_cross_product_rows, economics_at_knee_point_result,
                               fluid_selection_result=None, hmr_result=None):
     """Final, well-structured overview of every implemented analysis and
     its headline metric, printed once at the very end of the run so a
@@ -2074,6 +2213,21 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
     logger.info("  - Ranks all COP-maximization levers above by demonstrated Sobol "
                 "sensitivity and reports a recommended starting design point "
                 "(results/design_recommendations.txt)")
+
+    logger.info("Economics at the NSGA-III knee-point design (step 13b, LIMITATIONS.md "
+                "Section 4 follow-up)")
+    if economics_at_knee_point_result and _ok("13b."):
+        dp = economics_at_knee_point_result["design_point"]
+        env = economics_at_knee_point_result["full_system_cost_envelope"]
+        logger.info(f"  - Reruns the BOM/full-system-cost/LCOC/cross-check/envelope "
+                    f"functions at the ACTUAL recommended design (H={dp['mu0H_max_T']} T, "
+                    f"mass={dp['mass_regenerator_kg']} kg, material={dp['family_name']}), "
+                    f"not step 5's illustrative 2T/5kg/Gd point -- full-system cost "
+                    f"envelope ${env['combined_envelope_low_$']:,.0f} - "
+                    f"${env['combined_envelope_high_$']:,.0f}")
+    else:
+        logger.info("  - unavailable (step 11's Pareto front failed/was skipped, or this "
+                    "stage failed)")
 
     logger.info("Figures")
     n_figs = len(list(plots.FIG_DIR.glob("*.png"))) if plots.FIG_DIR.exists() else 0

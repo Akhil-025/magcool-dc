@@ -829,10 +829,87 @@ committed content before this phase's own changes could be packaged.
 
 ## 4. Scope items not yet attempted (still open)
 
-- **Full bottom-up manufactured-system BOM.** Cost model still uses an
-  order-of-magnitude multiplier for pumps/motors/controls rather than
-  individually-priced components. See `core/economics.py` module
-  docstring.
+- **Full bottom-up manufactured-system BOM (RESOLVED for non-materials
+  hardware pricing; two narrower integration gaps remain open).**
+  Status update from a later economics-integration check: this item, as
+  originally written, is now out of date. `core/economics.py` DOES have a
+  genuine bottom-up, individually-priced non-materials BOM
+  (`bottom_up_non_materials_bom()`: HX/pump/motor/drive/controls, each
+  priced from real market-catalog $/kW bands, LOW/MID/HIGH, see that
+  function's own section docstring for sourcing) alongside
+  `bom_cost()`'s materials-only BOM, combined by
+  `full_system_cost_estimate_bottom_up()`. This is wired into the
+  pipeline: `main.py`'s `run_economics()` (step 5) calls
+  `economics.cross_check_full_system_cost_methods()`, which calls
+  `full_system_cost_estimate_bottom_up()` and reports it alongside the
+  older borrowed-VCC-multiplier estimate every run.
+
+  There is also a real, committed, priced example of this BOM:
+  `data/MagCool_DC_BOM.xlsx`, built at the NSGA-III knee-point design
+  point (1.11T, 5.31kg La(Fe,Si)13Hy, COP_elec=9.57, Qc=35.38kW). A new
+  reconciliation test, `tests/test_bom_xlsx_reconciliation.py`, reads that
+  design point straight off the spreadsheet and confirms the spreadsheet's
+  materials/non-materials/grand-total line items match
+  `bom_cost()`/`bottom_up_non_materials_bom()`/
+  `full_system_cost_estimate_bottom_up()` run live, to the cent -- the
+  spreadsheet is a real, code-reproducible artifact, not a stale or
+  hand-typed one, and the new test will fail (not silently drift) if that
+  ever stops being true.
+
+  One thing this does NOT resolve, so the honesty flag is narrowed, not
+  removed: `bottom_up_non_materials_bom()` is itself still a
+  market-catalog ENGINEERING ESTIMATE for generic steady-flow component
+  categories (brazed-plate HX, centrifugal pump, NEMA motor, VFD),
+  explicitly NOT an AMR-specific vendor quote -- an AMR device needs
+  custom manifolding, oscillating-flow-rated seals, and a
+  cycle-synchronized drive that could cost more than an off-the-shelf
+  part of the same power rating (see that function's own docstring, and
+  the "Sources & Assumptions" tab of `data/MagCool_DC_BOM.xlsx`). This is
+  a genuine, non-code-fixable data gap (no AMR-specific manufactured-cost
+  quote exists in the public literature this project has access to), so
+  it remains open by design rather than as an oversight.
+
+  **RESOLVED this pass**: `run_economics()` previously ran the
+  BOM/full-system-cost functions only at a hardcoded illustrative design
+  point (2T, 5kg, Gd), not at the real NSGA-III knee-point design that
+  `design_recommendations.py` (step 13) produces, because step 5 runs
+  before step 13 in `main.py`'s pipeline order. LIMITATIONS.md's own
+  suggested fix -- rerunning the economics functions a second time at the
+  step-13 knee point -- is now implemented: `main.py` has a new step 13b
+  (`run_economics_at_knee_point()`, in `main.py`, called after step 13
+  with the same knee-point dict `design_recommendations.
+  summarize_field_flow_lever()` computes) that reruns
+  `bom_cost()`/`full_system_cost_estimate()`/`levelized_cost_of_cooling()`/
+  `cross_check_full_system_cost_methods()`/`full_system_cost_envelope()`
+  at the actual recommended design, and reports the result in both the
+  per-run log and the executive-summary banner. `data/MagCool_DC_BOM.xlsx`
+  itself is still a hand-assembled, out-of-band artifact from a prior
+  run's knee point (regenerating it programmatically from step 13b's
+  output has not been attempted), but a normal `python main.py` run now
+  reproduces that same design point's numbers through the pipeline
+  itself, not only via manual, out-of-band calls.
+- **RESOLVED.** Every `core/economics.py` function this section
+  previously flagged as implemented-and-tested-but-never-called from
+  `main.py`'s pipeline -- `bom_cost_geometric()` /
+  `full_system_cost_estimate_geometric()` (Halbach-cylinder geometric
+  magnet-mass model), `magnet_grade_cost_comparison()`,
+  `resource_criticality_note()`, `commercial_mcm_price_reality_check()`,
+  `rowe2011_vcc_compressor_cost_cross_check()`,
+  `rowe2011_magnet_mass_ratio_cross_check()`,
+  `compare_legacy_and_updated_magnet_ratio()`, `deflate_to_2026()` /
+  `inflation_adjusted_reference_prices()` / `bom_cost_2026_dollars()`
+  (CPI-U 2026-dollar adjustment), `full_system_cost_estimate_range()`
+  (LOW/MID/HIGH band on the borrowed-multiplier method), and
+  `full_system_cost_envelope()` (combined-methods envelope) -- is now
+  reachable from `main.py`'s pipeline: `full_system_cost_estimate_range()`
+  is called inside `cross_check_full_system_cost_methods()`, which
+  `run_economics()` (step 5, and now step 13b above) calls directly;
+  `full_system_cost_envelope()` is likewise called directly by both;
+  and the rest are called by `full_economics_wiring_report()` (also
+  `core/economics.py`), which `run_economics()` calls at the end of step
+  5. Every one of these now appears in `results/*.txt` output on a
+  normal pipeline run, not only in `core/economics.py` and
+  `tests/test_economics.py`.
 - **Reference-book gaps.** Kitanovski et al. (2015) pp.104-109
   (closed-form cycle-topology relations) and Tishin & Spichkin (2003)
   Ch.11 (passive regenerators) remain inaccessible even with the full

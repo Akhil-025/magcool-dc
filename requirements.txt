@@ -3,3 +3,4 @@ scipy>=1.10
 SALib>=1.4
 pymoo>=0.6
 pytest>=7.0
+openpyxl>=3.1
