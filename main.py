@@ -109,14 +109,23 @@ in the repository in one pass, in dependency order, so a single
         solid HTCM/MCM slices, removing pumping/dead-volume losses
         entirely (replaced by a different parasitic channel, inter-layer
         friction, which the module also models). Evaluated at this
-        repo's own representative operating point. ADDITIVE ONLY: writes
-        results/hybrid_solid_state_regenerator.txt only; does not change
-        any other stage's numbers. See that module's own printed
-        APPLES-TO-ORANGES warning -- the source paper's own COP excludes
-        drive-motor/magnet-system overhead, so its HMR/VCC ratio is an
-        upper bound, not an apples-to-apples electrical-COP figure, and
-        the source is a single 2024 conceptual/FEA paper, not a built
-        full-scale prototype.
+        repo's own representative operating point. Reports TWO
+        comparisons: (a) the original ideal-magnetic-cycle-only COP vs.
+        VCC's real electrical COP (an upper bound, apples-to-oranges),
+        and (b, NEW) a genuinely realistic electrical COP for HMR that
+        adds air-gap contact friction (the paper's own data), a rotary
+        drivetrain term (cross-device proxy fit to Lozano et al. 2013's
+        measured rotary-AMR drivetrain power, core/loss_model.py's own
+        RotaryDriveLossModel, independently corroborated in direction by
+        Arnold, Tura & Rowe 2014), and this repo's own CORE-calibrated
+        baseline overhead -- an apples-to-apples comparison against VCC.
+        ADDITIVE ONLY: writes results/hybrid_solid_state_regenerator.txt
+        only; does not change any other stage's numbers. See that
+        module's own printed APPLES-TO-ORANGES warning (comparison a)
+        and TIER 3 section (comparison b) before citing either ratio --
+        comparison (b)'s own drivetrain figure remains a cross-device
+        proxy, not an HMR-specific measurement, since no HMR prototype
+        has been built (single 2024 conceptual/FEA paper).
 
 Steps 3b and 8b reproduce core/thermal.py's and core/first_order_mce.py's
 own __main__ demo blocks. Both modules are otherwise only reached
@@ -1492,14 +1501,29 @@ def main(quick=False, layered_material_cross_product=True, regenerator_1d_overri
          "dead-volume losses entirely (a different parasitic channel -- inter-layer "
          "friction -- takes their place). Evaluated at this repo's own representative "
          "operating point (T_cold=291.15K, span=REPRESENTATIVE_SPAN_K, same point step "
-         "4's own representative_row is drawn from). ADDITIVE ONLY: reads "
-         "representative_row's own (T_cold, span) basis but does not read or write any "
-         "other stage's numbers; writes results/hybrid_solid_state_regenerator.txt only. "
-         "See that module's own printed APPLES-TO-ORANGES warning before citing its "
-         "HMR/VCC ratio -- the source paper's own COP is magnetic-cycle-work only (no "
-         "drive-motor/magnet-system electrical overhead), so this is an upper-bound, "
-         "not an apples-to-apples electrical-COP comparison, and the source is a single "
-         "2024 conceptual/FEA paper, not yet a built full-scale prototype.",
+         "4's own representative_row is drawn from). Reports TWO comparisons in the "
+         "same output file: (a) compare_to_vcc()'s original ideal-magnetic-cycle-only "
+         "COP vs. VCC's real electrical COP (an upper bound, flagged as "
+         "apples-to-oranges), and (b, NEW this pass) compare_to_vcc_realistic()'s "
+         "genuine electrical COP for HMR -- adding air-gap contact friction (the "
+         "paper's own measured/simulated derating), a rotary drivetrain term "
+         "(bearing/cogging/drive-motor power, reusing this repo's own "
+         "Lozano-et-al.-(2013)-calibrated RotaryDriveLossModel fit from "
+         "core/loss_model.py as a cross-device proxy, independently corroborated in "
+         "direction by Arnold, Tura & Rowe (2014)'s own rotary-AMR drive-force "
+         "measurements), and this repo's own CORE-calibrated baseline "
+         "controls/inverter overhead -- so (b) is a genuinely apples-to-apples "
+         "'electrical in / cooling out' comparison against VCC, not an ideal-vs-real "
+         "ratio. ADDITIVE ONLY: reads representative_row's own (T_cold, span) basis "
+         "but does not read or write any other stage's numbers; writes "
+         "results/hybrid_solid_state_regenerator.txt only. See that module's own "
+         "printed APPLES-TO-ORANGES warning (comparison a) and TIER 3 section "
+         "(comparison b) before citing either ratio -- comparison (a)'s source "
+         "paper's own COP is magnetic-cycle-work only (no drive-motor/magnet-system "
+         "electrical overhead); comparison (b) closes that specific gap but its own "
+         "drivetrain figure remains a cross-device literature proxy, not an "
+         "HMR-specific measurement, since no HMR prototype has been built (single "
+         "2024 conceptual/FEA paper).",
          None),  # handled specially below, result (hmr_result) captured
     ]
 
@@ -2093,17 +2117,34 @@ def _print_executive_summary(representative_row, cascade_rows_gd, graded_rows, m
                 "research direction)")
     if hmr_result and _ok("19."):
         best_row = max(hmr_result["rows"], key=lambda r: r["COP_HMR"])
-        logger.info(f"  - Best reported operating point: {best_row['frequency_Hz']:.1f} Hz, "
-                    f"COP_HMR(ideal)={best_row['COP_HMR']:.2f} vs. this repo's VCC electrical "
-                    f"COP={best_row['COP_VCC']:.2f} -- ratio {best_row['HMR_over_VCC']:.2f}x "
-                    "(results/hybrid_solid_state_regenerator.txt)")
+        logger.info(f"  - (a) IDEAL comparison: best reported operating point "
+                    f"{best_row['frequency_Hz']:.1f} Hz, COP_HMR(ideal)={best_row['COP_HMR']:.2f} "
+                    f"vs. this repo's VCC electrical COP={best_row['COP_VCC']:.2f} -- ratio "
+                    f"{best_row['HMR_over_VCC']:.2f}x (results/hybrid_solid_state_regenerator.txt)")
         logger.info("  - Lin et al., Innovation (Camb) 5(4):100645 (2024), Gd/Cu, Ns=24, "
                      "Uf=1.0. NOT an apples-to-apples electrical-COP comparison -- the "
                      "source paper's own COP excludes drive-motor/magnet-system overhead, "
                      "so this ratio is an UPPER BOUND, not evidence the real-world gap is "
-                     "closed. Single 2024 conceptual/FEA paper, not a built prototype -- "
-                     "see the results file's own printed APPLES-TO-ORANGES warning before "
-                     "citing this number elsewhere.")
+                     "closed.")
+        realistic = hmr_result.get("realistic")
+        if realistic:
+            best_real = max(realistic["rows"], key=lambda r: r["COP_HMR_electrical"])
+            logger.info(f"  - (a.2) Same frictionless number, WITH the paper's own air-gap "
+                        f"contact-friction derating alone (no drivetrain/baseline yet): "
+                        f"COP_ideal_airgap={best_real['COP_ideal_airgap']:.2f}")
+            logger.info(f"  - (b) REALISTIC comparison (NEW this pass): same best frequency, "
+                        f"REAL electrical COP_HMR={best_real['COP_HMR_electrical']:.2f} "
+                        f"(air-gap contact friction + rotary drivetrain, cross-device fit to "
+                        f"Lozano et al. 2013, + this repo's own CORE baseline overhead, all "
+                        f"included) vs. the SAME VCC electrical COP={best_real['COP_VCC']:.2f} "
+                        f"-- ratio {best_real['HMRe_over_VCC']:.2f}x. This is a genuine "
+                        f"apples-to-apples 'electrical in / cooling out' comparison, unlike "
+                        f"(a): {'still beats VCC' if best_real['HMRe_over_VCC'] >= 1.0 else 'does NOT beat VCC'} "
+                        f"once realistic losses are included at this operating point.")
+        logger.info("  - Single 2024 conceptual/FEA paper, not a built prototype -- see the "
+                     "results file's own printed APPLES-TO-ORANGES warning (a) and TIER 3 "
+                     "caveat (b, drivetrain figure is a cross-device proxy) before citing "
+                     "either ratio elsewhere.")
     else:
         logger.info("  - unavailable (stage failed or was skipped)")
 

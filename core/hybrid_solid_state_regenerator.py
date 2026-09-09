@@ -80,9 +80,99 @@ in this repo). What IS implemented, honestly split into two tiers:
   friction-derated one explicitly. This derating is ONLY validated at
   f=10 Hz in the source paper; using it at another frequency is flagged.
 
+  TIER 3 -- REALISTIC ELECTRICAL COP (new addition, this pass): closes
+  the single biggest gap the module's own APPLES-TO-ORANGES WARNING
+  (see compare_to_vcc()) previously left open -- that COP_HMR was
+  magnetic-cycle-work only, with NO drive-motor/drivetrain overhead and
+  NO baseline electrical overhead, making it structurally incomparable
+  to VCC's real installed electrical COP. `hmr_electrical_cop()` /
+  `compare_to_vcc_realistic()` add two REAL, previously-absent parasitic
+  loss channels and report a genuine COP_electrical for HMR, built the
+  same way (Qc / (W_mag + W_parasitic)) this repo's own
+  core.amr_cycle.AMRCycleResult.COP_electrical already is for fluid AMR:
+
+    (a) Inter-layer contact-friction / air-gap loss -- TIER 2's own
+        `apply_air_gap_derating()` above, turned ON by default here
+        (air_gap_nm=100, the paper's own least-ideal tested case,
+        chosen as the more physically realistic assumption for a real
+        rotating mechanical interface than the paper's idealized
+        zero-gap/thermal-grease contact) instead of the frictionless
+        default `hmr_cop()` keeps for backward compatibility. Still the
+        paper's OWN measured/simulated numbers -- nothing invented here.
+
+    (b) Rotary drivetrain power (bearing friction, detent/cogging
+        torque, and the drive motor needed to rotate the sector disk
+        and permanent-magnet assembly past each other -- Lin et al.'s
+        own "rotary HMR" design, Ns=24 sectors, structurally requires
+        exactly this kind of rotary drivetrain, but the source paper's
+        own Eq. 3 COP explicitly EXCLUDES it). This module does NOT
+        invent a number for this: it reuses
+        `core.loss_model.RotaryDriveLossModel` / `fit_rotary_drive_term()`,
+        already calibrated in this repo against Lozano, Engelbrecht,
+        Bahl, Nielsen, Eriksen, Olsen, Barbosa, Smith, Prata & Pryds,
+        "Performance analysis of a rotary active magnetic refrigerator,"
+        Applied Energy 111 (2013) 669-680 -- a rotary permanent-magnet-
+        assembly + rotating-regenerator device of the same general
+        mechanical class (24 regenerator sectors rotating inside a
+        4-pole permanent magnet) as the rotary HMR concept this module
+        implements, with DIRECTLY MEASURED drivetrain electrical power
+        (its own Table 3 WM column, 87-145 W, fit as W_drive(f) =
+        k_drive0 + k_drive1*f). This is a CROSS-DEVICE PROXY, stated
+        honestly, not a device-specific HMR drivetrain measurement (none
+        exists -- no HMR prototype has been built, per the module's own
+        Tier 1/2 honesty flag above): Lozano's device moves fluid
+        through a rotary valve as well as rotating the magnet, while
+        HMR has no fluid/valve but instead must rotate a segmented
+        HTCM/MCM sector disk -- a mechanically different but not
+        obviously lighter load (same class of bearing/cogging losses,
+        no valve-actuation savings to offset it). The DIRECTION of this
+        addition (real rotary magnetocaloric drivetrains draw
+        non-trivial parasitic power, often comparable to or exceeding
+        Qc itself) is independently corroborated by a SECOND, separate
+        source: Arnold, Tura & Rowe, "Experimental analysis of a
+        two-material active magnetic regenerator," Int. J. Refrig. 37
+        (2014) 99-105, whose own force/drive measurements found
+        "mechanical losses and pumping power are the most significant
+        contributions to net work while the net magnetic work is too
+        small to be resolved," with device efficiencies "all less than
+        0.15" -- i.e. two independent measured rotary AMR datasets agree
+        that drivetrain/mechanical loss, not magnetic work, dominates
+        real hardware of this general class. This does NOT establish
+        Lozano's specific k_drive0/k_drive1 values transfer quantitatively
+        to an HMR device; it establishes that omitting a drivetrain term
+        entirely (the paper's own Eq. 3 scope, and this module's
+        previous COP_HMR) is the more clearly wrong assumption of the
+        two, and gives the best currently-available real-hardware
+        anchor for the correction's rough SIZE.
+
+    (c) Baseline electrical overhead (controls, inverter) -- reuses this
+        repo's own CORE-calibrated `base_frac` (core.loss_model.
+        calibrate_loss_coefficients(), the same coefficient
+        core.amr_cycle.AMRSystem applies to every fluid-AMR
+        COP_electrical calculation) rather than inventing a separate
+        HMR-specific overhead fraction, so the "non-drivetrain,
+        non-friction" slice of the parasitic budget is treated
+        identically to how the rest of this repo treats it.
+
+  Reported HMR_electrical_COP = Qc_net / (W_mag_net + W_drivetrain +
+  W_baseline), where Qc_net and W_mag_net already include the (a) air-gap
+  derating (Qc_net = Qc_ideal * cooling_power_frac; W_mag_net backed out
+  from the paper's own derated eta so BOTH the cooling-power loss AND the
+  extra magnetic work the paper's own numbers imply are captured, not
+  just one). This is now the SAME kind of "real installed electrical
+  COP" quantity as vapor_compression_cop() and core.amr_cycle.
+  AMRCycleResult.COP_electrical -- closing (not merely re-flagging) the
+  ideal-vs-real structural mismatch the original APPLES-TO-ORANGES
+  WARNING identified, while being explicit that item (b)'s drivetrain
+  number is a cross-device literature proxy, not an HMR-specific
+  measurement (none exists yet).
+
 This module is purely additive: it imports nothing from and is imported
-by nothing in core/amr_cycle.py, core/optimize.py, core/cascade.py, or
-core/loss_model.py, so it changes no existing result. Run standalone:
+by nothing in core/amr_cycle.py, core/optimize.py, core/cascade.py, so
+it changes no existing result. It now imports read-only calibration
+helpers from core/loss_model.py (fit_rotary_drive_term,
+calibrate_loss_coefficients) but does not modify anything in that
+module or feed results back into it. Run standalone:
     python -m core.hybrid_solid_state_regenerator
 
 INTEGRATION NOTE (main.py step "19."): main.py calls compare_to_vcc()
@@ -101,6 +191,15 @@ import dataclasses
 import numpy as np
 
 from core.baseline_cooling import carnot_cop, vapor_compression_cop
+from core.loss_model import fit_rotary_drive_term, calibrate_loss_coefficients
+
+# Representative regenerator/MCM mass (kg) used to convert the paper's own
+# specific cooling power (kW/kg) into an absolute Qc (W) for the realistic
+# electrical-COP path below. Matches this repo's own representative design
+# point elsewhere (main.py step 5's economics run: "H=2.0T, mass=5.0kg Gd"),
+# so the HMR comparison is anchored to the SAME scale this repo already
+# reports its own fluid-AMR numbers at, not an arbitrarily chosen one.
+MASS_MCM_KG_DEFAULT = 5.0
 
 # ---------------------------------------------------------------------------
 # Real material properties (not invented). Sources given per-value.
@@ -294,6 +393,284 @@ def hmr_cop(T_cold_K, T_hot_K, frequency_Hz=1.0, air_gap_nm=None):
     )
 
 
+def specific_cooling_power_kw_per_kg(frequency_Hz):
+    """Interpolates/extrapolates the source paper's own three (f, specific
+    cooling power) points (Gd/Cu, Ns=24, Uf=1.0, its Table 1's own SCP
+    column, kW per kg of MCM). Same TIER 2 discipline as eta_hmr()/
+    delta_T_span_max_hmr() above: linear interpolation within [1,10] Hz,
+    flagged extrapolation outside it. Needed (new, this pass) to convert
+    the paper's dimensionless eta/COP figures into an absolute Qc (W) for
+    a given regenerator mass -- the paper itself never needed this because
+    it only reports efficiency ratios, not a specific device's cooling
+    duty."""
+    extrapolated = not (_HMR_GDCU_FREQ_HZ[0] <= frequency_Hz <= _HMR_GDCU_FREQ_HZ[-1])
+    scp = float(np.interp(frequency_Hz, _HMR_GDCU_FREQ_HZ, _HMR_GDCU_SCP_KW_PER_KG))
+    return scp, extrapolated
+
+
+# ---------------------------------------------------------------------------
+# TIER 3 (new, this pass): REALISTIC electrical COP -- adds the two
+# parasitic loss channels the paper's own Eq. 3 COP structurally excludes
+# (rotary drivetrain; baseline controls/inverter overhead) on top of TIER
+# 2's own air-gap contact-friction derating, so the reported number is a
+# genuine device-level electrical COP, comparable on equal terms to
+# vapor_compression_cop() and to core.amr_cycle.AMRCycleResult.
+# COP_electrical -- see the module docstring's TIER 3 section for the full
+# derivation and honesty flags (cross-device drivetrain proxy, etc).
+# ---------------------------------------------------------------------------
+
+_DEFAULT_ROTARY_DRIVE_FIT = None  # lazy-cached; see _rotary_drive_watts()
+
+
+def _rotary_drive_watts(frequency_Hz):
+    """W_drive(f) = k_drive0 + k_drive1*f, fit by
+    core.loss_model.fit_rotary_drive_term() to Lozano et al. (2013)'s own
+    directly-measured rotary magnet-assembly + valve drivetrain power
+    (their Table 3 WM column). Cached at module level (the fit itself is a
+    deterministic closed-form least-squares solve over 8 fixed literature
+    points, not a random/expensive search, so caching only avoids
+    re-printing the fit summary on every call)."""
+    global _DEFAULT_ROTARY_DRIVE_FIT
+    if _DEFAULT_ROTARY_DRIVE_FIT is None:
+        _DEFAULT_ROTARY_DRIVE_FIT = fit_rotary_drive_term(verbose=False)
+    fit = _DEFAULT_ROTARY_DRIVE_FIT
+    return fit["k_drive0"] + fit["k_drive1"] * frequency_Hz, fit
+
+
+_DEFAULT_BASE_FRAC = None  # lazy-cached; see _baseline_overhead_frac()
+
+
+def _baseline_overhead_frac():
+    """This repo's own CORE-calibrated `base_frac` (controls/inverter
+    overhead, proportional to Qc) from core.loss_model.
+    calibrate_loss_coefficients() -- the SAME coefficient
+    core.amr_cycle.AMRSystem applies to every fluid-AMR COP_electrical
+    calculation, reused here rather than inventing an HMR-specific
+    baseline-overhead fraction."""
+    global _DEFAULT_BASE_FRAC
+    if _DEFAULT_BASE_FRAC is None:
+        _DEFAULT_BASE_FRAC = calibrate_loss_coefficients(verbose=False)["base_frac"]
+    return _DEFAULT_BASE_FRAC
+
+
+@dataclasses.dataclass
+class HMRElectricalResult:
+    technology: str
+    frequency_Hz: float
+    mass_mcm_kg: float
+    air_gap_nm: int
+    Qc_ideal_W: float          # frictionless-limit Qc at this (f, mass) -- paper's own Table 1 SCP
+    Qc_net_W: float            # after air-gap contact-friction derating (TIER 2)
+    W_mag_net_W: float         # magnetic-cycle-only work, backed out from the air-gap-derated eta/COP
+    W_drivetrain_W: float      # rotary bearing/cogging/drive-motor power (Lozano 2013 cross-device fit)
+    W_baseline_W: float        # controls/inverter overhead (this repo's own CORE base_frac * Qc_net)
+    COP_ideal: float           # magnetic-cycle-only COP (== hmr_cop()'s own COP, air-gap-derated)
+    COP_electrical: float      # Qc_net / (W_mag_net + W_drivetrain + W_baseline) -- the REALISTIC number
+    COP_carnot: float
+    extrapolated: bool
+    source_note: str
+
+
+def hmr_electrical_cop(T_cold_K, T_hot_K, frequency_Hz=1.0,
+                        mass_mcm_kg=MASS_MCM_KG_DEFAULT, air_gap_nm=100,
+                        rotary_drive_watts_fn=_rotary_drive_watts,
+                        base_frac=None):
+    """Realistic, loss-inclusive device-level electrical COP for the Gd/Cu
+    HMR at (T_cold_K, T_hot_K). Unlike hmr_cop() (which reproduces the
+    paper's own frictionless-limit, magnetic-cycle-only Eq. 3/4 COP), this
+    function:
+      1. Applies the paper's own air-gap contact-friction derating
+         (TIER 2, apply_air_gap_derating()) -- ON by default here
+         (air_gap_nm=100, the paper's own least-ideal tested case) rather
+         than frictionless, because a real rotating mechanical interface
+         is a more realistic assumption than idealized zero-gap contact.
+      2. Converts the paper's dimensionless eta/COP into an absolute Qc
+         (W) via specific_cooling_power_kw_per_kg(f) * mass_mcm_kg, then
+         backs out W_mag_net = Qc_net / COP_net (both already air-gap-
+         derated), so the extra magnetic work the paper's own numbers
+         imply the air gap costs (eta drops MORE than Qc at 100 nm: -26%
+         vs. -13%) is captured, not just the cooling-power loss.
+      3. Adds a rotary drivetrain parasitic term (bearing/cogging
+         friction + drive motor to rotate the Ns-sector disk and magnet
+         assembly), reusing core.loss_model's own Lozano-et-al.-(2013)-
+         calibrated RotaryDriveLossModel/fit_rotary_drive_term() fit --
+         see the module docstring's TIER 3 section for why this
+         cross-device proxy is the best currently-available real-hardware
+         anchor, and for the independent Arnold/Tura/Rowe (2014)
+         corroboration that drivetrain loss, not magnetic work, tends to
+         dominate real rotary magnetocaloric hardware of this class.
+      4. Adds a baseline controls/inverter overhead, reusing this repo's
+         own CORE-calibrated base_frac (core.loss_model.
+         calibrate_loss_coefficients()) rather than inventing a separate
+         HMR-specific figure.
+
+    Returns an HMRElectricalResult. air_gap_nm must be one of {0, 10, 100}
+    (see apply_air_gap_derating()) or None (skip the air-gap derating
+    entirely -- NOT recommended for a "realistic" estimate, but available
+    for a frictionless-contact/drivetrain-only sensitivity check)."""
+    cc = carnot_cop(T_cold_K, T_hot_K)
+    eta, extrapolated = eta_hmr(frequency_Hz)
+    cop_ideal_frictionless = eta * cc
+    scp_kw_per_kg, scp_extrapolated = specific_cooling_power_kw_per_kg(frequency_Hz)
+    Qc_ideal_W = scp_kw_per_kg * 1000.0 * mass_mcm_kg
+
+    note = (f"Lin et al., Innovation 5(4):100645 (2024), Gd/Cu HMR, Ns=24, Uf=1.0, "
+            f"mass_mcm={mass_mcm_kg:.2f}kg (this repo's own representative design-point "
+            f"mass, see MASS_MCM_KG_DEFAULT)")
+    if extrapolated or scp_extrapolated:
+        note += f" -- EXTRAPOLATED to f={frequency_Hz:.2f} Hz (outside fitted [1,10] Hz range)"
+
+    cop_ideal, Qc_net_W = cop_ideal_frictionless, Qc_ideal_W
+    if air_gap_nm is not None:
+        cop_ideal, eta, air_note = apply_air_gap_derating(
+            cop_ideal_frictionless, eta, air_gap_nm, frequency_Hz)
+        # cooling_power_frac is the SAME fractional derating whether applied
+        # to the paper's dimensionless COP or to an absolute Qc built from
+        # its own SCP figure -- both are the paper's Table-1 numbers scaled
+        # by the same measured/simulated fraction, so this is not an
+        # independent assumption on top of apply_air_gap_derating()'s own.
+        Qc_net_W = Qc_ideal_W * (cop_ideal / cop_ideal_frictionless
+                                  if cop_ideal_frictionless > 0 else 0.0)
+        note += "; " + air_note
+    else:
+        note += "; air-gap derating SKIPPED (air_gap_nm=None) -- frictionless MCM/HTCM contact"
+
+    W_mag_net_W = Qc_net_W / cop_ideal if cop_ideal > 0 else 0.0
+    W_drivetrain_W, drive_fit = rotary_drive_watts_fn(frequency_Hz)
+    W_drivetrain_W = max(W_drivetrain_W, 0.0)  # the fitted line can't go negative here
+                                                 # (both coefficients are non-negative
+                                                 # over the fitted 0.4-1.4 Hz range) but
+                                                 # clip defensively if ever called far
+                                                 # outside that range.
+    b_frac = base_frac if base_frac is not None else _baseline_overhead_frac()
+    W_baseline_W = b_frac * Qc_net_W
+
+    note += (f"; +W_drivetrain={W_drivetrain_W:.1f}W (Lozano et al. 2013 rotary-AMR "
+             f"drivetrain fit, cross-device proxy -- see module docstring TIER 3); "
+             f"+W_baseline={W_baseline_W:.1f}W (base_frac={b_frac:.4f}, this repo's own "
+             f"CORE-calibrated controls/inverter overhead)")
+
+    W_parasitic_total = W_drivetrain_W + W_baseline_W
+    denom = W_mag_net_W + W_parasitic_total
+    cop_electrical = Qc_net_W / denom if denom > 0 else 0.0
+
+    return HMRElectricalResult(
+        technology="Hybrid solid-state magnetic regenerator (HMR, Gd/Cu) -- realistic",
+        frequency_Hz=frequency_Hz, mass_mcm_kg=mass_mcm_kg,
+        air_gap_nm=(air_gap_nm if air_gap_nm is not None else -1),
+        Qc_ideal_W=Qc_ideal_W, Qc_net_W=Qc_net_W, W_mag_net_W=W_mag_net_W,
+        W_drivetrain_W=W_drivetrain_W, W_baseline_W=W_baseline_W,
+        COP_ideal=cop_ideal, COP_electrical=cop_electrical, COP_carnot=cc,
+        extrapolated=bool(extrapolated or scp_extrapolated), source_note=note,
+    )
+
+
+def compare_to_vcc_realistic(T_cold_K, span_K, frequencies_Hz=(1.0, 5.0, 10.0),
+                              eta_2nd_law_vcc=0.42, mass_mcm_kg=MASS_MCM_KG_DEFAULT,
+                              air_gap_nm=100, log=print):
+    """Realistic counterpart to compare_to_vcc(): compares HMR's REAL
+    electrical COP (hmr_electrical_cop(), inclusive of air-gap friction,
+    rotary drivetrain, and baseline overhead) against VCC's REAL installed
+    electrical COP -- an apples-to-apples comparison in STRUCTURE (both
+    sides are now "electrical power in / cooling power out" with real
+    parasitic loss included), unlike compare_to_vcc()'s own ideal-vs-real
+    ratio. `log` defaults to print but accepts any single-string-argument
+    callable (compare_to_vcc() passes its own list-accumulating logger so
+    both sections land in the same results/hybrid_solid_state_regenerator.txt
+    file -- see that function's own call site below).
+
+    Also prints (new) an explicit COP_ideal_airgap column alongside
+    COP_HMRe, so the FULL loss chain is visible in one table rather than
+    split across two: COP_HMR (compare_to_vcc()'s own frictionless-limit
+    magnetic-work-only number, TIER 1/2) -> COP_ideal_airgap (same
+    magnetic-work-only quantity, but with the paper's own air-gap contact-
+    friction derating applied -- what hmr_cop(..., air_gap_nm=100) alone
+    would return) -> COP_HMRe (this function's own new TIER 3 number, ALSO
+    adding the rotary drivetrain and baseline-overhead terms). Each column
+    is a strict subset of the next column's loss accounting, so reading
+    left to right shows exactly how much each additional loss channel
+    costs."""
+    T_hot_K = T_cold_K + span_K
+    vcc = vapor_compression_cop(T_cold_K, T_hot_K, eta_2nd_law=eta_2nd_law_vcc)
+
+    log("")
+    log("=" * 88)
+    log("TIER 3 (realistic, loss-inclusive): HMR REAL electrical COP vs. VCC REAL "
+        "electrical COP")
+    log(f"Air-gap assumption: {air_gap_nm} nm (paper's own least-ideal tested case) | "
+        f"mass_mcm={mass_mcm_kg:.2f}kg | rotary drivetrain: Lozano et al. (2013) "
+        f"cross-device fit | baseline overhead: this repo's own CORE base_frac")
+    log("Reading left to right below: COP_ideal (TIER 1/2, frictionless, magnetic-work "
+        "only, see compare_to_vcc()'s own table above) -> COP_ideal_airgap (SAME "
+        "magnetic-work-only quantity, but with the paper's own air-gap contact-friction "
+        "derating now applied) -> COP_HMRe (TIER 3, NEW: also adds the rotary drivetrain "
+        "and baseline-overhead terms neither the paper nor compare_to_vcc() include).")
+    log("=" * 88)
+    log(f"{'freq(Hz)':>9}{'COP_ideal':>11}{'COP_id_ag':>11}{'Qc_net_W':>10}{'W_mag_W':>9}"
+        f"{'W_drv_W':>9}{'W_base_W':>10}{'COP_HMRe':>10}{'COP_VCC':>10}{'HMRe/VCC':>10}"
+        f"{'flag':>14}")
+
+    rows = []
+    for f in frequencies_Hz:
+        cc = carnot_cop(T_cold_K, T_hot_K)
+        eta_frictionless, _ = eta_hmr(f)
+        cop_ideal_frictionless = eta_frictionless * cc
+        r = hmr_electrical_cop(T_cold_K, T_hot_K, frequency_Hz=f,
+                                mass_mcm_kg=mass_mcm_kg, air_gap_nm=air_gap_nm)
+        ratio = r.COP_electrical / vcc.COP if vcc.COP > 0 else float("nan")
+        flag = "EXTRAPOLATED" if r.extrapolated else ""
+        log(f"{f:>9.1f}{cop_ideal_frictionless:>11.3f}{r.COP_ideal:>11.3f}"
+            f"{r.Qc_net_W:>10.1f}{r.W_mag_net_W:>9.1f}{r.W_drivetrain_W:>9.1f}"
+            f"{r.W_baseline_W:>10.1f}{r.COP_electrical:>10.3f}{vcc.COP:>10.3f}"
+            f"{ratio:>10.3f}{flag:>14}")
+        rows.append(dict(frequency_Hz=f, COP_ideal_frictionless=cop_ideal_frictionless,
+                          COP_ideal_airgap=r.COP_ideal, Qc_net_W=r.Qc_net_W,
+                          W_mag_net_W=r.W_mag_net_W, W_drivetrain_W=r.W_drivetrain_W,
+                          W_baseline_W=r.W_baseline_W, COP_HMR_electrical=r.COP_electrical,
+                          COP_VCC=vcc.COP, HMRe_over_VCC=ratio, extrapolated=r.extrapolated))
+
+
+    best = max(rows, key=lambda r: r["COP_HMR_electrical"])
+    log("")
+    if best["HMRe_over_VCC"] >= 1.0:
+        conclusion = (
+            f"Even after adding air-gap contact friction, a rotary drivetrain term, and "
+            f"baseline overhead, HMR's own REAL electrical COP at its best frequency "
+            f"({best['frequency_Hz']:.1f} Hz, COP_electrical={best['COP_HMR_electrical']:.2f}) "
+            f"still exceeds VCC's REAL electrical COP ({vcc.COP:.2f}) at this (T_cold, span) "
+            f"-- ratio {best['HMRe_over_VCC']:.2f}x. This is now a genuinely apples-to-apples "
+            f"comparison in structure (both 'electrical in / cooling out'), though the "
+            f"drivetrain figure itself remains a cross-device literature proxy (see module "
+            f"docstring), not an HMR-specific measurement -- no HMR prototype has been built."
+        )
+    else:
+        conclusion = (
+            f"Once air-gap contact friction, a rotary drivetrain term, and baseline "
+            f"overhead are added, HMR's own REAL electrical COP at its best frequency "
+            f"({best['frequency_Hz']:.1f} Hz, COP_electrical={best['COP_HMR_electrical']:.2f}) "
+            f"does NOT exceed VCC's REAL electrical COP ({vcc.COP:.2f}) at this (T_cold, "
+            f"span) -- ratio {best['HMRe_over_VCC']:.2f}x, compared to the higher, "
+            f"ideal-vs-real ratio compare_to_vcc() reports above (which omits drivetrain and "
+            f"baseline overhead entirely). Once those two real, previously-excluded loss "
+            f"channels are included on equal footing with VCC's own real installed-system "
+            f"number, this architecture does NOT close the electrical-COP gap to "
+            f"vapor-compression at this operating point, at least not on the strength of the "
+            f"frictionless-limit thermodynamics alone."
+        )
+    log("CONCLUSION: " + conclusion)
+    log("")
+    log("Caveat carried over from TIER 1/2 above: no HMR prototype has been built (single "
+        "2024 conceptual/FEA paper). The air-gap and specific-cooling-power figures ARE the "
+        "paper's own reported/simulated numbers; the rotary-drivetrain figure is a "
+        "cross-device proxy (Lozano et al. 2013, a fluid-based rotary AMR, not an HMR) whose "
+        "DIRECTION (real rotary magnetocaloric drivetrains draw non-trivial parasitic power) "
+        "is independently corroborated by Arnold, Tura & Rowe (2014)'s own force/drive "
+        "measurements on a different rotary AMR device, but whose exact MAGNITUDE for an "
+        "actual HMR device is not independently confirmed.")
+
+    return {"rows": rows, "vcc": vcc, "conclusion": conclusion}
+
+
 def compare_to_vcc(T_cold_K, span_K, frequencies_Hz=(1.0, 5.0, 10.0),
                     eta_2nd_law_vcc=0.42, out_path="results/hybrid_solid_state_regenerator.txt",
                     verbose=True):
@@ -403,6 +780,14 @@ def compare_to_vcc(T_cold_K, span_K, frequencies_Hz=(1.0, 5.0, 10.0),
         "results together (frictionless-limit conceptual device vs. this repo's calibrated, "
         "loss-model-derated existing AMR numbers).")
 
+    # TIER 3 addition, this pass: run the realistic, loss-inclusive electrical-COP
+    # comparison and append it to the SAME output file/log stream, so a reader sees
+    # both the original ideal-vs-real ratio AND the closed-gap realistic one together
+    # rather than needing to open two files.
+    realistic_result = compare_to_vcc_realistic(
+        T_cold_K, span_K, frequencies_Hz=frequencies_Hz,
+        eta_2nd_law_vcc=eta_2nd_law_vcc, log=log)
+
     import os
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open(out_path, "w") as f_out:
@@ -410,7 +795,8 @@ def compare_to_vcc(T_cold_K, span_K, frequencies_Hz=(1.0, 5.0, 10.0),
     if verbose:
         print(f"\nWrote {out_path}")
 
-    return {"rows": rows, "vcc": vcc, "conclusion": conclusion}
+    return {"rows": rows, "vcc": vcc, "conclusion": conclusion,
+            "realistic": realistic_result}
 
 
 if __name__ == "__main__":
