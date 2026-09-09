@@ -478,30 +478,224 @@ COP either, only on weight/power-density (heat-pump check) or narrower
 non-COP metrics (dry-rejection water usage, refrigerant-free emissions).
 - Source: `core/regime_crossover_analysis.py`; `main.py` step 15d.
 
-### 1.13 NSGA-III seed-to-seed stability on the MAIN Pareto front is now checkable, but no settled verdict is recorded yet
+### 1.13 NSGA-III seed-to-seed stability on the MAIN Pareto front -- now run, CLOSED with a positive verdict on the headline numbers
 `core/pareto_multiseed_stability.py` reruns `optimize.run_optimization()`
-at full production `pop_size=40, n_gen=25` across 5 independent seeds and
-reports variance on the specific headline numbers a paper would cite
-(best COP_electrical, knee-point design, each material family's share of
-the merged front) -- extending the same seed-stability discipline
-`hysteresis_sensitivity.py`'s own multiseed follow-up already applied to
-the ON/OFF hysteresis axis (Item 1.5 above, where the original
-reduced-setting reversal was found NOT stable) to the more basic
-"would a different NSGA-III seed move the number" question for the main
-front. This module is implemented, tested, and wired into `main.py` step
-16, but **no production 5-seed run has yet been executed and its result
-recorded in this ledger** -- a full run was not completed as part of this
-consolidation pass (each seed reruns the same NSGA-III search step 11
-already runs once, at production settings). Treat every single-seed
-headline number already cited elsewhere in this repo's `results/` outputs
-(e.g. "100% La(Fe,Si)13Hy" -style material-share claims) as **not yet
-seed-verified** until this check has actually been run and its verdict
-folded in here.
-- Source: `core/pareto_multiseed_stability.py`; `main.py` step 16.
+at full production `pop_size=40, n_gen=25` across 3 independent seeds
+(not the full 5 the module supports -- reduced for pipeline-runtime
+reasons; a deeper run is directly re-runnable) and reports variance on the
+specific headline numbers a paper would cite (best COP_electrical,
+knee-point design, each material family's share of the merged front) --
+extending the same seed-stability discipline `hysteresis_sensitivity.py`'s
+own multiseed follow-up already applied to the ON/OFF hysteresis axis
+(Item 1.5 above) to the more basic "would a different NSGA-III seed move
+the number" question for the main front. **Now actually run and
+recorded:**
+```
+best COP_electrical:        mean=10.413  std=0.068  range=[10.325, 10.490]
+knee-point COP_electrical:  mean= 9.200  std=0.768
+knee-point material consistent across all 3 seeds: True (La(Fe,Si)13Hy every time)
+material share of merged front (mean +/- std, range):
+  La(Fe,Si)13Hy (tuned)       80.7% +/- 9.2%  (71-93%)
+  Gd5(SixGe1-x)4(-Ga) (tuned) 10.6% +/- 7.7%  (0-18%)
+  Ga1-xCMn3+x (tuned)          6.7% +/- 0.6%  (6-7%)
+  Gd                           2.0% +/- 2.8%  (0-6%)
+```
+**Verdict: the best-COP headline number and the knee-point material
+choice ARE seed-stable** (low std, identical winning material every
+seed) -- unlike Item 1.5 (hysteresis share) and Item 1.14 (magnet-geometry
+mean field) below, both of which turned out NOT stable under the
+identical check. The material-family *share* is noisier (La(Fe,Si)13Hy
+71-93% across just 3 seeds) -- any claim more specific than "La(Fe,Si)13Hy
+dominates the front" should be reported as mean+/-std across seeds, not a
+single-seed point value, per this module's own stated discipline.
+- Source: `core/pareto_multiseed_stability.py`;
+  `results/pareto_multiseed_stability.txt`; `main.py` step 16.
+
+### 1.14 Magnet-geometry Pareto sensitivity: seed-to-seed stability -- run, and the effect is NOT stable
+Item 13.2-equivalent (`core/magnet_geometry.py`'s
+`run_geometric_cost_pareto_sensitivity()`) found, in one reduced-settings
+run, that the new GEOMETRIC (super-linear Halbach-cylinder) magnet-mass
+cost term does not pull the Pareto front's mean field down the way a
+nonlinear cost penalty on high fields would be expected to. A follow-up,
+`run_magnet_geometry_multiseed_stability_check()`, re-ran the same
+FLAT-vs-GEOMETRIC comparison at full production settings (pop_size=40,
+n_gen=25) across 3 seeds:
+```
+seed  mean_FLAT_T  mean_GEOM_T  front_FLAT  front_GEOM
+   1         1.28         1.20          23          23
+   2         1.48         1.50          22          21
+   3         1.11         1.24          18          20
+```
+**Result: NOT STABLE.** Seed 2's GEOMETRIC run has a HIGHER mean field
+than its own FLAT run -- the "geometric cost pulls mean field down"
+expectation does not hold universally even at full production settings.
+Same class of outcome as Item 1.5's hysteresis-share finding -- NSGA-III
+search noise at this problem's scale appears large enough to flip BOTH of
+this repo's reduced-setting Pareto sensitivity findings, not just one.
+This resolves the search-noise question, not the underlying cost-data
+quality question (the geometric magnet-mass relation is standard
+closed-form Halbach-cylinder physics; the $/kg figures and the ~2T
+"sweet spot" literature claim were not independently re-derived).
+- Source: `core/magnet_geometry.py`'s
+  `run_magnet_geometry_multiseed_stability_check()`;
+  `results/magnet_geometry_multiseed_stability.txt`; `main.py` step 11e.
+
+### 1.15 Calibration-failure root cause is structural (12/12), and the regenerative-amplification gap it exposes has a real, imperfect opt-in fix
+`core/validation_system.py`'s `diagnose_calibration_failures()` checks
+each of the 12 "NO CALIBRATION FOUND" benchmark rows (Item 1.7-adjacent
+territory) directly against `cooling_capacity()`'s own structural ceiling
+(2*dTad_noload -- the max span the 0-D model can reach at that
+field/T_mid, for ANY mdot). **All 12/12 are structural**, not a
+search-space artifact -- e.g. Astronautics (span=11.0K, margin=-10.96K),
+Cooltech_2013_rotary (span=42.0K, margin=-39.19K), DTU_MagQueen_2018
+(span=25.0K, margin=-24.97K). Widening the mdot search bound above 5 kg/s
+cannot change the outcome for any of them -- confirmed directly from
+`cooling_capacity()`'s own `dTad_noload` term, not assumed.
+`run_regenerative_amplification_diagnostic()` then quantifies the SIZE of
+the gap across every span>0 benchmark row: 12/17 rows with a well-defined
+`dTad_noload` exceed the model's own structural cap, ratio range
+1.02x-14.92x (median 1.39x), independently cross-checked by a directly-
+measured no-load span on the same physical MAGGIE hardware as an existing
+calibrated row (not back-calculated from any mdot). This is a LOWER
+BOUND on the model's error (graded/layered real beds additionally lose
+accuracy from the single-Tc approximation -- see Item 1.16).
+`AMRSystem.no_load_span_override` (populated from
+`regenerator_1d.regenerative_span_cap()`, Item 1.3/1.7) is the opt-in
+mechanism meant to close this gap; tested on 3 of the 12 flagged rows
+(the full 12-device check is directly re-runnable, capped here for
+pipeline runtime): recovers a usable, evaluable COP for 1/3
+(Lozano_POLO_UFSC_2016_r1, COP_lit=0.37 vs. COP_pred=0.318, -14.1% error)
+but does NOT reach feasibility for the other 2 (DTU_Eriksen_MAGGIE_2016,
+Risoe_DTU_Gd_2011 -- their real spans still exceed even the 1-D model's
+own, larger span-cap prediction). Reads as: the override fixes
+FEASIBILITY (can represent the span at all) without necessarily fixing
+ACCURACY -- exactly the honest outcome `no_load_span_override`'s own
+docstring predicts. Still opt-in, still off by default everywhere else
+in this codebase.
+- Source: `core/validation_system.py`'s `diagnose_calibration_failures()`,
+  `run_regenerative_amplification_diagnostic()`,
+  `run_regenerative_amplification_override_check()`;
+  `results/calibration_failure_diagnostics.txt`,
+  `results/regenerative_amplification_diagnostic.txt`,
+  `results/regenerative_amplification_override_check.txt`; `main.py`
+  steps 2c/2d/2f.
+
+### 1.16 Graded-bed structural fix extended to the remaining large structural devices -- real per-layer data helps two of three, mass-unreported sensitivity only for the third
+Following on from Item 1.15's finding that Astronautics, DTU_MagQueen_2018,
+Risoe_DTU_Gd_2011, and Cooltech_2013_rotary are all structurally
+infeasible under the single-Tc model, and Section 11.3's existing
+Astronautics 6-layer graded-bed fix (-81.1% error), this extends the same
+mechanism to the other three:
+- **DTU_MagQueen_2018** (mass unreported, swept 0.5-10kg): calibrates at
+  every swept mass, COP_error approx -45% to -48% depending on mass -- a
+  real number, but a mass-sensitivity, not a calibrated answer (unlike
+  Astronautics, whose 1.52kg mass IS directly reported).
+- **MagQueen, REAL 10-layer bed (Masche, Bahl, Nielsen, Choi, Bez, Bjørk
+  & Engelbrecht, Applied Thermal Engineering, 2021, Table 3)** -- using
+  the device's own reported per-layer Curie temperatures AND masses (not
+  a sweep or composition search): **no calibration found, an HONEST
+  STRUCTURAL FINDING, not a wiring bug**. Every one of the 10 real layers,
+  centered exactly on its own reported Tc (the most generous possible
+  placement), caps out at peak dTad_noload~=0.28K at this device's real
+  1.44T field -- a ~0.56K structural span ceiling per layer, well under
+  the ~1.03K/layer the real device's own operating point requires. A
+  property of `LAFESIH_FIRST_ORDER`'s own Landau calibration at this
+  field, confirmed unchanged for the base material -- not an artifact of
+  the per-layer wiring.
+- **DTU_Eriksen_MAGGIE_2016, REAL 4-composition Gd/Gd-Y graded bed**
+  (actual reported Curie temperatures): MAGGIE's own 15.5K row, previously
+  a flat "NO CALIBRATION FOUND" under the single-Tc model, now calibrates
+  (Qc=81.5W target 81.5W, COP_cascade=3.068 vs. lit=3.6, -14.8% error).
+  **Genuine trade-off, not a strict win**: the companion row on the SAME
+  physical prototype (DTU_Eriksen_rotary_Gd_2015, 10.2K span) -- already
+  calibrating fine under the simpler single-Tc approximation -- trades
+  away some of that accuracy under this same real 4-layer model. A single
+  graded-bed model does not uniformly improve every operating point of
+  the same physical device.
+- **Risoe_DTU_Gd_2011 (30K span) -- HYPOTHETICAL 6-stage redesign**, not
+  the real device (a single plain-Gd bed, not reported as graded): Qc
+  target reached, but only 2/6 stages land within `GD_FAMILY`'s
+  documented [20,290]K range (4/6 fall back to plain Gd), and COP_cascade
+  collapses to 0.0 (vs. reported COP=5.0). A Qc-feasibility finding only,
+  not an efficient-redesign prediction.
+- **Cooltech_2013_rotary (42K span, largest in this benchmark set) --
+  also HYPOTHETICAL, mass unreported (swept)**: reaches positive Qc
+  feasibility at every swept mass (4/6 stages fall back to plain Gd) -- a
+  feasibility sensitivity, not a calibrated result.
+- **Consolidated**: the graded-bed STRUCTURE closes the Qc-feasibility gap
+  for every device checked, at every swept mass -- the mechanism
+  generalizes. Whether it also closes the ACCURACY gap depends on whether
+  the per-stage material is real (MagQueen structural-negative, MAGGIE
+  real-and-mixed) or hypothetical (Risoe/Cooltech, feasibility only).
+- **Separately**: applying the Giguere ~2.42x DeltaT_ad overestimate
+  correction (Item 1.2) on top of the existing Astronautics 6-layer fix
+  narrows that device's error further (COP_cascade 1.919/+1.0% error ->
+  1.895/-0.3% error) -- does NOT establish the correction transfers to
+  La(Fe,Si)13Hy (it was fit to a Gd5Si2Ge2-specific direct measurement),
+  but a smaller error is a smaller error and the experiment was actually
+  run rather than left as an unexercised option.
+- Source: `core/cascade.py`'s device-specific graded-bed validation
+  functions (`main.py` steps 7d/7e); `results/` step-7 output.
+
+### 1.17 Loss-model 4th calibration point (same device class) generalizes better than earlier cross-scale points -- still not a fix for the zero-degrees-of-freedom problem (Item 1.4)
+Item 1.4's EXTENDED/FURTHER_EXTENDED 4th-point diagnostics add devices
+spanning additional orders of magnitude and do NOT generalize (leave-one-
+out error still hundreds of percent). A different 4th point --
+DTU_Eriksen_MAGGIE_2016, the SAME physical prototype as an existing CORE
+point (DTU_Eriksen_rotary_Gd_2015) at a different operating condition,
+only reachable using this session's `no_load_span_override` (Item 1.15)
+-- is genuinely different: its own held-out leave-one-out error is
+**+26.5%**, far inside the ~250-700% range every other fold (old or new)
+still shows, and the two pre-existing folds shared with CORE both improve
+modestly rather than degrading. Real, partial progress -- NOT a fix for
+the underlying zero-degrees-of-freedom problem (Astronautics and Tusek's
+own folds are still order-of-magnitude misses with 4 points, same as with
+3). **CORE (3pt) remains the production default.** What generalizes is
+more data of the SAME device class, not more devices per se -- consistent
+with, and sharpening, Item 1.4's existing diagnosis.
+- Source: `core/loss_model.py`'s
+  `calibrate_loss_coefficients(CALIBRATION_POINTS_CORE_PLUS_MAGGIE_HIGHSPAN)`;
+  `main.py` step 3a2.
+
+### 1.18 Nanocomposite off-design robustness: real but narrow -- avoids catastrophic failure, does not raise off-design performance
+Item 1.2's nanocomposite blend trails a single sharply-tuned phase at its
+own design span (COP 4.62 vs. 6.72 at 10K). A follow-up asks whether the
+blend's deliberately broadened working range pays off OFF-design, when a
+composition tuned once (10K design span) is evaluated WITHOUT retuning at
+other spans (5/10/15/20K): the nanocomposite is feasible (Qc>0) at 1/3
+off-design spans tested; the single sharply-tuned phase is feasible at
+0/3. At the one off-design span where the single phase collapses to
+Qc=0 (5K), the nanocomposite still delivers positive Qc. No off-design
+span left both candidates feasible simultaneously, so no raw
+performance comparison was possible off-design -- the genuine finding is
+ROBUSTNESS TO NARROWING (avoiding catastrophic failure), not raw
+off-design performance, and this is a first-pass finding at one spread
+value and one design/off-design span set, not a general claim.
+- Source: `core/nanocomposite_material.py` follow-up;
+  `results/nanocomposite_robustness.txt`; `main.py` step 8e.
 
 ---
 
 ## 2. Calibration-data provenance (now resolved, documented for the record)
+
+### 2.0 Working-fluid selection: `DEFAULT_FLUID` recommendation resolved (water_eg10, not pure water)
+`core/fluid_selection_optimization.py` sweeps every fluid in
+`core/fluids.py`'s `FLUID_LIBRARY` (water, water_eg10/eg20, water_pg30,
+ethanol) through the standard NTU thermal + calibrated loss + geometry-
+explicit pumping model, re-optimizing mdot per fluid, at two operating
+points (5kg/1Hz baseline; 2kg/2Hz robustness check) -- ranking is
+identical at both. Pure water tops both sweeps, but no real AMR prototype
+in this project's corpus actually runs pure water (Gd corrodes in it) --
+its #1 ranking is a reference ceiling, not a usable recommendation.
+`core.fluids.DEFAULT_FLUID` is set to **`water_eg10`** -- the best
+corrosion-realistic fluid, giving up only 1.4-2.3% COP_electrical vs. the
+unrealistic pure-water ceiling. Additive/comparison-only: no existing
+`AMRSystem` call site changed its own default (every existing caller
+still defaults to `fluid="water"`) -- `water_eg10` must be passed
+explicitly to be used.
+- Source: `core/fluid_selection_optimization.py`;
+  `results/fluid_selection_optimization.txt`,
+  `results/fluid_selection_optimization_robustness.txt`; `main.py` step 18.
 
 ### 2.1 Tusek calibration point corrected to the paper-verified field/point
 Previously, `core/loss_model.py`'s `CALIBRATION_POINTS_CORE` used a
@@ -574,7 +768,7 @@ called from `main.py` but had no dedicated `tests/test_*.py` file.
   See `tests/test_uncertainty_propagation.py`'s
   `test_qc_is_essentially_invariant_to_calibration_uncertainty_unlike_cop`.
 
-### 3.3 Material x n_layers cross-product was documented as a follow-up, never attempted
+### 3.3 Material x n_layers cross-product was documented as a follow-up, never attempted -- now implemented and run
 `run_layered_optimization()`'s own docstring explicitly scoped this out.
 - **Fixed**: implemented as
   `run_layered_optimization_material_family_cross_product()` in
@@ -588,6 +782,16 @@ called from `main.py` but had no dedicated `tests/test_*.py` file.
   `out_csv=None` (an inconsistency with `per_n_layers_out_dir`, which
   already handled `None` correctly) -- now guarded, with a regression
   test.
+- **Now actually run** (main.py step 11g, `--layered-material-cross-product`):
+  5 material families x 3 n_layers values = 15 independent NSGA-III
+  passes, merged into 34 globally non-dominated designs
+  (`results/layered_pareto_front_material_cross_product.csv`). Material
+  representation: La(Fe,Si)13Hy 28/34 (82%), Gd 4/34 (12%),
+  (Mn,Fe)2(P,Si) 1/34 (3%), Mn1-xCuxCoGe 1/34 (3%). Best cascade
+  COP=10.407 (La(Fe,Si)13Hy, n_layers=1). This confirms rather than
+  overturns step 11f.'s single-family ranking -- the cross-product's
+  value is showing that jointly varying material family and layer count
+  does not change which material wins, not a different answer.
 
 ### 3.4 Several tests silently overwrite real `results/*.txt` and `results/*.csv` output files
 Discovered while preparing this ledger: `tests/test_hysteresis_sensitivity.py` correctly

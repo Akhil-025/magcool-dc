@@ -207,6 +207,70 @@ worked around — see the consolidated book-access note in Section 6.*
   * Numerically optimizes packed-bed sphere diameter and parallel-plate spacing/thickness against cooling capacity and COP for a fixed AMR outer envelope (Gd, water, 0-1T, 15K span). Reports its own operating-point optima in Table 3: packed-bed sphere diameter 0.07 mm (Qc-optimal)/0.17 mm (COP-optimal); parallel-plate spacing 0.035 mm (Qc-optimal)/0.075 mm (COP-optimal, independent of plate thickness).
   * Used in `core/thermal.py`/`core/geometry_analysis.py` to add a geometry-dependent hydraulic pumping-power term (packed-bed Ergun-type and parallel-plate laminar-channel relations, this paper's Eqs. 5–7) coupled to the NTU effectiveness gain — closing a gap where the pre-existing regenerator model had no coupling between particle/plate geometry and pumping cost at all, and so could not show an interior COP optimum vs. geometry even in principle. Re-run at this repo's own fixed representative flow (0.08 kg/s, since Section 9's own finding is that free COP-only optimization over ṁ is itself degenerate — see the "From Sensitivity to Optimization" entry below), the coupled model now *does* reproduce a genuine interior optimum: packed-bed sphere diameter 0.5 mm and parallel-plate spacing 0.1 mm both maximize COP_aug in `core/geometry_analysis.py`'s own sweep (`main.py` step 3c). These specific values are not expected to match the paper's own Table 3 exactly — the two studies differ in operating point, envelope geometry, and (crucially) whether ṁ is re-optimized per geometry — but the qualitative finding (an interior optimum now exists where none could before) is the confirmed result.
 
+#### Curie-Graded Multi-Layer Beds — Real Per-Layer Data **[NEW]**
+
+* **Masche, Bahl, Nielsen, Choi, Bez, Bjørk & Engelbrecht**, *Applied Thermal Engineering* (2021), Table 3.
+
+  * Reports the DTU "MagQueen" AMR device's real 10-layer La(Fe,Mn,Si)₁₃Hy
+    graded bed: per-layer Curie temperatures AND per-layer masses, plus a
+    real, measured cooling-mode operating point (T_cold=284.7 K,
+    μ₀H=1.44 T, f=0.5 Hz, reported Qc=288.0 W) — distinct from, and more
+    detailed than, the secondary-sourced/derived `DTU_MagQueen_2018`
+    benchmark row already in `data/amr_experimental_benchmarks.csv`
+    (Kamran, Ahmad & Wang's Table 2, Section 2 above).
+  * Used in `core/cascade.py`'s
+    `validate_magqueen_masche2021_real_graded_bed()` to test the real
+    per-layer data directly, rather than the mass-swept single-Tc
+    approximation already in the benchmark set. Result: **no calibration
+    found — an honest structural finding, not a wiring bug**. Every one
+    of the 10 real layers, tested standalone and centered exactly on its
+    own reported Curie temperature (the most generous possible
+    placement), caps out at peak ΔTₐd,noload≈0.28 K at this device's real
+    1.44 T field — a ~0.56 K structural span ceiling per layer, well
+    under the ~1.03 K/layer (10.3 K over 10 stages) the real device's own
+    reported operating point requires. This is a property of
+    `LAFESIH_FIRST_ORDER`'s own Landau calibration at this field
+    (confirmed unchanged for the base, non-composition-tuned material),
+    not an artifact of the per-layer Tc/mass wiring — see that function's
+    own docstring. Documented as a genuine non-calibrating point, the
+    same convention already applied to `Risoe_DTU_Gd_2011`, not silently
+    dropped or forced through.
+  * The same real-per-layer approach applied to `DTU_Eriksen_MAGGIE_2016`
+    (a real 4-composition Gd/Gd-Y graded bed, actual reported Curie
+    temperatures, not a composition search) turns that device's own 15.5 K
+    row from a flat "NO CALIBRATION FOUND" (Section 2's system-level
+    validation) into a calibrated COP_cascade=3.068 vs. reported COP=3.6
+    (−14.8% error) — but at a genuine cost: the *companion* row on the
+    same physical prototype (`DTU_Eriksen_rotary_Gd_2015`, 10.2 K span,
+    already calibrating fine under the simpler single-Tc approximation)
+    trades away some of that accuracy under this same real 4-layer model.
+    A single graded-bed model does not uniformly improve every operating
+    point of the same physical device — reported directly rather than
+    cherry-picked.
+  * Read together with the 6-layer Astronautics reproduction (Section 2's
+    Validation Strategy entry) and Section 1's Giguère correction: applying
+    that ~2.42× ΔTₐd overestimate correction on top of the existing
+    Astronautics 6-layer fix narrows its error further (COP_cascade
+    1.919/+1.0% error → 1.895/−0.3% error). Does **not** establish the
+    correction transfers to La(Fe,Si)₁₃Hy (it was fit to a Gd₅Si₂Ge₂-
+    specific direct measurement, and no equivalent direct-measurement
+    dataset for La(Fe,Si)₁₃Hy was located in this repo's corpus) — but a
+    smaller error is a smaller error, and the experiment was actually run
+    rather than left as an unexercised option.
+  * **Consolidated finding across all four structurally-infeasible
+    devices this graded-bed mechanism was tested against** (Astronautics,
+    DTU_MagQueen_2018, DTU_Eriksen_MAGGIE_2016, plus hypothetical
+    redesigns of `Risoe_DTU_Gd_2011` and `Cooltech_2013_rotary`): the
+    graded-bed *structure* (splitting one large span across several
+    stages, each handling a small local span its own material can reach)
+    closes the Qc-*feasibility* gap for every device checked, at every
+    swept mass — the mechanism generalizes. Whether it also closes the
+    *accuracy* gap depends on whether the per-stage material is real
+    (MagQueen: structurally negative; MAGGIE: real and mixed) or
+    hypothetical (Risø/DTU, Cooltech: feasibility only, since most stages
+    fall outside any documented composition-tunability window at those
+    devices' spans).
+
 #### Hydraulic / Pumping-Power Architecture **[NEW]**
 
 * **Klinar, Muhič, Tušek & Nielsen**, *Advanced Energy Materials*, **14**, 2401739 (2024).
@@ -249,7 +313,7 @@ worked around — see the consolidated book-access note in Section 6.*
 
 * **Bjørk, Bahl & Nielsen**, "The Halbach Cylinder — Design and Physical Limitations," arXiv:1410.1987. **[CITATION CORRECTED]**
 
-  * An earlier draft of this review cited "Bjørk et al., arXiv:1410.1987" as the source for the "fields near 2 T give an effective cost-vs-performance compromise" claim under the heading *Permanent Magnet Design*, alongside language ("investigated optimized Halbach permanent magnet assemblies… demonstrated that fields near 2 T provide an effective compromise") that describes a field-vs-magnet-mass/design-limits paper, not the field-vs-*cost* claim it was attached to. Checking the arXiv identifier directly (`core/magnet_geometry.py`'s own module docstring, HONESTY FLAG #2) confirms this is a genuinely different paper by an overlapping author list from the Bjørk, Bahl, Smith, Christensen & Pryds (2011) cost paper above — this one covers Halbach-cylinder field-vs-geometry physical limits, not a cost-minimization study. The ~2 T "sweet spot" claim as originally paraphrased here remains sourced only to this (now correctly attributed) reference; it is **not** independently re-derived by this repo's own models. `core/magnet_geometry.py`'s fixed-MCM-mass, dollars-per-Kelvin proxy in fact finds its *own* cost-per-K minimum at 0.5 T, not ~2 T — explicitly *not* claimed as a refutation of the literature figure, since that simple proxy holds MCM mass fixed while sweeping only field, ignoring the system-level cooling-power/device-size trade-offs a real design would also make (plausibly the actual driver of the literature's own reported optimum). What the new Halbach-cylinder relation *does* confirm directly (not merely assert from closed-form algebra) is that magnet mass grows super-linearly with field — 1.69× at 1.0 T rising to 13.98× at 3.0 T relative to the old flat per-Tesla ratio across `core/optimize.py`'s own [1.0, 3.0] T search bounds — the specific nonlinearity this review's earlier language implied without the code actually having it.
+  * An earlier draft of this review cited "Bjørk et al., arXiv:1410.1987" as the source for the "fields near 2 T give an effective cost-vs-performance compromise" claim under the heading *Permanent Magnet Design*, alongside language ("investigated optimized Halbach permanent magnet assemblies… demonstrated that fields near 2 T provide an effective compromise") that describes a field-vs-magnet-mass/design-limits paper, not the field-vs-*cost* claim it was attached to. Checking the arXiv identifier directly (`core/magnet_geometry.py`'s own module docstring, HONESTY FLAG #2) confirms this is a genuinely different paper by an overlapping author list from the Bjørk, Bahl, Smith, Christensen & Pryds (2011) cost paper above — this one covers Halbach-cylinder field-vs-geometry physical limits, not a cost-minimization study. The ~2 T "sweet spot" claim as originally paraphrased here remains sourced only to this (now correctly attributed) reference; it is **not** independently re-derived by this repo's own models. `core/magnet_geometry.py`'s fixed-MCM-mass, dollars-per-Kelvin proxy in fact finds its *own* cost-per-K minimum at 0.5 T, not ~2 T — explicitly *not* claimed as a refutation of the literature figure, since that simple proxy holds MCM mass fixed while sweeping only field, ignoring the system-level cooling-power/device-size trade-offs a real design would also make (plausibly the actual driver of the literature's own reported optimum). What the new Halbach-cylinder relation *does* confirm directly (not merely assert from closed-form algebra) is that magnet mass grows super-linearly with field — 1.69× at 1.0 T rising to 13.98× at 3.0 T relative to the old flat per-Tesla ratio across `core/optimize.py`'s own [1.0, 3.0] T search bounds — the specific nonlinearity this review's earlier language implied without the code actually having it. **Seed-to-seed stability, checked rather than assumed**: a follow-up production-settings (pop_size=40, n_gen=25), 3-seed rerun of the FLAT-vs-GEOMETRIC Pareto comparison found the "geometric cost pulls the front's mean field down" direction is **NOT stable** — at least one of the three seeds (mean field 1.48T→1.50T) reverses the expected direction even at full production settings, the same class of seed-sensitivity this repo's own hysteresis-sensitivity multiseed check (Section 2) already found for its analogous ON/OFF comparison. Treat the direction of this specific effect as seed-dependent / not reliably signed, not as a settled finding in either direction — see `results/magnet_geometry_multiseed_stability.txt`.
 
 #### NEW — Hysteresis-Exploiting Multicaloric Cycle (Unexplored Device Architecture)
 
@@ -584,6 +648,55 @@ work, noted inline below.
 * **Reference books in this corpus remain largely untapped** — see
   Section 6 above for the full, per-section accounting of what Kitanovski
   et al. (2015) and Tishin & Spichkin (2003) could and could not supply.
+
+* **NSGA-III seed-to-seed stability, now checked on three separate fronts
+  with two different verdicts.** The main material+geometry Pareto front
+  (`core/pareto_multiseed_stability.py`, full production settings,
+  3 seeds) turns out to be seed-stable on the headline numbers that would
+  actually be cited: best electrical COP = 10.413 ± 0.068 across seeds,
+  and La(Fe,Si)₁₃Hy wins the knee-point material in all three. The
+  material-family *share* of the front is noisier (71–93% for
+  La(Fe,Si)₁₃Hy) and should be reported as mean ± std rather than a
+  single-seed figure. By contrast, the same discipline applied to two
+  other axes — the hysteresis-on/off material-share reversal, and the
+  magnet-geometry FLAT-vs-GEOMETRIC mean-field comparison — found BOTH
+  effects are **not** seed-stable at full production settings (one seed
+  reverses the expected direction in each case). Net finding: this
+  repo's own reduced-setting NSGA-III sensitivity checks were, in two of
+  three cases checked so far, indistinguishable from search noise —
+  a methodological caution for any future single-seed Pareto claim, not
+  just a series of isolated results.
+
+* **The material × n_layers cross-product** (`run_layered_optimization_
+  material_family_cross_product()`), previously scoped out as "a
+  documented follow-up, not attempted," has now been run (off by default,
+  `--layered-material-cross-product`, ~5× step 11f.'s own runtime).
+  Merging 5 material families × 3 layer counts (15 independent NSGA-III
+  passes) yields 34 globally non-dominated designs; La(Fe,Si)₁₃Hy again
+  dominates (28/34, 82%), with Gd, (Mn,Fe)₂(P,Si) and Mn₁₋ₓCuₓCoGe each
+  contributing only 1–4 designs at the front's edges. This is consistent
+  with, rather than a correction to, the single-family front's own
+  material ranking — the cross-product's main value is confirming that
+  jointly varying layer count does not change which material wins.
+
+* **The 0-D structural-cap failures were root-caused, not just
+  reported.** For all 12 "NO CALIBRATION FOUND" benchmark rows flagged
+  earlier, `core/validation_system.py`'s
+  `run_calibration_failure_root_cause_diagnostic()` confirms every one is
+  a genuine structural limit — span exceeds twice the model's own
+  no-load ΔTₐd at every mdot tested, not a search-space artifact that a
+  wider flow-rate bound would fix. A follow-up
+  (`run_regenerative_amplification_gap_diagnostic()`) quantifies the size
+  of that gap directly: real AMR spans exceed the 0-D model's own
+  structural ceiling by 1.02×–14.92× (median 1.39×) across 12 of 17
+  span > 0 benchmark rows with a well-defined no-load ΔTₐd — a
+  regenerative-amplification effect the single-blow 0-D model cannot
+  represent by construction, independent of any one device's data
+  quality (cross-confirmed against a directly-measured no-load span for
+  the DTU MAGGIE hardware). An opt-in override recovers a usable, if
+  still inaccurate, prediction for one of three checked devices; the
+  other two remain infeasible even with the 1-D transient regenerator's
+  own span cap substituted in.
 
 ---
 

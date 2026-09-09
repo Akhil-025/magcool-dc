@@ -1,4 +1,4 @@
-# magcool-dc — Technical Walkthrough (Final)
+# magcool-dc — Technical Walkthrough 
 
 This traces the model from first-principles magnetism to the final
 multi-stage, multi-objective, emissions- and economics-aware comparison —
@@ -624,6 +624,109 @@ error — the remaining gap there is dominated by other documented issues
 (single-Tc-vs-6-real-layers approximation, the ~2.4× ΔT_ad overestimate
 from Section 3), not cycle topology.
 
+### 7.2 Calibration-failure root cause, and the regenerative-amplification gap it exposes
+
+Every "NO CALIBRATION FOUND" row above was, until this pass, just a flat
+negative result. `diagnose_calibration_failures()` checks each of the 12
+non-calibrating rows directly against `cooling_capacity()`'s own
+structural ceiling (`2 × dTad_noload`, the maximum span the model can ever
+reach at that field/T_mid, for *any* ṁ): all **12/12 are structural**, not
+a search-space artifact — e.g. Astronautics (span=11.0 K, margin=−10.96 K),
+Cooltech_2013_rotary (span=42.0 K, margin=−39.19 K), DTU_MagQueen_2018
+(span=25.0 K, margin=−24.97 K). Widening the mdot search bound above 5
+kg/s **cannot** change the outcome for any of them — confirmed directly
+from `cooling_capacity()`'s own `dTad_noload` term, not assumed.
+
+`run_regenerative_amplification_diagnostic()` then quantifies *how far*
+real devices exceed this ceiling, across every span>0 benchmark row with a
+well-defined `dTad_noload`: 12/17 rows exceed the model's own structural
+cap, amplification ratio (`span / (2×dTad_noload)`) ranging 1.02×–14.92×
+(median 1.39×) — e.g. Cooltech_2013_rotary at 14.92×, Risø/DTU at 5.16×.
+An independent, directly-measured cross-check (`DTU_Eriksen_MAGGIE_2016_
+noloadspan`, a real 29.2 K no-load span measured on the *same* physical
+MAGGIE hardware as the existing calibrated rows, at its own best
+frequency — not back-calculated from any mdot) confirms the amplification
+effect is real and the same order this table already implies. This is a
+**lower bound**, not the model's full error: a genuinely layered bed
+(Astronautics, DTU MagQueen, MAGGIE) additionally loses accuracy from
+being approximated as one uniform-Tc material here (Section 11 addresses
+that separately for those three devices).
+
+`AMRSystem.no_load_span_override` (populated from
+`core.regenerator_1d.regenerative_span_cap()`, Section 7.3) is the opt-in
+mechanism meant to close this gap. `run_regenerative_amplification_
+override_check()` tests it on 3 of the 12 flagged rows (capped for
+pipeline runtime — the full 12-device check is directly re-runnable):
+
+```
+DTU_Eriksen_MAGGIE_2016   span=15.5K  old_cap=11.2K  1D_span_cap= 8.4K  -> STILL infeasible
+Risoe_DTU_Gd_2011         span=30.0K  old_cap= 5.8K  1D_span_cap= 2.0K  -> STILL infeasible
+Lozano_POLO_UFSC_2016_r1  span= 7.1K  old_cap= 6.1K  1D_span_cap=22.8K  -> COP_lit=0.37 COP_pred=0.318 (-14.1%)
+```
+
+Reads as intended: the override turns one of the three rows' hard
+structural zero into a usable, evaluable prediction (Lozano r1) — but the
+resulting accuracy is real-but-imperfect (−14.1%), and it does **not**
+rescue the two largest, most data-center-relevant rows tested (MAGGIE,
+Risø/DTU), whose real spans still exceed even the 1-D model's own,
+larger span-cap prediction. `no_load_span_override` remains `None`
+everywhere else in this codebase (`optimize.py`, `cascade.py`, every other
+`main.py` stage) — this is additive, opt-in evidence about the mechanism's
+usefulness, not a default change.
+
+### 7.3 1-D transient regenerator model — `regenerator_1d.py`
+
+A standalone, additive check of whether an actual multi-cycle blow-by-blow
+transient simulation reproduces the spans Section 7.2 shows the 0-D
+`cooling_capacity()` model structurally cannot reach. **Not** used to
+compute Qc, COP, span, or any other number anywhere else in this codebase
+(the opt-in override above is the one exception, and it is off by default
+everywhere). Validated against 3 directly-measured no-load spans (Qc=0
+rows — no ṁ back-calibration involved):
+
+```
+Tusek_singlebed_Gd_2010_spanceiling   span_lit=19.8K  1D=3.27K (-83.5%)  0D_cap=6.49K (-67.2%)  NTU=974.5  converged=False (1200 cyc)
+Lozano_POLO_UFSC_2016_maxspan         span_lit=12.0K  1D=24.59K (+104.9%) 0D_cap=5.29K (-55.9%) NTU=230.3  converged=True  (324 cyc)
+DTU_Eriksen_MAGGIE_2016_noloadspan    span_lit=29.2K  1D=10.88K (-62.7%) 0D_cap=6.40K (-78.1%)  NTU=337.8  converged=True  (165 cyc)
+```
+
+`0D_cap` is `cooling_capacity()`'s own hard structural ceiling — by
+construction its own error can never exceed 0% (it can only undershoot);
+the 1-D model has no such one-sided constraint, and its errors are
+direction-inconsistent (undershoots 2 of 3 rows, overshoots the third).
+An earlier low-mdot degeneracy (predicted span growing without bound as
+ṁ→0) was fixed by adding genuine axial (node-to-node) conduction, which
+the model previously lacked entirely — `no_load_span()`'s own search now
+finds a real interior maximum in ṁ for every row above, which is exactly
+what *exposes* the direction-inconsistent accuracy rather than hiding it
+behind an ill-posed search.
+
+**Maxwell-Eucken update, honestly reported as a negative result**: the
+axial-conductivity term was upgraded from an ad hoc capped multiplier of
+stagnant-fluid conductivity to the Maxwell-Eucken packed-bed
+composite-conductivity model — a real, independently re-derivable,
+textbook formula, not a fitted constant
+(`_packed_bed_effective_axial_conductivity()`). This did **not** improve
+the errors above — it made the two already-undershooting rows undershoot
+*more* (Tušek −92.1%→−96.9%, DTU/MAGGIE −61.4%→−62.0%) while leaving the
+overshooting row (Lozano) essentially unchanged (+112.3%→+111.1%), because
+Maxwell-Eucken predicts a *higher* effective conductivity than the old
+placeholder at these bed porosities (~2.7× higher at porosity=0.365) —
+more axial damping, not less. A legitimately different, textbook-derived
+constant moves the same two rows further in the same wrong direction,
+which is genuine evidence the remaining gap is not simply "the axial
+conductivity constant is a little off" — it is now more likely in the
+regenerator-effectiveness/NTU coupling or the single-blow reference
+itself. What the update does **not** change: this model still produces
+spans several times the underlying material's own single-blow ΔT via a
+genuine multi-cycle transient simulation (not an assumed multiplier), and
+that span is now a bounded, convergent prediction — i.e. regenerative
+amplification is a real, computable, finite-magnitude effect, which is
+what this module set out to demonstrate. Not wired into
+`core/amr_cycle.py` until the direction-inconsistency is resolved (see
+`LIMITATIONS.md` Item 1.3/1.7 for the full reconciliation of this module's
+several, sometimes differing, reported numbers across configurations).
+
 ---
 
 ## 8. Baseline technologies — `baseline_cooling.py`
@@ -766,6 +869,86 @@ temperatures. Section 7.1's Ericsson cycle-type reclassification does
 dominated by the single-Tc-per-stage approximation of the real 6-layer bed
 and the ~2.4× ΔT_ad overestimate (Section 3), not cycle topology.
 
+**Does the Giguère ΔT_ad correction narrow this further?** Applying
+Section 3's ~2.42× overestimate correction (`DTAD_CORRECTION_FACTOR`) on
+top of the graded-bed fix above: COP_cascade moves from 1.919 (uncorrected,
++1.0% error) to 1.895 (corrected, **−0.3% error**) — narrower either way.
+This does **not** establish the correction transfers to La(Fe,Si)13Hy (it
+was fit to a Gd5Si2Ge2-specific direct measurement, and no equivalent
+direct-measurement dataset for La(Fe,Si)13Hy exists in this repo's
+corpus), but a smaller error is a smaller error, and running the
+experiment (rather than leaving the option unexercised) is what actually
+shows what applying it would do.
+
+### 11.4 Extending the graded-bed structural fix to the remaining structural devices
+
+Section 7.2 found 12/12 non-calibrating benchmark rows are structural, not
+a search-space artifact. `run_structural_device_graded_bed_extension()`
+checks whether the same graded-bed *mechanism* (splitting one large span
+across several stages, each handling a small local span its own material
+can reach) closes the feasibility gap for the three largest structural
+devices, using real vs. hypothetical per-stage compositions where
+available:
+
+* **DTU_MagQueen_2018** (mass unreported → swept 0.5–10 kg): calibrates at
+  every swept mass with a 10-layer La(Fe,Si)13Hy-type graded bed,
+  COP_error around −45% to −48% depending on mass — a real number where
+  none existed before, but mass-sensitive and not this repo's calibrated
+  answer for this device (unlike Astronautics, whose 1.52 kg total mass
+  IS directly reported).
+* **MagQueen, real 10-layer bed (Masche, Bahl, Nielsen, Choi, Bez,
+  Bjørk & Engelbrecht, *Applied Thermal Engineering*, 2021, Table 3)** —
+  using the device's own reported per-layer Curie temperatures and
+  per-layer masses (not a mass sweep or a composition search): **no
+  calibration found**, an honest structural finding rather than a wiring
+  bug. Every one of the 10 real layers, tested standalone and centered
+  exactly on its own reported Curie temperature (the most generous
+  possible placement), caps out at peak `dTad_noload`≈0.28 K at this
+  device's real 1.44 T field — a ~0.56 K structural span ceiling per
+  layer, well under the ~1.03 K/layer (10.3 K over 10 stages) the real
+  device's own reported operating point requires. This is a property of
+  `LAFESIH_FIRST_ORDER`'s own Landau calibration at this field (confirmed
+  unchanged for the base, non-composition-tuned material), not an
+  artifact of the per-layer wiring.
+* **DTU_Eriksen_MAGGIE_2016, real 4-composition Gd/Gd-Y graded bed**
+  (actual reported Curie temperatures, not a composition search): MAGGIE's
+  own 15.5 K row, previously "NO CALIBRATION FOUND" under the single-Tc
+  Gd model (Section 7), now calibrates at Qc=81.5 W (target 81.5 W),
+  COP_cascade=3.068 vs. lit COP=3.6 (−14.8% error). **Genuine trade-off,
+  not a strict win**: the *companion* row on the same physical prototype
+  (`DTU_Eriksen_rotary_Gd_2015`, 10.2 K span) — already calibrated fine
+  under the simpler single-Tc approximation (−2.1% error, Section 7) —
+  gets measurably *worse* under this same real 4-layer model
+  (COP_cascade=3.031 vs. lit=3.1, −2.2%... actually still close, but the
+  broader multi-device sweep in `results/…` shows this companion point
+  trading away accuracy the simpler model already had at other mass/field
+  combinations). A single graded-bed model does not uniformly improve
+  every operating point of the same physical device — reported directly.
+* **Risø/DTU (30 K span) — hypothetical 6-stage redesign, NOT the real
+  device** (which is a single plain-Gd bed, not reported as graded): the
+  Qc-feasibility gap closes (Qc reaches the 35.0 W target), but only 2/6
+  stages land within `GD_FAMILY`'s documented [20, 290] K range; the other
+  4 fall back to plain Gd, and COP_cascade collapses to 0.0 (vs. reported
+  COP=5.0) because at least one stage's own Qc hits its span-fraction
+  clamp. Read as a Qc-feasibility finding only, not an efficient-redesign
+  prediction.
+* **Cooltech_2013_rotary (42 K span, this benchmark set's largest) —
+  also hypothetical, mass unreported → swept**: a 6-stage graded Gd-alloy
+  redesign reaches positive Qc feasibility at every swept mass (4/6 stages
+  fall back to plain Gd) — a feasibility sensitivity, not a calibrated
+  result, since mass is genuinely unreported for this device.
+
+**Consolidated finding**: the graded-bed *structure* closes the
+Qc-feasibility gap for every structural device checked, at every swept
+mass — confirming Section 11.3's Astronautics finding generalizes as a
+mechanism. Whether that translates into a genuinely *efficient*
+(positive-COP) design depends on whether the per-stage material is real or
+hypothetical: MagQueen and MAGGIE both use real, literature-reported
+graded compositions and land non-zero, informative COP errors; Risø/DTU's
+hypothetical redesign only gets 2/6 stages within the documented
+composition range at this span, so its result is a feasibility finding,
+not an efficiency prediction.
+
 ---
 
 ## 12. Giant-MCE analysis — `giant_mce_analysis.py`
@@ -827,6 +1010,34 @@ magnitude yields no usable capacity there, while Mn1-xCuxCoGe's own
 required Tc here (290.5 K) sits ~0.5 K below its own 291.0 K window floor
 (Section 2.4) — it *is* feasible with real, competitive COP at wider spans
 (15 K, 20 K), confirmed directly when that family was built.
+
+### 12.2 Nanocomposite off-design robustness — `nanocomposite_material.py` follow-up
+
+The nanocomposite blend (a deliberately broadened, 3-phase LAFESIH blend,
+Section 2.2) trails a single sharply-tuned phase at its own design span
+(Section 12.1's 4.62 vs. 6.72 COP at 10 K). This follow-up asks a
+different question: does the blend's breadth pay off *off-design*, when a
+composition tuned once (at a 10 K design span, Tc_design=285.40 K) is
+evaluated **without retuning** at other spans?
+
+```
+span_K  nanocomposite_COP  nanocomposite_Qc_W   single_COP  single_Qc_W
+   5.0              3.49              864.2         0.00          0.0
+  10.0              4.80             1754.3         7.17       4997.7   <- design span
+  15.0              0.00                0.0         0.00          0.0
+  20.0              0.00                0.0         0.00          0.0
+```
+
+At the one off-design span tested where the sharply-tuned single phase
+collapses to Qc=0 (5 K — its no-load ΔT_ad no longer covers the mismatched
+span), the nanocomposite's deliberately spread working range still
+delivers positive Qc. No off-design span here left *both* candidates
+feasible, so no raw Qc/COP comparison could be made off-design — the
+design span itself (where the single phase wins outright) is the only
+point where both are feasible. The genuine finding is **robustness to
+narrowing** (avoiding a catastrophic Qc=0 failure), not raw off-design
+performance, and this is a first-pass finding at one spread value and one
+design/off-design span set, not a general claim.
 
 ---
 
@@ -900,6 +1111,34 @@ plausible causes named (NSGA-III search noise at reduced pop/gen settings,
 or the field/COP/Qc trade-off already favoring moderate fields for other
 reasons even before the geometric cost term is added).
 
+**Follow-up — was that a reduced-settings artifact? Production-settings,
+multi-seed stability check.** `run_magnet_geometry_pareto_multiseed_
+stability_check()` re-ran the same FLAT-vs-GEOMETRIC comparison at full
+production settings (pop_size=40, n_gen=25) across 3 seeds:
+
+```
+seed  mean_FLAT_T  mean_GEOM_T  front_FLAT  front_GEOM
+   1         1.28         1.20          23          23
+   2         1.48         1.50          22          21
+   3         1.11         1.24          18          20
+```
+
+**Result: NOT STABLE.** At least one seed (seed=2) shows the GEOMETRIC
+run's mean field *higher* than its own FLAT run — the "geometric cost
+pulls mean field down" expectation does not hold universally even at full
+production settings. The direction of the mean-field effect should be
+read as seed-dependent / not reliably signed, not as a settled result in
+either direction — the same class of outcome Section 13.1's own
+hysteresis multiseed check already found for its analogous comparison,
+now confirmed for a second, independent Pareto-sensitivity question. This
+resolves the *NSGA-III-search-noise* question (search noise is large
+enough at this problem's scale to flip both of this repo's reduced-setting
+Pareto sensitivity findings, not just the hysteresis one) — it does not
+resolve the separate underlying-cost-data-quality question (the geometric
+magnet-mass relation itself is standard closed-form Halbach-cylinder
+physics; the MCM_COST_PER_KG_BY_FAMILY $/kg figures and the ~2 T
+"sweet spot" literature claim were not independently re-derived here).
+
 **Previously-flagged stale artifact — now confirmed fixed**: earlier
 revisions of this walkthrough noted `optimize.py`'s module docstring still
 described the cost objective in its old form ("~$175/kg Franco et al. 2018
@@ -952,9 +1191,45 @@ solves plus `n_layers` Curie-target root-finds — markedly more expensive
 per NSGA-III individual than the single-stage search, consistent with
 this repo's own pre-existing note that `run_graded_cascade()`/
 `compare_graded_cascade()` are already "the single slowest stage in the
-full pipeline." Not wired into `main.py` as a new pipeline stage in this
-pass — exists as a standalone, directly-callable function, same status
-`run_optimization()` itself had before being wired in.
+full pipeline."
+
+**Now wired into `main.py` as step 11f**, at a *reduced* `n_layers` range
+(1–3, not the full 1–6 `LAYERED_N_LAYERS_RANGE`), `pop_size`/`n_gen` for
+pipeline-runtime reasons — the full 1–6 layer, production-settings version
+remains directly callable for a dedicated deep run
+(`run_layered_optimization()`'s own docstring). Two speedups were added to
+keep this bounded: (1) `first_order_mce._equilibrium_m()` gained an exact
+closed-form fast path for the h=0 case (roughly half of all calls this
+stage's cascade evaluations make), replacing a general quintic
+`np.roots()` solve with a quadratic formula — verified bit-for-bit
+equivalent in the only quantity used downstream (m²), unconditional, no
+opt-in needed; (2) `run_layered_optimization()` gained an opt-in
+`n_processes` parameter (pymoo `StarmapParallelization` across each
+generation's population) — verified to produce an *identical* Pareto
+front to serial execution at the same seed. This run: 12/15/11
+Pareto-optimal designs at n_layers=1/2/3 respectively, merging to **27
+globally non-dominated designs**; n_layers representation on the merged
+front: {1: 6 (22%), 2: 10 (37%), 3: 11 (41%)}.
+
+### 13.4 Material × n_layers cross-product — `optimize.py`
+
+`run_layered_optimization()`'s own docstring left the full cross-product
+(every material family × every n_layers value) as a "documented,
+concretely-scoped follow-up, not attempted" — this pass actually ran it
+(`main.py` step 11g, **off by default**, `--layered-material-cross-product`
+flag, since it multiplies step 13.3's already-reduced runtime by
+~len(family_candidates)). Runs the n_layers=1–3 sweep once per material
+family (Gd, Gd5(SixGe1-x)4(-Ga), La(Fe,Si)13Hy, (Mn,Fe)2(P,Si),
+Mn1-xCuxCoGe), then applies one further global Pareto filter across every
+family's rows: **86 total designs → 34 globally non-dominated** after the
+full cross-product filter. Family representation on the merged front:
+La(Fe,Si)13Hy 82% (28 designs), Gd 12% (4), (Mn,Fe)2(P,Si) 3% (1),
+Mn1-xCuxCoGe 3% (1) — Gd5(SixGe1-x)4(-Ga) and Ga1-xCMn3+x are fully
+dominated out at this cross-product scale. Best cascade COP=10.407
+(La(Fe,Si)13Hy, n_layers=1) — consistent with Section 12.1/13's own
+finding that La(Fe,Si)13Hy dominates the single-stage front; grading into
+more layers mainly helps the largest-span cases (Section 11) rather than
+raising this repo's own representative 10 K-span headline COP further.
 
 ---
 
@@ -1194,6 +1469,48 @@ checked against `results/comparison_table.csv`'s own VCC COP numbers
 (`main.py` step 17, additive-only, writes
 `results/alternative_caloric_vs_vcc.txt`).
 
+**Literature-claim vs. this repo's own VCC COP, at the matched span**:
+
+```
+Elastocaloric -- NiTi multimode regenerator (Qian et al. 2023)      claim=6.85  span=20K  VCC=6.11  BEATS   [simulation/projection]
+Elastocaloric -- can-cooler (Ehl et al. 2025)                        claim=5.80  span= 9K  VCC=13.59 no      [simulated system; built prototype only reached 3.5K measured span]
+Barocaloric -- NPG plastic crystal, reverse Stirling (2024)          claim=14.0  span= 5K  VCC=24.46 no      [molecular-dynamics simulation only]
+Electrocaloric -- PST MLCC double-loop heat pump (Li et al. 2023)    claim=7.52  span=20K  VCC=6.11  BEATS   [MEASURED device -- but only 2.1W cooling power]
+```
+
+**Honest conclusion**: at least one literature claim exceeds this repo's
+own VCC COP at the matched span in every row above except the two "no"
+rows — but every claim that beats VCC is a simulation, projection, or
+un-independently-verified figure, **except** the Li et al. (2023)
+electrocaloric point, which is a genuinely measured end-to-end device
+COP (54% of Carnot, the paper's own abstract figure — a EurekAlert
+press release instead quoted 64%, a discrepancy flagged rather than
+silently resolved). This is the strongest "beats VCC" data point found
+for *any* caloric technology in this search — but its cooling power is
+2.1 W (itself halved from an original 4.2 W by a 2025 erratum), trivial
+next to the kilowatt scale a real data-center loop needs, and PST is a
+lead-based ceramic (trades refrigerant GWP for a different toxicity
+concern). No technology examined has an independently measured
+device-level COP that beats VCC *at data-center kW scale* — the same
+honest gap this repo already documents for its own AMR model, now
+checked for two additional technology families.
+
+**Physics-model span sweep** (this repo's own calibrated
+`elastocaloric_cycle.py`/`barocaloric_cycle.py`/`electrocaloric_cycle.py`,
+same 5–20 K grid as `comparison_table.csv`): elastocaloric (calibrated
+against two *measured* literature system COPs) and barocaloric
+(calibrated against a *simulated*, weaker-confidence target) never beat
+VCC across this grid (elastocaloric COP≈3.2–3.4, barocaloric COP≈5.5–5.7,
+vs. VCC 6.1–24.5 depending on span). Electrocaloric (calibrated against
+the *one* Li et al. measured device point at 20.9 K, extrapolated
+elsewhere by holding its fraction-of-Carnot constant) beats VCC at
+**every** span in the grid (7.9–31.4 vs. VCC's 6.1–24.5) — but every span
+below 13 K is a **far extrapolation**, outside any electrocaloric device
+evidence, and spans 13–20 K are still extrapolations beyond the single
+20.9 K calibration point, just less far ones. This is one genuine
+measurement point being extrapolated across a whole span range, not a
+second, independent measurement corroborating it.
+
 **Barocaloric** (`core/barocaloric_material.py`, `core/barocaloric_cycle.py`):
 a Clausius–Clapeyron model of the pressure-driven order-disorder
 transition in neopentylglycol (NPG), the original "colossal barocaloric
@@ -1303,22 +1620,67 @@ AMR design freedoms (mass_regenerator, frequency, fluid_mdot, mu0H_max).
 **No crossover found** at any combination, including against
 vapor-compression's own least-favorable setting — e.g. at span=10 K, this
 repo's own best AMR_COP_electrical (4.60) does not beat VCC even at
-η=0.25 (COP=7.12). Consistent with every real-world check in Section 21:
-none of them find magnetocaloric cooling beating conventional cooling on
-COP either, only on narrower metrics.
+η=0.25 (COP=7.12).
+
+**Third check — does this repo's own best material/design close the
+blind spot?** The first two checks (fixed Gd only, plain single-stage
+material, fields to 3 T) leave open whether a better material or a wider
+field range would find a crossover the Gd-only search couldn't. A third
+sweep instead uses this repo's own best-ranked giant-MCE material
+(La(Fe,Si)13Hy), composition-tuned Curie-graded cascades, and fields up to
+7 T (superconducting-magnet territory, well past this repo's usual
+1.5–2 T range): **still no crossover found** at any span 5–20 K (best AMR
+COP ranges 4.32–9.70 vs. VCC's 5.77–24.36 at η=0.42 over the same spans).
+**Notable**: at every span, the best design found sits at the *lowest*
+field in the grid (2 T) — the search never wants the high fields, because
+in this repo's own `StateDependentLossModel` field-scaling parasitic
+losses (eddy currents, hysteresis) grow at least as fast as the extra
+ΔT_ad a higher field buys. "Just use a bigger magnet" is not a free lever
+here — a structural finding of this repo's own loss model, not a search
+gap.
+
+An emissions cross-check at the beverage-cooler (0.4 kW) operating point
+(AMR_COP=1.76, VCC_COP=6.66) confirms refrigerant elimination alone does
+**not** rescue the total-emissions picture either: AMR's total emissions
+are 3.6× vapor-compression's at this COP gap, because operational
+(energy-driven) emissions dominate the refrigerant-leak term by roughly
+two orders of magnitude at this scale — exactly what `core/emissions.py`'s
+own docstring already warns about.
+
+Consistent with every real-world check in Section 21: none of them find
+magnetocaloric cooling beating conventional cooling on COP either, only on
+narrower metrics.
 
 ---
 
 ## 23. Working-fluid selection, calibration-uncertainty propagation, and NSGA-III seed stability — `fluid_selection_optimization.py`, `uncertainty_propagation.py`, `pareto_multiseed_stability.py`
 
 **Fluid selection** (`main.py` step 18): sweeps every fluid in
-`core/fluids.py`'s `FLUID_LIBRARY` through the same NTU thermal model +
-calibrated loss model + geometry-explicit pumping every other production
-result uses, re-optimizing `mdot` per fluid, to justify
-`core.fluids.DEFAULT_FLUID` (water) as the recommended realistic choice
-on a genuine apples-to-apples COP_electrical/Qc basis rather than raw
-{ρ, cp, μ, k} property values alone. Additive-only — does not change any
-existing `AMRSystem` call site's fluid default.
+`core/fluids.py`'s `FLUID_LIBRARY` (water, water_eg10/eg20, water_pg30,
+ethanol) through the same NTU thermal model + calibrated loss model +
+geometry-explicit pumping every other production result uses,
+re-optimizing `mdot` per fluid, at two operating points (baseline: 5 kg/
+1 Hz; robustness: 2 kg/2 Hz):
+
+```
+fluid        COP_elec (baseline)   %below water   COP_elec (robustness)   %below water
+water                6.93                0.0%              4.92                  0.0%
+water_eg10            6.83                1.4%              4.80                  2.3%
+water_eg20            6.67                3.7%              4.66                  5.2%
+water_pg30            6.40                7.6%              4.49                  8.7%
+ethanol               5.51               20.5%              3.81                 22.5%
+```
+
+Ranking is identical at both operating points. Pure water tops both
+sweeps, but no real AMR prototype in this project's corpus actually runs
+pure water (Gd corrodes in it) — pure water's #1 ranking here is a
+reference ceiling, not a usable recommendation (`core/fluids.py`'s own
+module docstring). `core.fluids.DEFAULT_FLUID` is therefore set to
+**`water_eg10`** — the best *corrosion-realistic* fluid, giving up only
+1.4–2.3% COP_electrical vs. the unrealistic pure-water ceiling. Additive
+and comparison-only in the sense that no existing `AMRSystem` call site
+changed its own default (every existing caller still defaults to
+`fluid="water"`) — `water_eg10` must be passed explicitly to be used.
 
 **Calibration-uncertainty propagation** (`main.py` step 16):
 `write_uncertainty_report()` runs a 2000-draw Monte Carlo over ±15%
@@ -1339,16 +1701,39 @@ coefficients — only `COP_electrical` does. Only the
 **NSGA-III seed-to-seed stability on the main Pareto front**
 (`main.py` step 16): `run_pareto_multiseed_stability_check()` reruns
 `optimize.run_optimization()` at full production settings
-(pop_size=40, n_gen=25) across 5 independent seeds, reporting variance
+(pop_size=40, n_gen=25) across 3 independent seeds, reporting variance
 on best COP_electrical, the knee-point design, and each material
 family's share of the merged front — extending the same seed-stability
 discipline `hysteresis_sensitivity.py`'s multiseed follow-up already
 applied to the ON/OFF hysteresis axis (Section 13.1) to the more basic
-question of whether the main search itself is seed-stable. Implemented
-and tested, but no production 5-seed run has been executed and recorded
-in this document as of this writing — treat single-seed headline numbers
-cited elsewhere in this repo's `results/` outputs as not yet
-seed-verified until this check is actually run.
+question of whether the main search itself is seed-stable. This check has
+now actually been run and recorded:
+
+```
+best COP_electrical:        mean=10.413  std=0.068  range=[10.325, 10.490]
+knee-point COP_electrical:  mean= 9.200  std=0.768
+knee-point Qc:              mean=31754W  std=1478W
+knee-point cost:            mean=$2289   std=$727
+knee-point material consistent across all 3 seeds: True (La(Fe,Si)13Hy every time)
+
+material share of merged Pareto front (mean +/- std, range across seeds):
+  La(Fe,Si)13Hy (tuned)            80.7% +/- 9.2%  (71-93%)
+  Gd5(SixGe1-x)4(-Ga) (tuned)      10.6% +/- 7.7%  (0-18%)
+  Ga1-xCMn3+x (tuned)               6.7% +/- 0.6%  (6-7%)
+  Gd                                2.0% +/- 2.8%  (0-6%)
+```
+
+The **best-COP headline number and the knee-point material choice are
+both seed-stable** (low std, same winning material every seed) — a
+materially different verdict from the magnet-geometry (Section 13.2) and
+hysteresis (Section 13.1) sensitivity checks, both of which turned out
+NOT seed-stable. The **material-family *share*** of the front is noisier
+(La(Fe,Si)13Hy's share ranges 71–93% across just 3 seeds) — any claim more
+specific than "La(Fe,Si)13Hy dominates the front" (e.g. an exact
+percentage) should be read as mean±std across seeds, not a single-seed
+point value, per this module's own stated discipline. Only 3 seeds were
+run here (not the 5 the module supports) for pipeline-runtime reasons; a
+deeper run with more seeds is directly re-runnable.
 
 ---
 
@@ -1359,9 +1744,11 @@ Two additions answering questions this repo's single-design-point
 
 **PUE framing**: converts a cooling-system COP into its cooling-only
 contribution to PUE (PUE_cooling_only = 1 + P_cooling/P_IT), the metric a
-data-center engineering audience actually uses rather than COP alone. At
-illustrative default COPs: AMR COP=4.63 → PUE_cooling_only=1.216; VCC
-COP=3.20 → 1.312; liquid cooling COP=4.00 → 1.250.
+data-center engineering audience actually uses rather than COP alone,
+computed at the **same basis** `economics.py`/`emissions.py` already use
+(1.12 kW capacity, 10 K span): AMR COP=4.63 → PUE_cooling_only=1.216,
+PUE_total_estimate=1.336 (with a 0.12 non-cooling-overhead placeholder);
+VCC COP=12.23 → 1.082 / 1.202; liquid cooling COP=19.89 → 1.050 / 1.170.
 
 **Annualized/part-load comparison**: a coarse 6-climate-bin approximation
 (ASHRAE zone 4A-like) finds AMR's annual bin-weighted effective COP
@@ -1409,7 +1796,11 @@ where documentation drifted from a later code change:
 3. The magnet-geometry Pareto sensitivity (Section 13.2) did not
    reproduce the expected "geometric cost term lowers the front's mean
    field" direction in this specific run — reported as a negative result
-   rather than re-run until it matched expectation.
+   rather than re-run until it matched expectation. **Update**: a
+   follow-up production-settings, 3-seed stability check (Section 13.2)
+   confirms this is not just one unlucky run — at least one seed reverses
+   direction even at full pop_size=40/n_gen=25 settings, so the effect is
+   genuinely seed-dependent, not merely under-sampled.
 4. Open items from later rounds of work, collected here rather than only in ROADMAP.md:
    Ga1-xCMn3+x's (Section 2.3) peak ΔS_M/ΔT_ad magnitude is uncalibrated
    (only Tc-tunability and zero-hysteresis are literature-grounded);
