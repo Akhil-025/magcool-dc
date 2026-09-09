@@ -44,17 +44,20 @@ that constraint and can silently mask an unstable fit. For the CORE
 3-point set the unconstrained optimum is already non-negative, so NNLS
 and the old lstsq-then-clip approach agree exactly (checked by
 `tests/test_loss_model.py`). For the EXTENDED 4-point set, NNLS
-removes the negative k_eddy/base_frac reported (`k_eddy=0` is
-now the constrained optimum instead of a clipped negative value), but
-leave-one-out error predicting the smallest device (Tušek, 5.3 W --
-Qc/Wp corrected from an old, unverified 6.5W/0.76W guessed
-point to a genuinely digitized one, see CALIBRATION_POINTS_CORE below)
-from the other three is now ~333% (down from ~680% under the old,
-previous Tušek point, and from +1639% with plain lstsq before that,
-but still an order-of-magnitude miss) -- confirming the earlier conclusion
-that pooling four orders of magnitude of device scale needs a structural
-change to the model, not just a better-behaved solver or better-sourced
-calibration data.
+removes the negative k_eddy/k_pump reported (both are pinned to 0 by
+the non-negativity constraint, base_frac=0.456 alone absorbs the fit).
+Leave-one-out error is now worst for Astronautics (+303%, held out with
+the other three -- including the corrected Okamura point below --
+predicting its W_parasitic), not Tušek as under the old, wrong Okamura
+figure; Tušek's own held-out fold is +232% (still an order-of-magnitude
+miss on an absolute-W basis, see CALIBRATION_POINTS_CORE's own Wp=0.73W
+for that device). These specific percentages moved again once the
+Okamura point below was corrected from its old, unverifiable
+secondary-source figure to the real primary-source one -- see that
+correction's own comment for why -- but the qualitative conclusion is
+unchanged: pooling four orders of magnitude of device scale needs a
+structural change to the model, not just a better-behaved solver or
+better-sourced calibration data.
 
 `analyze_parasitic_fraction_scaling()` checks the natural next
 hypothesis -- that this is a simple device-size effect, i.e. that
@@ -183,6 +186,29 @@ would actually help" question this module's docstring poses above --
 still not enough to promote past CORE as the production default, since
 Astronautics and Tušek's own folds remain order-of-magnitude misses
 either way.
+
+Paper-Mining Pass correction (Okamura primary source located and read
+directly): the CORE-adjacent "Okamura_Hirano_2013" EXTENDED point (200 W,
+1.1 T, mdot=0.0502, Wp=0.367*200) was sourced only from a review table
+whose underlying "2013" citation could never be located or verified (see
+CITATION_AUDIT_PHASE30.md). The primary device paper has now been read
+directly: T. Okamura, K. Yamada, N. Hirano, S. Nagaya, "Performance of a
+room-temperature rotary magnetic refrigerator," Int. J. Refrigeration 29
+(2006) 1327-1331 -- almost certainly the archival journal version of the
+same device work the citation audit had already traced to a 2005
+conference proceedings. Every number in the old EXTENDED row was wrong:
+field is 0.77 T (not 1.1 T), Qc_max is 60 W (not 200 W) at a 1.1 K span
+(not 5 K), the cycle time is a fixed 2.4 s throughout (f=1/2.4=0.4167 Hz,
+not the old 1.0 Hz placeholder), and the paper gives an explicit COP
+formula (COP=QL/W, W = measured motor+pump power = 108+280 = 388 W) at
+that exact operating point, giving COP_lit=60/388=0.1546, not the
+review's unsourced 2.5. See CALIBRATION_POINTS_EXTENDED below for the
+recalibrated point and its own derivation comment. Net effect on this
+module's own findings: Okamura is REMOVED as a "clean monotonic trend"
+data point (see analyze_parasitic_fraction_scaling()'s updated
+discussion) -- its real parasitic fraction is dramatically higher than
+every other device in this benchmark set, not a mid-scale, mid-fraction
+point as the fabricated review number implied.
 """
 
 import numpy as np
@@ -298,12 +324,60 @@ CALIBRATION_POINTS_CORE = [
     # stale re: mdot and should be treated as historical, not current.)
     ("Tusek_singlebed_Gd_2010", 0.3, 1.15, 0.021068, 5.27, 0.7250),
 ]
-# EXTENDED: CORE + Okamura & Hirano (2013). Retained only as a
+# EXTENDED: CORE + Okamura et al. (2006). Retained only as a
 # diagnostic comparison; not used as the default calibration.
+#
+# CORRECTION (Paper-Mining Pass, primary source located and read directly):
+# the old "Okamura_Hirano_2013" point (0.0502 kg/s, 1.1 T, 200 W, Wp=0.367*200=73.4W,
+# 1.0 Hz placeholder) was sourced only from Kamran, Ahmad & Wang's 2020 review
+# table, which cited a "2013 J. Japan Soc. Appl. Electromagn. Mech." paper this
+# repo could never locate or verify (see CITATION_AUDIT_PHASE30.md). The primary
+# device paper has now been read directly: T. Okamura, K. Yamada, N. Hirano,
+# S. Nagaya, "Performance of a room-temperature rotary magnetic refrigerator,"
+# Int. J. Refrigeration 29 (2006) 1327-1331 (DOI 10.1016/j.ijrefrig.2006.07.020)
+# -- almost certainly the archival journal version of the same device work the
+# citation audit already traced to a 2005 conference proceedings, not a
+# different, unverifiable "2013" device. Every number in the old row was wrong:
+#   - field: paper states 0.77 T throughout, not 1.1 T.
+#   - Qc: paper's own headline result is a MAXIMUM of 60 W (at Tin=10C, 4 L/min,
+#     0.77T) -- not 200W, which does not appear anywhere in this paper and most
+#     likely was silently carried over in the review table from a DIFFERENT,
+#     larger Okamura device (a "100W-class" 2007 follow-up refrigerator by an
+#     overlapping author list, Okamura/Rachi/Hirano/Nagaya, not in this repo's
+#     Papers/).
+#   - span: the paper's own conclusion pairs the 60W maximum with a 1.1 K span
+#     (TH=11C), not the review's 5K.
+#   - frequency: NOT actually unreported in the primary literature -- the review
+#     table simply dropped it. The paper's Figs. 7/8/10 (the ones this Qc/COP
+#     pairing is read from) all use a fixed 2.4 s cycle time -> f = 1/2.4 =
+#     0.4167 Hz, not the old 1.0 Hz placeholder.
+#   - mass: the paper states each individual AMR bed holds "four kinds of
+#     Gd-based alloy spheres ... total weight: 1 kg", and the apparatus has
+#     4 beds (A/B/C/D, Fig. 4) -- so the 60W result (which uses the full
+#     apparatus, not the reduced 2-bed setup Fig. 9 explicitly flags as a
+#     special case) implies ~4 kg of total MCM, not 1 kg. Checked directly:
+#     mass_regenerator has NO effect on this repo's cooling_capacity() unless
+#     use_ntu_thermal_model=True (not used here), so this ambiguity does not
+#     change mdot_cal/Qc_model/Wp_required below -- noted for the record and
+#     for data/amr_experimental_benchmarks.csv's mass_MCM_kg field, not
+#     because it changes this calibration point's own numbers.
+#   - COP / Wp_required: the paper gives an explicit, literal formula, COP =
+#     QL/W where W is "the power consumption of the motor and the pump," and
+#     reports those as 108 W and 280 W respectively at the SAME operating point
+#     (Tin=10C, 4 L/min, 2.4s cycle) the 60W/1.1K pairing above comes from --
+#     so COP_lit = 60/(108+280) = 0.1546, not the review's unsourced 2.5.
+#     mdot_cal (brentq(qc_residual,1e-6,5.0), GADOLINIUM, T_cold=289K, same
+#     procedure as CORE) = 0.008930 kg/s -> Qc_model=60.0W (exact match),
+#     COP_ideal=136.62 -> Wp_required = 60*(1/0.1546 - 1/136.62) = 387.56 W.
+#     Note this device's real measured electrical overhead (motor+pump, sized
+#     for a 400W-max pump moving water through a high-pressure-loss bed) is
+#     nearly 6.5x its own cooling capacity -- a far worse real-world parasitic
+#     fraction than the old row implied (0.367 of Qc) or than any other CORE/
+#     EXTENDED device. See analyze_parasitic_fraction_scaling()'s updated
+#     discussion below: this REVERSES the "cleanly monotonic in device scale"
+#     finding from the prior pass, it does not merely shift a number.
 CALIBRATION_POINTS_EXTENDED = CALIBRATION_POINTS_CORE + [
-    # frequency not reported in the secondary source for this device --
-    # 1.0 Hz placeholder (see data/amr_experimental_benchmarks.csv note)
-    ("Okamura_Hirano_2013", 1.0, 1.1, 0.0502, 200.0, 0.367 * 200.0),
+    ("Okamura_Yamada_Hirano_Nagaya_2006", 1.0 / 2.4, 0.77, 0.008930, 60.0, 387.56),
 ]
 # FURTHER_EXTENDED: EXTENDED + 4 points from Lozano et al. (2016), the
 # POLO/UFSC rotary device (see data/amr_experimental_benchmarks.csv and
@@ -548,19 +622,31 @@ def analyze_parasitic_fraction_scaling(points=None, verbose=True):
                     all(fracs[i] >= fracs[i + 1] for i in range(len(fracs) - 1))
         print(f" Monotonic in device scale? {monotonic}")
         if not monotonic:
+            worst_name, worst_Qc, worst_frac = max(rows, key=lambda r: r[2])
             print(f" CONCLUSION: no monotonic size trend in this {len(rows)}-point "
-                  "set -- the smallest device (Tusek, 6.5W) does NOT have the "
+                  "set -- the smallest device (Tusek, 5.3W) does NOT have the "
                   "highest overhead fraction, and the largest (Astronautics, "
                   "2502W) does NOT have the lowest. A simple size/scale term is "
-                  "not supported by the data in hand; the Astronautics outlier is "
-                  "independently attributed by its own source paper to 'mediocre' "
-                  "electrical-component efficiency at that scale, i.e. a "
-                  "device-specific engineering choice, not a generic size law. "
-                  "With the Lozano points included, the picture sharpens further: "
-                  "the four highest fractions in the whole set (1.18-1.68) are "
-                  "ALL Lozano points clustered in the low-to-mid Qc range, sitting "
-                  "well above Okamura (200W, 0.367) and Astronautics (2502W, "
-                  "0.453) -- i.e. grouped by device/paper, not ordered by scale.")
+                  "not supported by the data in hand. CORRECTION (Paper-Mining "
+                  "Pass, Okamura primary source located and read directly): "
+                  "Okamura is no longer a mid-scale, mid-fraction point (the old, "
+                  "unverifiable secondary-source row read 200W/0.367) -- the real "
+                  "device (Okamura et al. 2006, 60W max cooling, 388W measured "
+                  "motor+pump power) has a parasitic fraction of "
+                  f"{dict((r[0], r[2]) for r in rows).get('Okamura_Yamada_Hirano_Nagaya_2006', float('nan')):.2f}"
+                  ", far above every other CORE/EXTENDED device including "
+                  "Astronautics (2502W, 0.453), and (once Lozano is included) "
+                  "above Lozano's own worst point too (1.68). The single largest "
+                  f"outlier in the current {len(rows)}-point set is "
+                  f"{worst_name} (Qc={worst_Qc:.1f}W, fraction={worst_frac:.2f}), "
+                  "not Astronautics as the prior pass reported. This is "
+                  "independently consistent with the prior pass's own reading of "
+                  "the Astronautics outlier -- a device-specific engineering "
+                  "choice (here, a pump sized up to 400W max against a 60W-class "
+                  "cooling duty and a high-pressure-loss bed the paper itself "
+                  "flags as needing redesign), not a generic size law -- it just "
+                  "means Astronautics is no longer the most extreme example of "
+                  "that phenomenon in this benchmark set.")
         else:
             print(" NOTE (Paper-Mining Pass Part 6): with the DTU point corrected "
                   "from its old fabricated 818W/0.171 figure to the verified "
@@ -578,21 +664,26 @@ def run_extended_diagnostic():
     The diagnostic is provided for transparency and is not used as the
     production calibration."""
     print("=" * 90)
-    print("DIAGNOSTIC: adding Okamura & Hirano (2013) as a fourth calibration point")
+    print("DIAGNOSTIC: adding Okamura et al. (2006) as a fourth calibration point")
     print("=" * 90)
     calibrate_loss_coefficients(CALIBRATION_POINTS_EXTENDED, verbose=True,
                                   label="EXTENDED (4pt, diagnostic only, NNLS)")
     print("\n Leave-one-out cross-validation on the EXTENDED set (NNLS per fold):")
     loo = leave_one_out_cv(CALIBRATION_POINTS_EXTENDED, verbose=True)
     worst = max(loo, key=lambda r: abs(r[3]))
-    print(f"\n CONCLUSION: switching from unconstrained lstsq to NNLS removes the "
-          f"negative (unphysical) coefficients found, and improves the "
-          f"worst leave-one-out error from +1639% to {worst[3]:+.0f}% "
-          f"(held-out device: {worst[0]}) -- but that is still an order-of-"
-          f"magnitude miss. A better-behaved solver alone does not make a "
-          f"single linear model generalize across devices spanning 6.5W to "
-          f"2502W of cooling capacity. The CORE 3-point fit remains the "
-          f"production default.")
+    print(f"\n CONCLUSION: NNLS gives a non-negative fit by construction (k_eddy and "
+          f"k_pump are both pinned to 0 here, base_frac=0.456 alone absorbs it) -- "
+          f"the worst leave-one-out error on the CURRENT (corrected-Okamura) "
+          f"EXTENDED set is {worst[3]:+.0f}% (held-out device: {worst[0]}), still an "
+          f"order-of-magnitude miss. (An earlier pass, under the OLD unverifiable "
+          f"Okamura secondary-source point, reported the worst NNLS fold at ~+682% "
+          f"vs. +1639% for plain unconstrained lstsq on that same stale data -- not "
+          f"directly comparable to the number above, since the underlying data have "
+          f"since changed; see this module's docstring and the Okamura correction "
+          f"comment above CALIBRATION_POINTS_EXTENDED for why.) A better-behaved "
+          f"solver alone does not make a single linear model generalize across "
+          f"devices spanning 5.3W to 2502W of cooling capacity. The CORE 3-point "
+          f"fit remains the production default.")
     print("\n Testing the natural next hypothesis -- that this is a simple "
           "device-size effect:")
     analyze_parasitic_fraction_scaling(CALIBRATION_POINTS_EXTENDED, verbose=True)

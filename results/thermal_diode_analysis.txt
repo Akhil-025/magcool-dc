@@ -1,0 +1,39 @@
+==========================================================================================
+PHASE 18: mechanical-contact active thermal diode -- COST-ONLY sensitivity
+study (reports an UPPER BOUND on switching-power overhead; no offsetting
+heat-transfer benefit is modeled, so this is not a two-directional finding).
+See core/thermal_diode.py's module docstring for the full honesty flag
+(this project's copy of the book does not include Ch. 6, pp. 211-268).
+==========================================================================================
+
+--- Step 1: does this repo's model have a mechanical-switching frequency ceiling for a diode to relax? ---
+core/optimize.py's NSGA-III search-space frequency upper bound is 5.0 Hz.
+AMRSystem itself (core/amr_cycle.py) has NO internal frequency ceiling: frequency only ever enters W_eddy~f^2 and W_hys~f (both monotonic, uncapped parasitic-loss terms), never a hard cutoff on cooling_capacity() or magnetic_work().
+No comment, docstring, or ROADMAP.md entry ties the 5.0 Hz optimize.py bound to a mechanical-valve-switching limit specifically -- it is an unexplained round-number search-space bound, not a physical constraint this module can relax.
+
+--- Step 2: COP_electrical impact of the (illustrative) MechanicalContactDiode actuation cost across frequency, at T_cold=291.0K, span=10.0K, mu0H=1.5T, mass=5.0kg, mdot=0.08kg/s ---
+ f= 0.50Hz COP_no_diode= 7.7943   COP_diode_assisted= 7.7921   delta= -0.03%
+ f= 1.00Hz COP_no_diode= 5.0514   COP_diode_assisted= 5.0497   delta= -0.03%
+ f= 2.00Hz COP_no_diode= 2.0923   COP_diode_assisted= 2.0917   delta= -0.03%
+ f= 4.00Hz COP_no_diode= 0.6226   COP_diode_assisted= 0.6225   delta= -0.02%
+ f= 8.00Hz COP_no_diode= 0.1634   COP_diode_assisted= 0.1634   delta= -0.01%
+
+--- Step 2b: same sweep for the literature-grounded FerrofluidThermalSwitch (see core/thermal_diode.py's VALIDATION UPDATE) ---
+ f= 0.50Hz COP_no_diode= 7.7943   COP_diode_assisted= 7.7140   delta= -1.03%
+ f= 1.00Hz COP_no_diode= 5.0514   COP_diode_assisted= 4.9872   delta= -1.27%
+ f= 2.00Hz COP_no_diode= 2.0923   COP_diode_assisted= 2.0706   delta= -1.04%
+ f= 4.00Hz COP_no_diode= 0.6226   COP_diode_assisted= 0.6187   delta= -0.62%
+ f= 8.00Hz COP_no_diode= 0.1634   COP_diode_assisted= 0.1629   delta= -0.33%
+
+--- Step 3: cycle_time_reduction_factor() illustrative worked example ---
+ Illustrative example only (NOT a literature value -- see docstring): conventional valve switch time=0.5s, diode switch time=0.05s -> 90% dead-time reduction per half-cycle IF these numbers were real.
+
+--- Step 4: check against Andrade et al. (2024)'s real Gd+ferrofluid-thermal-switch refrigeration prototype (the benchmark device Step 2's own module docstring originally said did not exist) ---
+Benchmark device: Andrade et al., Int. J. Refrigeration 164 (2024) 210-217 (7.0g Gd (99.99%, Alfa Aesar ingot) + ferrofluid thermal switch (commercial FF and MFO tested)).
+Benchmark's own reported finding under SYMMETRIC cycling: no advantage from the ferrofluid switch over bare Gd.
+This repo's model at the representative operating point (f=4.0 Hz): COP_electrical no-diode=0.6226, with FerrofluidThermalSwitch=0.6187 -> NO advantage (agrees with benchmark).
+Benchmark's ASYMMETRIC-cycling finding (1D model, not hardware-measured, in the same paper): up to 60% temperature-span improvement. This repo's AMRSystem has NO asymmetric-cycle mechanics -- that figure is reported here for completeness, NOT reproduced by this repo's model.
+
+--- Conclusion ---
+MechanicalContactDiode (design-exploration, cryogenic-analog-grounded only): reduces COP_electrical by at most 0.03% across the frequencies swept -- a small effect relative to the eddy-current/base-overhead losses that already dominate W_parasitic here, because the illustrative actuation_energy_J_per_cycle=0.05J is small. No offsetting heat-transfer benefit is modeled for this class, so net COP_electrical is <= the no-diode baseline by construction; this remains a cost-only accounting for an UNvalidated mechanism -- treat MechanicalContactDiode as a design-exploration tool.
+FerrofluidThermalSwitch (VALIDATED -- see core/thermal_diode.py's and this module's VALIDATION UPDATE): reduces COP_electrical by at most 1.27% across the same frequency sweep. Step 4's check against Andrade et al. (2024)'s real Gd+ferrofluid-switch prototype found QUALITATIVE AGREEMENT under symmetric cycling (both this model and that real device show no net advantage from the switch under symmetric cycling). The benchmark's own asymmetric-cycling finding (up to 60% span improvement) is NOT reproduced here -- this repo's AMRSystem has no asymmetric-cycle mechanics, a real, stated scope gap rather than a silently-dropped result. FerrofluidThermalSwitch's rectification_ratio (3.84) is a real measured value (Katiyar et al. 2016), its frequency range (0.5-18 Hz tested) is real hardware (Rodrigues et al. 2019), and it now has an actual benchmark device to check qualitative behavior against (Andrade et al. 2024) -- this class and its default are therefore a validated feature, not a design-exploration placeholder. MechanicalContactDiode (Sect. 6.2.4's mechanical-contact mechanism) remains design-exploration, unchanged by this pass. Step 1's finding (no internal mechanical-switching frequency ceiling exists in this repo's model to relax) is also unchanged and applies to both diode classes equally.

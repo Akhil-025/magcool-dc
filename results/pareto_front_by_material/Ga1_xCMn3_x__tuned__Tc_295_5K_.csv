@@ -1,0 +1,2 @@
+material,mu0H_max_T,frequency_Hz,fluid_mdot_kgs,mass_regenerator_kg,regen_effectiveness,blow_fraction,particle_diameter_mm,COP_electrical,Qc_W,cost_index_USD
+"Ga1-xCMn3+x (tuned, Tc=295.5K)",1.001,3.697,0.0925,1.0,0.804,0.503,0.4426,0.0,0.0,593.6

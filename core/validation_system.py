@@ -1215,7 +1215,7 @@ def run_field_sensitivity_check(verbose=True, device_group="ChubuToshiba_Gd_2016
     reported Qc.
 
     SAME secondary-source caveat as the CSV rows themselves and the
-    existing Okamura_Hirano_2013 row: both points are read from a review's
+    old (now-corrected) Okamura_Hirano_2013 row used to have: both points are read from a review's
     table (Kamran, Ahmad & Wang, Renew. Sustain. Energy Rev. 133 (2020)
     110247, Table 2), not the primary device paper (ref [69] in that
     review), which is not in this repo's Papers/.

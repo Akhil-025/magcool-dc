@@ -152,7 +152,7 @@ def test_run_system_validation_still_returns_four_point_results():
     reachable mdot range -- a genuine, expected side effect of a real
     physics correction, not a bug in the calibration search itself.
     with_cop therefore drops again, from 6 to 5... but empirically only
-    r4 is lost (Tusek_singlebed_Gd_2010, Okamura_Hirano_2013,
+    r4 is lost (Tusek_singlebed_Gd_2010, Okamura_Yamada_Hirano_Nagaya_2006,
     DTU_Eriksen_rotary_Gd_2015, and Lozano r6/r7/r8 all still calibrate),
     so with_cop lands at 6, not 5 -- see this test's own assertion below
     for the current count; total stays at 15 either way (r4 is still
