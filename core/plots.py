@@ -992,7 +992,9 @@ def plot_nsga3_pareto(precomputed=None):
     rows = precomputed.get('pareto_rows')
     if rows is None:
         if HAVE_PYMOO:
-            rows = optimize_mod.run_optimization(out_csv=str(RESULTS_DIR / 'pareto_front.csv'))
+            rows = optimize_mod.run_optimization(
+                out_csv=str(RESULTS_DIR / 'pareto_front.csv'),
+                per_material_out_dir=str(RESULTS_DIR / 'pareto_front_by_material'))
         else:
             print("  [pymoo unavailable — falling back to pre-computed results/pareto_front.csv]")
             rows = _read_csv_rows(RESULTS_DIR / 'pareto_front.csv')
