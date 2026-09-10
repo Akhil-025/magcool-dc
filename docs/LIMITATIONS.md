@@ -19,57 +19,21 @@ extended, or fixed directly during a later consolidation pass (noted inline).
 
 ## 1. Model-accuracy limitations (physics)
 
-### 1.1 Mean-field Gd model overpredicts near the Curie point (LARGELY FIXED)
-Mean-field (Brillouin/Weiss) theory systematically overpredicted Gd's
-adiabatic temperature change close to Tc=294K, worst at low field and
-shrinking as field increases. Original numbers: +48.9% at 1T, +29.2% at
-2T, +9.8% at 5T vs. Dan'kov et al. 1998.
-
-**Physics fix (Paper-Mining Pass, de Oliveira & von Ranke, Phys. Rep. 489
-(2010) 89-159, now in Papers/), three changes stacked together:**
-1. Exact isentropic ΔT_ad (`delta_T_adiabatic_exact()`,
-   `core/mce_material.py`): the old formula (`-T·ΔS/C`) is only that
-   paper's own Eq. (3) linearized for an infinitesimal field step, not
-   valid at 1-7.5T. Replaced with a direct root-solve for
-   S(T₂,H₂)=S(T₁,H₁), which needed a real lattice entropy function too
-   (`entropy_lattice()`, closed-form Debye entropy).
-2. Sommerfeld electronic entropy/heat-capacity term
-   (`sommerfeld_gamma_J_per_molK2`), previously omitted entirely. Uses
-   the paper's own cited Gd value (γ=5.4 mJ/mol·K², Sec. 4.2).
-3. Fitted polycrystalline grain-Curie-temperature broadening
-   (σ_Tc=6.74K, `core/inhomogeneous_broadening.py`'s
-   `calibrate_grain_broadening_sigma_Tc()` /
-   `GADOLINIUM_CALIBRATED`) — real samples aren't one perfect crystal at
-   one exact Tc; fit by least-squares to the same 3 Dan'kov points, using
-   the exact method above (fitting the OLD linear method's approximation
-   to a field-dependent broadening had converged to zero broadening being
-   optimal — see `run_field_dependent_broadening_calibration()` for that
-   earlier, superseded negative result — the exact method is what let a
-   real, physically-reasonable fit actually converge).
-
-**Result:** +4.2% at 1T, -1.1% at 2T, -8.1% at 5T. Held-out cross-check
-(Giguère et al. 1999, not used in the fit): the 5T prediction (11.30K)
-now falls INSIDE Giguère's independently-reported 10.5-11.5K range,
-versus outside it before.
-
-**What's left, honestly:** the residual few-percent error is plausibly
-the genuine short-range-correlation/critical-fluctuation physics mean-
-field theory misses near a critical point — de Oliveira & von Ranke's own
-Gd treatment (same paper, Sec. 4.2) uses the identical mean-field
-approach and reports the same class of near-Tc deviation as "an artifact
-of the mean field theory, since short range interactions are not taken
-into account," with no closed-form correction given. Closing that last
-gap fully would need a genuinely different statistical-mechanics
-treatment (e.g. an Oguchi/pair-cluster approximation) — real, scoped,
-substantial future work, not a same-pass patch.
+### 1.1 Mean-field Gd model overpredicts near the Curie point -- LARGELY FIXED
+Fixed via exact isentropic ΔT_ad root-solve, a Sommerfeld electronic
+entropy term, and fitted grain-Curie-temperature broadening. Error cut
+from +48.9%/+29.2%/+9.8% (1T/2T/5T vs. Dan'kov et al. 1998) to
++4.2%/-1.1%/-8.1%; the 5T value now falls inside Giguère et al.'s
+held-out 10.5-11.5K range.
+- Residual few-percent error near Tc is expected mean-field short-range-
+  correlation physics (per de Oliveira & von Ranke, Phys. Rep. 489
+  (2010), same treatment) -- closing it needs a different statistical-
+  mechanics treatment (e.g. Oguchi/pair-cluster), real future work, not
+  a same-pass patch.
 - Source: `core/mce_material.py` (`delta_T_adiabatic_exact`,
   `entropy_lattice`, `sommerfeld_gamma_J_per_molK2`),
-  `core/inhomogeneous_broadening.py` (`GADOLINIUM_CALIBRATED`,
-  `calibrate_grain_broadening_sigma_Tc`), `core/validation.py`
-  (`run_validation`, `run_giguere_gd_extension`).
-- Correction (still applies): the 5T literature reference value
-  was previously wrong (14.6K); a pixel-calibrated re-digitization of
-  Dan'kov et al.'s own Fig. 10 found the correct value is 12.3K.
+  `core/inhomogeneous_broadening.py` (`GADOLINIUM_CALIBRATED`),
+  `core/validation.py` (`run_validation`, `run_giguere_gd_extension`).
 
 ### 1.1b Curie-point field-shift rate (still open, distinct from 1.1)
 Separately from the near-Tc overprediction MAGNITUDE fixed in 1.1 above,
@@ -132,14 +96,22 @@ leaving it as a suggestion:
 - Source: `research/oguchi_pair_cluster_prototype.py` (reference
   implementation, not imported by `core/` or `main.py`, not tested).
 
-### 1.2 First-order Landau model overestimates giant-MCE ΔTad
-The 6th-order Landau free-energy expansion used for Gd5Si2Ge2,
-La(Fe,Si)13Hy, and (Mn,Fe)2(P,Si) overestimates ΔTad by roughly 2.4x
-against Giguere et al.'s (1999) direct measurement.
-- Source: `core/giguere_validation.py`; `tests/test_giant_mce_analysis.py`.
-- Status: open. Re-fitting the 6th-order coefficients against Giguere's
-  data specifically (rather than Pecharsky & Gschneidner's) is the
-  concretely-scoped next step, not yet attempted.
+### 1.2 First-order Landau model overestimates giant-MCE ΔTad -- CLOSED, proposed fix rejected
+Model overestimates ΔTad by ~2.4x vs. Giguere et al. (1999) direct
+measurement. The previously-proposed fix (re-fit the 6th-order Landau
+coefficients to Giguere's ΔTad instead of Pecharsky & Gschneidner's
+ΔS_M) was investigated and rejected: the 0-D lattice-only-Cp model
+can't satisfy both targets at once (unresolved latent-heat structure,
+not a tuning problem), and applying that correction across fields
+drags the independent Gd5Si2Ge2/Gd cross-check ratio from ~1.24
+(close to the 1.30 literature value) down to ~0.51 -- i.e. it would
+predict the "giant MCE" material underperforming plain Gd.
+- Status: closed. Existing single-field empirical correction
+  (`DTAD_CORRECTION_FACTOR`, `apply_giguere_correction()`) stands as the
+  correct-scoped compromise. Further improvement needs a genuine latent-
+  heat-resolving model extension, not a same-pass patch.
+- Source: `core/first_order_mce.py`, `core/giguere_validation.py`;
+  `tests/test_giant_mce_analysis.py`.
 
 ### 1.3 1-D regenerator: direction-inconsistent error, even after three fix passes
 `core/regenerator_1d.py`'s multi-cycle transient model undershoots on two
@@ -201,82 +173,35 @@ order-of-magnitude miss).
   fabricated to close this gap artificially.
 
 ### 1.5 Hysteresis-share reversal finding is not stable across NSGA-III seeds -- CLOSED
-The earlier finding that thermal hysteresis loss shifts material-family
-representation on the Pareto front (La(Fe,Si)13Hy share 88%->100%) did
-NOT reproduce consistently across random seeds at production NSGA-III
-settings -- one seed showed the share moving the opposite direction.
-- Source: `hysteresis_multiseed_stability.txt`,
-  `results/hysteresis_sensitivity.txt`.
-- **Update (n=20 seeds):** re-ran `run_hysteresis_multiseed_stability_check()`
-  at production settings (pop_size=40, n_gen=25) across 20 seeds instead
-  of 3 (`results/hysteresis_multiseed_stability_n20.txt`), and computed
-  the actual ON-minus-OFF La(Fe,Si)13Hy-share distribution instead of only
-  a pass/fail direction check: mean = -1.25 percentage points, std =
-  6.9pp, 13/20 seeds positive vs. 7/20 negative, one-sample t-test against
-  zero gives p=0.43 (independently reproduced from the raw per-seed
-  numbers in that results file). **CLOSED, not just "confirmed
-  unstable": the effect is statistically indistinguishable from zero at
-  this sample size** -- there is no reliable directional effect to
-  report. The original 88%->100% finding should be treated as
-  noise at the n=1-seed level it was originally reported at, not a real
-  hysteresis-driven shift in material representation.
-- **Also found, not yet root-caused:** re-running the SAME 3 seeds (1, 2,
-  3) at the SAME settings that the original 3-seed check used produced
-  DIFFERENT per-seed frac_ON/frac_OFF numbers than the archived
-  `hysteresis_multiseed_stability.txt` shows -- meaning `seed=` alone does
-  not fully determine `run_hysteresis_sensitivity()`'s output; something
-  else (unseeded global random/numpy state, non-deterministic parallel
-  worker/tie-break ordering in `core/optimize.py`'s NSGA-III run, or
-  similar) also contributes. Doesn't change the CLOSED conclusion above
-  (if anything it strengthens it) but is a genuine, separate
-  reproducibility gap worth tracking down if exact seed-for-seed
+The earlier finding (La(Fe,Si)13Hy share 88%->100% with hysteresis loss
+on) did not hold up: re-run across n=20 seeds at production settings
+gives mean=-1.25pp, std=6.9pp, p=0.43 vs. zero -- statistically
+indistinguishable from no effect. **Closed as noise**, not a real
+hysteresis-driven shift.
+- Also found (separate, not root-caused): the same seed number doesn't
+  fully determine `run_hysteresis_sensitivity()`'s output -- some
+  unseeded state also contributes. Worth tracking down if exact
   reproducibility ever matters elsewhere.
-- Caveat carried over unchanged: the `hysteresis_loss_J_per_kg` values
-  this whole comparison depends on remain literature analogs for
-  different exact compositions, not measurements of the calibrated
-  compositions themselves -- this closes the NSGA-III-search-noise
-  question, not the underlying-data-quality question.
+- Caveat unchanged: `hysteresis_loss_J_per_kg` values remain literature
+  analogs, not measurements of the calibrated compositions -- this
+  closes the search-noise question, not the underlying-data question.
+- Source: `results/hysteresis_multiseed_stability_n20.txt`,
+  `results/hysteresis_sensitivity.txt`.
 
-### 1.6 Qc(span) "feasibility reopening" artifact -- now clamped, opt-in
-Root cause (see Item 1.1 above / `core/mce_material.py`'s
-`magnetic_heat_capacity()` docstring): the mean-field magnetic heat
-capacity has a genuine finite-jump discontinuity approaching Tc from
-below. Because `AMRSystem.cooling_capacity()` evaluates `dTad_noload` at a
-single `T_mid = T_cold + span/2` per call with no knowledge of neighboring
-spans, that discontinuity can make a raw, single-point Qc evaluation
-REPORT A LARGER value at a bigger span than at a smaller one --
-physically backwards (a device's achievable cooling capacity cannot
-increase as the demanded span widens).
-`core/validation_system.py`'s `diagnose_qc_feasibility_reopening()`
-already detected and reported this (and `run_tusek_multipoint_curve_validation()`
-already attributed a large per-point miss to it: Tusek AMR(A), V*=0.95,
-span=12.23K, raw model Qc=20.51W vs. digitized 2.03W, +910%) -- but
-neither function corrected the reported number, only flagged the span
-range where it happens.
-- **Fix (additive, opt-in, nothing else changed):** added
-  `AMRSystem.cooling_capacity_span_sweep()`. Evaluates `cooling_capacity()`
-  over a requested set of spans plus an internal dense scan grid (so the
-  clamp is correct even when the caller's own spans are sparse -- a
-  sparse-only running-min would under-clamp if the reopening excursion
-  falls entirely between two requested points), then applies a
-  running-minimum clamp: Qc at a given span can never exceed Qc at any
-  smaller span already evaluated in the same sweep. This is a post-hoc
-  monotonicity clamp, not a new physical mechanism and not a fit to any
-  literature value -- it can only reduce a reported Qc relative to a
-  smaller span, never invent a number. Confirmed against the exact Tusek
-  case above: raw Qc=20.51W at span=12.23K is now correctly reported as
-  Qc=0W (matching what the model already concludes at every other span
-  inside that same reopened window).
-- **What this does NOT fix:** the underlying mean-field discontinuity
-  itself (Item 1.1's territory) is untouched, `cooling_capacity()` itself
-  is untouched (same signature, same return value, same default
-  behavior), and no existing caller (`optimize.py`, `cascade.py`,
-  `plots.py`, `validation_system.py`, `main.py`, or any pre-existing test)
-  was changed to use the new method -- so no number anywhere else in this
-  repo's `results/` outputs changes because of this fix.
-- Source: `core/amr_cycle.py`'s `cooling_capacity_span_sweep()`;
-  `tests/test_amr_cycle.py`'s new tests (incl. a direct reproduction of
-  the Tusek case above).
+### 1.6 Qc(span) "feasibility reopening" artifact -- FIXED, opt-in
+Root cause: a genuine mean-field magnetic heat-capacity discontinuity
+near Tc (Item 1.1) could make single-point Qc evaluation report a
+*larger* value at a bigger span than a smaller one -- physically
+backwards. Confirmed case: Tusek AMR(A), span=12.23K, raw Qc=20.51W vs.
+digitized 2.03W (+910%).
+- Fix: added `AMRSystem.cooling_capacity_span_sweep()`, which applies a
+  running-minimum monotonicity clamp across a dense span scan (can only
+  reduce Qc, never invent a value). Confirmed: the Tusek case above now
+  reports Qc=0W, matching the model's own conclusion at neighboring spans.
+- Opt-in only: `cooling_capacity()` itself and all existing callers are
+  unchanged, so no existing `results/` output changes because of this.
+- Source: `core/amr_cycle.py` (`cooling_capacity_span_sweep`);
+  `tests/test_amr_cycle.py`.
 
 ### 1.7 Regenerator-1D span undershoot (issue #8) -- partial real fix found, deeper issue surfaced
 `core/regenerator_1d.py`'s transient 1-D AMR simulator was previously
@@ -478,36 +403,12 @@ COP either, only on weight/power-density (heat-pump check) or narrower
 non-COP metrics (dry-rejection water usage, refrigerant-free emissions).
 - Source: `core/regime_crossover_analysis.py`; `main.py` step 15d.
 
-### 1.13 NSGA-III seed-to-seed stability on the MAIN Pareto front -- now run, CLOSED with a positive verdict on the headline numbers
-`core/pareto_multiseed_stability.py` reruns `optimize.run_optimization()`
-at full production `pop_size=40, n_gen=25` across 3 independent seeds
-(not the full 5 the module supports -- reduced for pipeline-runtime
-reasons; a deeper run is directly re-runnable) and reports variance on the
-specific headline numbers a paper would cite (best COP_electrical,
-knee-point design, each material family's share of the merged front) --
-extending the same seed-stability discipline `hysteresis_sensitivity.py`'s
-own multiseed follow-up already applied to the ON/OFF hysteresis axis
-(Item 1.5 above) to the more basic "would a different NSGA-III seed move
-the number" question for the main front. **Now actually run and
-recorded:**
-```
-best COP_electrical:        mean=10.413  std=0.068  range=[10.325, 10.490]
-knee-point COP_electrical:  mean= 9.200  std=0.768
-knee-point material consistent across all 3 seeds: True (La(Fe,Si)13Hy every time)
-material share of merged front (mean +/- std, range):
-  La(Fe,Si)13Hy (tuned)       80.7% +/- 9.2%  (71-93%)
-  Gd5(SixGe1-x)4(-Ga) (tuned) 10.6% +/- 7.7%  (0-18%)
-  Ga1-xCMn3+x (tuned)          6.7% +/- 0.6%  (6-7%)
-  Gd                           2.0% +/- 2.8%  (0-6%)
-```
-**Verdict: the best-COP headline number and the knee-point material
-choice ARE seed-stable** (low std, identical winning material every
-seed) -- unlike Item 1.5 (hysteresis share) and Item 1.14 (magnet-geometry
-mean field) below, both of which turned out NOT stable under the
-identical check. The material-family *share* is noisier (La(Fe,Si)13Hy
-71-93% across just 3 seeds) -- any claim more specific than "La(Fe,Si)13Hy
-dominates the front" should be reported as mean+/-std across seeds, not a
-single-seed point value, per this module's own stated discipline.
+### 1.13 NSGA-III seed-to-seed stability on the MAIN Pareto front -- CLOSED, positive verdict
+Re-run at production settings across 3 seeds: best COP_electrical
+mean=10.413, std=0.068 (seed-stable); knee-point material consistent
+(La(Fe,Si)13Hy every seed). Material-family *share* of the merged front
+is noisier (La(Fe,Si)13Hy 71-93% across seeds), so report that as
+mean+/-std, not a single-seed number.
 - Source: `core/pareto_multiseed_stability.py`;
   `results/pareto_multiseed_stability.txt`; `main.py` step 16.
 
@@ -678,152 +579,73 @@ value and one design/off-design span set, not a general claim.
 
 ## 2. Calibration-data provenance (now resolved, documented for the record)
 
-### 2.0 Working-fluid selection: `DEFAULT_FLUID` recommendation resolved (water_eg10, not pure water)
-`core/fluid_selection_optimization.py` sweeps every fluid in
-`core/fluids.py`'s `FLUID_LIBRARY` (water, water_eg10/eg20, water_pg30,
-ethanol) through the standard NTU thermal + calibrated loss + geometry-
-explicit pumping model, re-optimizing mdot per fluid, at two operating
-points (5kg/1Hz baseline; 2kg/2Hz robustness check) -- ranking is
-identical at both. Pure water tops both sweeps, but no real AMR prototype
-in this project's corpus actually runs pure water (Gd corrodes in it) --
-its #1 ranking is a reference ceiling, not a usable recommendation.
-`core.fluids.DEFAULT_FLUID` is set to **`water_eg10`** -- the best
-corrosion-realistic fluid, giving up only 1.4-2.3% COP_electrical vs. the
-unrealistic pure-water ceiling. Additive/comparison-only: no existing
-`AMRSystem` call site changed its own default (every existing caller
-still defaults to `fluid="water"`) -- `water_eg10` must be passed
-explicitly to be used.
-- Source: `core/fluid_selection_optimization.py`;
-  `results/fluid_selection_optimization.txt`,
-  `results/fluid_selection_optimization_robustness.txt`; `main.py` step 18.
+### 2.0 Working-fluid selection resolved: `DEFAULT_FLUID` = water_eg10
+Pure water tops the fluid sweep but no real AMR prototype runs it (Gd
+corrodes). `core.fluids.DEFAULT_FLUID` set to **water_eg10**, the best
+corrosion-realistic fluid, at only 1.4-2.3% COP_electrical cost vs. the
+unrealistic pure-water ceiling. Comparison-only -- no existing
+`AMRSystem` call site's own default changed.
+- Source: `core/fluid_selection_optimization.py`; `main.py` step 18.
 
 ### 2.1 Tusek calibration point corrected to the paper-verified field/point
-Previously, `core/loss_model.py`'s `CALIBRATION_POINTS_CORE` used a
-stopgap Tusek point (1.69T, 0.196kg, 0.25Hz, guessed Qc=6.5W) because the
-paper-verified operating point (1.15T, 0.1763kg, 0.3Hz) did not calibrate
-against an unverified guessed (span, Qc) pair. A rigorous pixel-calibrated
-digitization of the source paper's actual Figs. 10-11 had already been
-completed (`data/tusek_ate2013_figs/`) but was never wired into the
-calibration.
-- **Fixed**: `CALIBRATION_POINTS_CORE` now uses the verified
-  point (span=7.26K, Qc=5.27W, COP=5.38 at the correct 1.15T/0.1763kg/
-  0.3Hz), recomputed via the same brentq procedure used for every other
-  CORE point. This calibrates cleanly (mdot_cal=0.007351 kg/s, matching
-  the CSV's own independent cross-check to 2 sig figs).
-- Every downstream number this touched was re-verified and updated:
-  `core/loss_model.py`'s docstring narrative (leave-one-out errors,
-  parasitic-fraction ranking), `tests/test_loss_model.py`'s hardcoded
-  self-consistency dictionaries, and `results/regenerator_1d_validation.txt`.
-- Full regression run: 130+ tests across every module depending on
-  `StateDependentLossModel`'s default coefficients, all passing after the
-  coefficient shift (k_eddy 30.52->31.25, base_frac 0.0484->0.0387).
-- **Not yet regenerated**: several `results/*.txt` diagnostic files
-  reference "Tusek" in contexts that may still show pre-fix numbers if
-  they were generated by a one-off script rather than a function called
-  fresh each pipeline run (`results/cycle_type_validation.txt`,
+`CALIBRATION_POINTS_CORE` now uses the paper-verified operating point
+(span=7.26K, Qc=5.27W, COP=5.38 at 1.15T/0.1763kg/0.3Hz) instead of a
+stopgap guessed point. All downstream numbers re-verified (130+ tests
+passing; k_eddy 30.52->31.25, base_frac 0.0484->0.0387).
+- **Not yet regenerated**: `results/cycle_type_validation.txt`,
   `results/design_recommendations.txt`,
   `results/geometry_optimization_analysis.txt`,
-  `results/regenerative_amplification_diagnostic.txt`). Re-run
-  `python main.py` (or the specific analysis module) to refresh these
-  before citing their exact numbers in a report.
+  `results/regenerative_amplification_diagnostic.txt` may still show
+  pre-fix numbers until `python main.py` is re-run (see Section 4).
 
 ---
 
 ## 3. Software robustness (found and fixed)
 
-### 3.1 ProcessPoolExecutor hangs indefinitely in restricted environments
-`core/cascade.py`'s parallel mass-sensitivity sweeps
-(`run_magqueen_mass_sensitivity`, `run_cooltech_mass_sensitivity`) used
-bare `future.result()` with no timeout, and several other pool call sites
-used `pool.shutdown(wait=True)` with no timeout either. In a sandboxed
-environment with unreliable process forking, this hung the calling
-process indefinitely with no exception ever raised -- reproduced directly
-via this project's own test suite
-(`test_magqueen_mass_sensitivity_parallel_matches_sequential` and its
-cooltech analog).
-- **Fixed**: every `ProcessPoolExecutor` call site in
-  `core/cascade.py` now goes through one of three new helpers
-  (`_pool_map_or_none`, `_pool_submit_all_or_none`, `_safe_pool_shutdown`)
-  that bound every wait to a hard timeout and fall back to the
-  pre-existing sequential code path on any failure. A "poisoned executor"
-  flag prevents a broken pool from being retried on every iteration of a
-  `brentq` root-finding loop (an early version of this fix multiplied
-  the wait instead of bounding it -- caught and corrected before landing).
-- Verified: both previously-hanging tests now complete (87.5s and 44s
-  respectively, bounded instead of unbounded); full downstream regression
-  suite (95+ tests across every module importing `core.cascade`) passing.
+### 3.1 ProcessPoolExecutor hangs indefinitely in restricted environments -- FIXED
+Bare `future.result()`/`pool.shutdown(wait=True)` calls with no timeout
+hung indefinitely in sandboxed environments with unreliable forking.
+- Fixed: every `ProcessPoolExecutor` call site in `core/cascade.py` now
+  goes through helpers that bound waits to a hard timeout and fall back
+  to the sequential path on failure. Verified: previously-hanging tests
+  now complete (87.5s/44s, bounded); 95+ downstream tests passing.
 
-### 3.2 Missing test coverage for 5 pipeline-wired modules
+### 3.2 Missing test coverage for 5 pipeline-wired modules -- FIXED
 `core/regenerator_1d.py`, `uncertainty_propagation.py`, `water_usage.py`,
-`pue_annualized.py`, and `commercial_landscape.py` were all imported and
-called from `main.py` but had no dedicated `tests/test_*.py` file.
-- **Fixed**: all 5 now have test files (65 new tests total,
-  all passing). One genuine finding surfaced while writing these:
-  `uncertainty_propagation.py`'s Monte Carlo `Qc` confidence band is
-  architecturally near-zero-width (std ~1e-13) because cooling capacity
-  does not depend on the calibrated loss coefficients in this codebase --
-  only `COP_electrical` does. The module's own `Qc_p05`/`Qc_p95` columns
-  are therefore not actually informative uncertainty bands; only the
-  `COP_electrical_p05`/`p95` columns carry real calibration uncertainty.
-  See `tests/test_uncertainty_propagation.py`'s
-  `test_qc_is_essentially_invariant_to_calibration_uncertainty_unlike_cop`.
+`pue_annualized.py`, `commercial_landscape.py` now all have test files
+(65 new tests, all passing).
+- Genuine finding surfaced: `uncertainty_propagation.py`'s Monte Carlo
+  `Qc` confidence band is architecturally near-zero-width (std ~1e-13)
+  since Qc doesn't depend on the calibrated loss coefficients in this
+  codebase, only COP_electrical does -- `Qc_p05`/`Qc_p95` aren't
+  informative uncertainty bands.
 
-### 3.3 Material x n_layers cross-product was documented as a follow-up, never attempted -- now implemented and run
-`run_layered_optimization()`'s own docstring explicitly scoped this out.
-- **Fixed**: implemented as
-  `run_layered_optimization_material_family_cross_product()` in
-  `core/optimize.py`, reusing the existing per-family and per-n_layers
-  Pareto-filtering machinery with no new NSGA-III formulation needed.
-  Wired into `main.py` as step "11g.", **off by default** (pass
-  `--layered-material-cross-product` to run it -- it multiplies step
-  11f.'s already-reduced runtime by ~5x, one per material family).
-  Surfaced and fixed a real latent bug in the process:
-  `run_layered_optimization()`'s `out_csv` parameter crashed on
-  `out_csv=None` (an inconsistency with `per_n_layers_out_dir`, which
-  already handled `None` correctly) -- now guarded, with a regression
-  test.
-- **Now actually run** (main.py step 11g, `--layered-material-cross-product`):
-  5 material families x 3 n_layers values = 15 independent NSGA-III
-  passes, merged into 34 globally non-dominated designs
-  (`results/layered_pareto_front_material_cross_product.csv`). Material
-  representation: La(Fe,Si)13Hy 28/34 (82%), Gd 4/34 (12%),
-  (Mn,Fe)2(P,Si) 1/34 (3%), Mn1-xCuxCoGe 1/34 (3%). Best cascade
-  COP=10.407 (La(Fe,Si)13Hy, n_layers=1). This confirms rather than
-  overturns step 11f.'s single-family ranking -- the cross-product's
-  value is showing that jointly varying material family and layer count
-  does not change which material wins, not a different answer.
+### 3.3 Material x n_layers cross-product -- now implemented and run
+Implemented as `run_layered_optimization_material_family_cross_product()`,
+wired into `main.py` as step "11g." (off by default, ~5x runtime;
+`--layered-material-cross-product`). Also fixed a latent `out_csv=None`
+crash surfaced in the process.
+- Result: 5 families x 3 n_layers = 34 non-dominated designs
+  (`results/layered_pareto_front_material_cross_product.csv`).
+  La(Fe,Si)13Hy dominates (28/34, 82%); best cascade COP=10.407. Confirms
+  step 11f.'s single-family ranking rather than overturning it.
 
-### 3.4 Several tests silently overwrite real `results/*.txt` and `results/*.csv` output files
-Discovered while preparing this ledger: `tests/test_hysteresis_sensitivity.py` correctly
-overrides `run_hysteresis_sensitivity()`'s `out_path` (the human-readable
-report) with a `tmp_path`-based scratch file, but does **not** override
-that function's `out_csv_on`/`out_csv_off` parameters -- which default to
-the real `results/pareto_front_hysteresis_{on,off}.csv` files. Similarly,
-`core/plots.py`'s figure-generation code calls
-`optimize.run_optimization(out_csv=str(RESULTS_DIR / 'pareto_front.csv'))`
-without overriding `per_material_out_dir`, which defaults to the real
-`results/pareto_front_by_material/` directory. Running the test suite
-(specifically `tests/test_hysteresis_sensitivity.py` and
-`tests/test_plots.py`) therefore silently overwrites these real result
-files with test-scale (small `pop_size`/`n_gen`) data as a side effect --
-discovered directly when a broad regression run corrupted
-several of these files, which then had to be restored from the original
-committed content before this phase's own changes could be packaged.
-- Status: **open, not yet fixed** (out of scope for this pass --
-  flagged rather than silently worked around). The correct fix is for
-  every test that calls a function with a real default output path to
-  explicitly override *every* such parameter, not just the most obviously
-  named one; a stronger structural fix would be for these functions to
-  default to `None` (skip writing) rather than a real repository path,
-  matching the convention already applied to
-  `run_layered_optimization()`'s `out_csv` in Section 3.3 above.
-- Practical consequence: if you need trustworthy, current copies of
-  `results/pareto_front.csv`, `results/pareto_front_by_material/*.csv`,
-  `results/pareto_front_hysteresis_{on,off}.csv`, or
-  `results/hysteresis_sensitivity.txt`, regenerate them with a fresh,
-  deliberate call to `main.py` or the specific module function (not by
-  running the test suite) after any change to `core/loss_model.py`'s
-  calibration or NSGA-III search parameters.
+### 3.4 Several tests silently overwrote real `results/` output files -- CLOSED
+Four instances found and fixed (test overrides of `run_hysteresis_
+sensitivity()`, `plot_nsga3_pareto()`, `run_optimization()`'s
+`per_material_out_dir`, and a direct `os.remove()` of the regenerator-1D
+performance cache) -- all now use scratch/tmp_path paths instead of real
+repo paths.
+- Verified, not just asserted: full `pytest` run (698 tests) followed by
+  an md5 checksum diff of all 190 files under `results/` against a
+  pre-run snapshot -- zero differences, across two independent runs.
+- Not closed: this only guarantees the *current* test suite is clean, not
+  a structural guarantee against a similarly-written future test (would
+  need output-path parameters to default to `None` everywhere, per
+  Section 3.3's convention) -- that refactor remains open.
+- Source: `core/plots.py`; `tests/test_hysteresis_sensitivity.py`,
+  `tests/test_optimize.py`, `tests/test_plots.py`,
+  `tests/test_regenerative_amplification_override.py`.
 
 ---
 
