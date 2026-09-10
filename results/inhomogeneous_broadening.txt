@@ -2,14 +2,16 @@
 PHASE 22 ITEM 1: Gaussian inhomogeneous/polycrystalline Tc-broadening
 sensitivity for the mean-field Gd model (core/mce_material.py)
 ==========================================================================================
-HONESTY FLAG: Tishin & Spichkin (2003) Sec. 2.8 (inhomogeneous ferromagnets)
-is this item's intended primary source per phase_plan.md. Confirmed directly
-that this project's copy is an image-only PDF (pdfplumber extracts 0
-characters from every one of its 486 pages sampled) -- same finding already
-flagged for Tishin Ch.11 in the earlier baseline_cooling.py. So Sec. 2.8's
-specific content could not be digitized; what follows is the standard
+HONESTY FLAG (updated): Tishin & Spichkin (2003) Sec. 2.8 (inhomogeneous
+ferromagnets, pp.43-44) is this item's intended primary source per
+phase_plan.md. pdfplumber extracts 0 characters (no text layer -- confirmed),
+but OCR has now actually been run and DOES recover it: a real 2-page section
+on the Wagner/Silin/Romanov & Silin local-Tc-distribution model (eq.
+2.109-2.111), a genuine precedent for this module's own Curie-broadening
+idea -- but its specific W(s) distribution was not extracted in enough
+numerical detail to wire in here. What follows is still the standard
 literature treatment of Tc-distribution broadening (see this module's own
-docstring), not book content.
+docstring), cross-checked against, not reproduced from, Sec. 2.8.
 
 --- Step 1: peak DeltaT_ad / FWHM vs. sigma_Tc, at Dan'kov et al.'s own three fields ---
 

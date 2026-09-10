@@ -2,7 +2,10 @@
 PHASE 21: passive/hybrid magnetic regenerator augmentation of a
 conventional (vapor-compression) gas cycle -- see
 core/baseline_cooling.py's own docstring block for the honesty
-flag (Tishin Ch.11 not digitizable -- image-only PDF, no text layer)
+flag (Tishin Ch.11 OCR'd -- passive-regenerator materials and design
+guidance recovered; no digitized effectiveness/COP curve for THIS
+module's VCC-augmentation use case, and no penetration-depth formula
+exists in the source -- see this module's own docstring)
 and for why the effectiveness-to-COP mapping is an illustrative,
 literature-range-anchored ceiling rather than a fitted coefficient.
 ==========================================================================================
