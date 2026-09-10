@@ -30,6 +30,28 @@ cost estimate and the underlying hysteresis-loss landscape (42-43), and
 the Phase 37 calibration-drift fix together with the Lozano row-by-row
 calibration-status check it motivated (44-45).
 
+Figures 46-56 cover the final rounds of previously-computed-but-unplotted
+analyses: cross-technology caloric comparison vs. this repo's own VCC COP
+(46), annual water-usage/WUE comparison (47), a Monte Carlo calibration-
+uncertainty band on COP_electrical (48), NSGA-III Pareto-front
+seed-to-seed stability (49), a two-search regime-crossover null result
+(50), the Ames Lab heat-pump architecture check (51), Hypereg parallel-
+hydraulic pumping-power sensitivity (52), the corpus-wide regenerative-
+amplification gap across the full benchmark set (53), the hybrid
+solid-state regenerator's ideal-to-real COP loss funnel vs. VCC (54),
+whether the single-design-point COP conclusion survives a full annual
+climate profile (55), and the heat-transfer fluid selection trade-off
+behind core/fluids.py's own DEFAULT_FLUID choice (56).
+
+Figures 57-61 close out the remaining computed-but-unplotted analyses:
+a commercial-landscape reality check against real vendor-claimed
+magnetocaloric products (57), the measured system-level cost of not
+using the Gd grain-Tc-broadening physics fix as the default material
+(58), the 1-D transient regenerator model's own validation against
+directly-measured no-load spans (59), a field-dependent Tc-broadening
+fit checked against held-out data (60), and the multiseed robustness
+check on fig34's single-seed magnet-geometry Pareto finding (61).
+
 Notes
 -----
 Two analyses in this repository (Sobol sensitivity via SALib, NSGA-III
@@ -45,6 +67,8 @@ economics models in core/.
 import os
 import sys
 import csv
+import re
+import textwrap
 from pathlib import Path
 
 import numpy as np
@@ -92,6 +116,11 @@ from core import uncertainty_propagation
 from core import heat_pump_validation
 from core import hypereg_analysis
 from core import regime_crossover_analysis
+from core import hybrid_solid_state_regenerator
+from core import pue_annualized
+from core import fluid_selection_optimization
+from core import commercial_landscape
+from core import regenerator_1d
 
 try:
     from core import sensitivity as sensitivity_mod
@@ -398,7 +427,13 @@ def plot_material_comparison():
     ax.set_xlabel('Temperature [K]')
     ax.set_ylabel(r'$\Delta T_{ad}$ at 2 T [K]')
     ax.set_title('Material Comparison: Adiabatic Temperature Change vs. Data-Center Range')
-    ax.legend(fontsize=9)
+    # The red (Gd5Si2Ge2) and green (La(Fe,Si)13Hy) peaks sit at high y
+    # in DIFFERENT x-ranges (~286-289K and ~298-300K respectively), so
+    # every in-axes corner wide enough to hold this 4-entry legend
+    # collides with one peak or the other -- upper-left hits the red
+    # rising edge, upper-right hits the green one. Placing the legend
+    # below the axes entirely sidesteps this regardless of curve shape.
+    ax.legend(fontsize=9, loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=2)
     fig.tight_layout()
     save(fig, 'fig05_material_comparison_dTad')
 
@@ -664,8 +699,20 @@ def plot_parasitic_fraction_scaling():
     fig, ax = plt.subplots(figsize=(9.5, 6))
     ax.scatter(Qc, frac, c=np.arange(len(Qc)), cmap='viridis', s=90,
                      edgecolor='white', zorder=3)
-    for qc_, f_, n_ in zip(Qc, frac, names):
-        ax.annotate(n_, (qc_, f_), fontsize=7, xytext=(5, 4), textcoords='offset points')
+    # Points that sit close together in (log Qc, frac) space -- e.g. the
+    # four Lozano POLO UFSC rows -- would otherwise get directly
+    # overlapping text labels with one fixed offset. Fan the offset out
+    # further for each point that lands near an already-placed one.
+    log_qc = np.log10(Qc)
+    x_span = (max(log_qc) - min(log_qc)) or 1.0
+    y_span = (max(frac) - min(frac)) or 1.0
+    placed = []
+    for qc_, f_, n_, lq in zip(Qc, frac, names, log_qc):
+        nearby = sum(1 for plx, ply in placed
+                     if abs(plx - lq) / x_span < 0.05 and abs(ply - f_) / y_span < 0.05)
+        placed.append((lq, f_))
+        dx, dy = 5 + 8 * nearby, 4 + 13 * nearby
+        ax.annotate(n_, (qc_, f_), fontsize=7, xytext=(dx, dy), textcoords='offset points')
     ax.set_xscale('log')
     ax.set_xlabel('Device cooling capacity Qc [W] (log)')
     ax.set_ylabel('Parasitic fraction W_parasitic / Qc')
@@ -1407,7 +1454,7 @@ def plot_inhomogeneous_broadening():
     axes[1].set_title('Validation Error vs. Tc-Broadening')
 
     fig.suptitle('Gaussian Inhomogeneous/Polycrystalline Tc-Broadening Sensitivity\n'
-                 '( — standard literature broadening treatment, '
+                 '(standard literature broadening treatment, '
                  'not digitized book content)', fontsize=11)
     fig.tight_layout()
     save(fig, 'fig27_inhomogeneous_tc_broadening')
@@ -1583,6 +1630,14 @@ def plot_cycle_type_validation():
                color=COLOR_POWER, alpha=0.85, edgecolor='white')
         ax.set_xticks(x)
         ax.set_xticklabels(names, rotation=15, ha='right', fontsize=8)
+        # With only n=1 comparable device (the common case here), x has a
+        # single tick at 0 and matplotlib's default 5%-of-data-range
+        # margin barely pads beyond the bars themselves (width 0.35 each,
+        # so the data range is only 0.35 wide) -- the two bars end up
+        # stretched to fill almost the entire axes edge-to-edge. Pad the
+        # x-limits explicitly so this chart keeps the same breathing room
+        # a multi-device version of it would have.
+        ax.set_xlim(x[0] - 1.0, x[-1] + 1.0)
     ax.set_ylabel('|COP error| vs. published value [%]')
     ax.set_title('Cycle-Topology Sensitivity: Rotary Benchmark Devices\n'
                  '(naming-convention proxy, not a literature-confirmed classification)')
@@ -2285,10 +2340,14 @@ def plot_alternative_caloric_comparison():
     sweep_results, _, _ = alternative_caloric_comparison.compare_physics_models_across_spans(
         vcc, verbose=False)
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6.5))
 
     # --- Left: literature claims vs. VCC at each claim's matched span ---
-    labels = [f"{r['technology']}\n{r['system'][:28]}" for r in claim_results]
+    # Wrap (not mid-word truncate) the system label so short names like
+    # "Elastocaloric can-cooler (Ehl et al. 2025)" render in full across
+    # up to two lines instead of being cut off mid-word.
+    labels = [f"{r['technology']}\n" + textwrap.fill(r['system'], width=22, max_lines=2, placeholder='...')
+              for r in claim_results]
     claim_cops = [r['claimed_cop'] for r in claim_results]
     vcc_cops_matched = [r['vcc_cop_at_matched_span'] for r in claim_results]
     measured = [r['is_measured_device_cop'] for r in claim_results]
@@ -2308,7 +2367,9 @@ def plot_alternative_caloric_comparison():
     ax1.set_xticklabels(labels, fontsize=7, rotation=20, ha='right')
     ax1.set_ylabel('COP')
     ax1.set_title('Literature Claims vs. This Repo\'s VCC\n'
-                   '(hatched = simulation/projection/vendor claim, not a measured device)')
+                   + textwrap.fill('(hatched = simulation/projection/vendor claim, not a measured device)',
+                                    width=42),
+                   fontsize=10)
     ax1.legend(fontsize=8)
 
     # --- Right: physics-model span sweep ---
@@ -2340,13 +2401,16 @@ def plot_alternative_caloric_comparison():
     ax2.set_xlabel('Temperature Span [K]')
     ax2.set_ylabel('COP')
     ax2.set_title('Physics-Model Span Sweep\n'
-                   '(this repo\'s own literature-calibrated models, same grid as comparison_table.csv)')
+                   + textwrap.fill("(this repo's own literature-calibrated models, same grid as "
+                                    "comparison_table.csv)", width=42),
+                   fontsize=10)
     ax2.legend(fontsize=7.5)
 
     fig.suptitle('Does ANY Solid-State Caloric Technology Beat This Repo\'s Own VCC COP?\n'
                  'Honest answer: only one measured device (electrocaloric, 20.9K, 2.1W) — everything else is simulation, projection, or loses',
                  fontsize=11)
-    fig.tight_layout()
+    fig.tight_layout(rect=[0, 0, 1, 0.94])
+    fig.subplots_adjust(wspace=0.3, bottom=0.28)
     save(fig, 'fig46_alternative_caloric_comparison')
 
 
@@ -2386,18 +2450,21 @@ def plot_water_usage_comparison(precomputed=None):
     wues = [r.WUE_L_per_kWh_IT for r in results]
     colors = [COLOR_MAIN, COLOR_POWER, '#2ca02c']
 
-    fig, ax = plt.subplots(figsize=(9, 5.5))
+    fig, ax = plt.subplots(figsize=(9, 6))
     bars = ax.bar(labels, liters_per_kw, color=colors, alpha=0.85, edgecolor='white')
+    # Give the tallest bar's annotation room to breathe above the bar so it
+    # can't collide with the (multi-line) title sitting above the axes.
+    ax.set_ylim(0, max(liters_per_kw) * 1.18)
     for b, v, w_ in zip(bars, liters_per_kw, wues):
         ax.annotate(f'{v:,.0f} L/kW-IT/yr\n(WUE={w_:.2f} L/kWh)', xy=(b.get_x() + b.get_width() / 2, v),
                     xytext=(0, 4), textcoords='offset points', ha='center', fontsize=9)
     ax.set_ylabel('Annual water consumption [L per kW-IT per year]')
     title = ('Annual Water Usage (WUE) Comparison, 100kW-IT Facility\n'
-             '(AMR assigned dry/air-cooled rejection by default — a design choice, '
-             'not a property of the magnetocaloric cycle itself)')
+             + textwrap.fill('(AMR assigned dry/air-cooled rejection by default — a design '
+                              'choice, not a property of the magnetocaloric cycle itself)', width=70))
     if is_default:
         title += '\n[ILLUSTRATIVE — comparison_table.csv not found, using placeholder COPs]'
-    ax.set_title(title, fontsize=11)
+    ax.set_title(title, fontsize=10.5)
     fig.tight_layout()
     save(fig, 'fig47_water_usage_comparison')
 
@@ -2500,8 +2567,12 @@ def plot_pareto_multiseed_stability():
     ax2.bar(labels2, means2, yerr=stds2, capsize=6, color=COLOR_POWER, alpha=0.85,
             edgecolor='white', width=0.5)
     for i, (m, s) in enumerate(zip(means2, stds2)):
-        ax2.annotate(f'{m:.2f} ± {s:.2f}', xy=(i, m), xytext=(0, 8),
+        # Anchor at the top of the error bar (m + s), not the bar top (m),
+        # so the label sits above the error-bar cap instead of being
+        # bisected by it.
+        ax2.annotate(f'{m:.2f} \u00b1 {s:.2f}', xy=(i, m + s), xytext=(0, 8),
                     textcoords='offset points', ha='center', fontsize=9)
+    ax2.set_ylim(0, max(m + s for m, s in zip(means2, stds2)) * 1.15)
     ax2.set_ylabel('Electrical COP')
     consistent = summary['knee_material_consistent_across_seeds']
     ax2.set_title(f'Headline COP Numbers, Mean ± Std\n'
@@ -2676,15 +2747,654 @@ def plot_hypereg_analysis():
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# FIG 53 — Regenerative-amplification gap across the full benchmark corpus
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_regenerative_amplification_gap():
+    """Figure for validation_system.analyze_regenerative_amplification_gap():
+    the systematic, corpus-wide version of the point-check fig35 already
+    shows for 3 devices. Every span>0 benchmark row is evaluated against
+    cooling_capacity()'s own structural ceiling (2*dTad_noload, the most
+    span the 0-D single-blow model can EVER reach at that field/T_mid, for
+    any mdot) and the ratio actual_span/structural_cap is plotted --
+    ratio>1 means the real device demonstrably exceeds what the 0-D model
+    can represent, a lower bound on the "regenerative amplification"
+    (temperature-profile build-up over many cycles) effect a single-blow
+    dTad model cannot capture by construction. This is new information no
+    existing figure shows in aggregate: fig35 checks 3 specific spans
+    against an override fix; this shows the shape and prevalence of the
+    underlying gap across all ~19 usable benchmark rows at once, which is
+    what actually motivates fig35's fix and regenerator_1d.py's 1-D
+    alternative in the first place."""
+    entries = validation_system.analyze_regenerative_amplification_gap(verbose=False)
+    clean = [e for e in entries if not e['near_zero']]
+    clean.sort(key=lambda e: e['amplification_ratio'])
+    names = [e['device'].replace('_', ' ') for e in clean]
+    ratios = [e['amplification_ratio'] for e in clean]
+    exceeds = [r > 1.0 for r in ratios]
+    colors = [COLOR_POWER if e else COLOR_MAIN for e in exceeds]
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+    y = np.arange(len(names))
+    ax.barh(y, ratios, color=colors, alpha=0.85, edgecolor='white')
+    ax.axvline(1.0, color='black', linestyle='--', linewidth=1.2,
+               label='Model\'s own structural cap (ratio = 1)')
+    ax.set_yticks(y)
+    ax.set_yticklabels(names, fontsize=8)
+    ax.set_xscale('log')
+    ax.set_xlabel('Amplification ratio = span_K / (2\u00d7dTad_noload)  [log]')
+    n_exceed = sum(exceeds)
+    ax.set_title('Regenerative-Amplification Gap Across the Full Benchmark Corpus\n'
+                 f'{n_exceed}/{len(clean)} real devices exceed the 0-D model\'s own structural span cap',
+                 fontsize=12)
+    from matplotlib.patches import Patch
+    ax.legend(handles=[Patch(color=COLOR_POWER, label='Exceeds structural cap (ratio > 1)'),
+                        Patch(color=COLOR_MAIN, label='Within structural cap (ratio \u2264 1)'),
+                        plt.Line2D([0], [0], color='black', linestyle='--', label='ratio = 1')],
+              fontsize=8, loc='lower right')
+    fig.tight_layout()
+    save(fig, 'fig53_regenerative_amplification_gap_corpus')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 54 — Hybrid solid-state regenerator (HMR) vs. VCC, ideal -> real
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_hmr_vs_vcc_loss_funnel(T_cold_K=291.15, span_K=10.0):
+    """Figure for hybrid_solid_state_regenerator.compare_to_vcc_realistic():
+    a genuinely different alternative-cooling architecture (all-solid-state
+    magnetic regenerator, Lin et al. 2024) from the fluid/elastocaloric/
+    barocaloric/electrocaloric technologies fig46 already covers, at this
+    repo's own ASHRAE-representative operating point. Shows, per tested
+    frequency, the same "ideal claim collapses once real losses are added"
+    funnel this repo's honesty framing already applies elsewhere (fig04,
+    fig08, fig46): COP_ideal (frictionless, magnetic-work only, the
+    source paper's own headline number) -> COP_ideal_airgap (adds the
+    paper's own worst-case contact-friction derating) -> COP_HMR_electrical
+    (this repo's new TIER-3 addition: rotary drivetrain + baseline
+    overhead), against VCC's own real installed electrical COP at the same
+    point. New information: no existing figure compares this architecture
+    to anything."""
+    result = hybrid_solid_state_regenerator.compare_to_vcc_realistic(
+        T_cold_K, span_K, log=lambda *_: None)
+    rows = result['rows']
+    freqs = [r['frequency_Hz'] for r in rows]
+    ideal = [r['COP_ideal_frictionless'] for r in rows]
+    airgap = [r['COP_ideal_airgap'] for r in rows]
+    real = [r['COP_HMR_electrical'] for r in rows]
+    vcc_cop = result['vcc'].COP
+
+    fig, ax = plt.subplots(figsize=(9.5, 6.5))
+    x = np.arange(len(freqs))
+    w = 0.25
+    ax.bar(x - w, ideal, w, color='#a6c8e0', edgecolor='white',
+           label='COP$_{ideal}$ (frictionless, magnetic-work only)')
+    ax.bar(x, airgap, w, color='#5b9bd5', edgecolor='white',
+           label='COP$_{ideal,airgap}$ (+ contact friction)')
+    ax.bar(x + w, real, w, color=COLOR_POWER, edgecolor='white',
+           label='COP$_{HMR,electrical}$ (+ drivetrain + baseline overhead)')
+    ax.axhline(vcc_cop, color='black', linestyle='--', linewidth=1.5,
+               label=f"VCC real electrical COP ({vcc_cop:.2f})")
+    ax.set_xticks(x)
+    ax.set_xticklabels([f'{f:g} Hz' for f in freqs])
+    ax.set_ylabel('COP')
+    ax.set_xlabel('Cycle frequency')
+    best = max(rows, key=lambda r: r['COP_HMR_electrical'])
+    verdict = 'still beats' if best['HMRe_over_VCC'] >= 1.0 else 'does NOT beat'
+    ax.set_title('Hybrid Solid-State Regenerator (HMR) vs. VCC: Ideal \u2192 Real\n'
+                 f"(Lin et al. 2024, Gd/Cu; best-frequency HMR real electrical COP "
+                 f"{verdict} VCC's, {best['HMRe_over_VCC']:.2f}\u00d7)",
+                 fontsize=11)
+    ax.legend(fontsize=8.5)
+    fig.tight_layout()
+    save(fig, 'fig54_hmr_vs_vcc_loss_funnel')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 55 — Annualized, climate-weighted COP comparison
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_annualized_climate_comparison():
+    """Figure for pue_annualized.annualized_energy_comparison(): every
+    other COP comparison in this repo (comparison_table.csv and everything
+    downstream of it, including fig08/fig19/fig36) is evaluated at ONE
+    fixed (T_cold, span) design point. This figure tests whether that
+    single-point conclusion survives across a full representative annual
+    climate profile (ASHRAE zone 4A-like, 6 bins), which is new
+    information -- it is the only figure in this repo that varies the
+    outdoor condition rather than holding it fixed. Left panel: COP by
+    technology at each climate bin (AMR bars absent where the implied
+    span exceeds this repo's own validated 5-20K AMR envelope, flagged
+    rather than silently zeroed). Right panel: the bin-weighted annual
+    effective COP per technology, with AMR's annotated hours-coverage
+    caveat and liquid cooling's economizer-credit caveat carried over
+    explicitly from the module's own honest-framing text."""
+    result = pue_annualized.annualized_energy_comparison(verbose=False)
+    rows = result['rows']
+    bins = [r['bin'] for r in rows]
+    amr = [r['AMR_COP'] if r['AMR_span_feasible'] else np.nan for r in rows]
+    vcc = [r['VCC_COP'] for r in rows]
+    liq = [r['Liquid_COP'] for r in rows]
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6.5),
+                                    gridspec_kw={'width_ratios': [1.6, 1]})
+    x = np.arange(len(bins))
+    w = 0.25
+    ax1.bar(x - w, amr, w, color=COLOR_MAIN, edgecolor='white', label='AMR')
+    ax1.bar(x, vcc, w, color=COLOR_POWER, edgecolor='white', label='Vapor-compression')
+    ax1.bar(x + w, liq, w, color='#2ca02c', edgecolor='white', label='Liquid cooling')
+    for xi, a in zip(x, amr):
+        if np.isnan(a):
+            ax1.annotate('n/a\n(span\n>20K)', xy=(xi - w, 0), xytext=(0, 3),
+                        textcoords='offset points', ha='center', fontsize=6.5, color='#888')
+    ax1.set_xticks(x)
+    ax1.set_xticklabels([textwrap.fill(b, width=10) for b in bins], fontsize=8)
+    ax1.set_ylabel('COP at that climate bin')
+    ax1.set_title('COP by Climate Bin\n(AMR: n/a where implied span exceeds its validated 5-20K envelope)',
+                  fontsize=10)
+    ax1.legend(fontsize=8)
+
+    labels2 = ['AMR', 'Vapor-\ncompression', 'Liquid\ncooling']
+    vals2 = [result['AMR_effective_annual_COP'] or 0, result['VCC_effective_annual_COP'],
+             result['Liquid_effective_annual_COP']]
+    colors2 = [COLOR_MAIN, COLOR_POWER, '#2ca02c']
+    bars = ax2.bar(labels2, vals2, color=colors2, edgecolor='white', alpha=0.9)
+    for b, v in zip(bars, vals2):
+        ax2.annotate(f'{v:.2f}', xy=(b.get_x() + b.get_width() / 2, v), xytext=(0, 4),
+                    textcoords='offset points', ha='center', fontsize=9)
+    ax2.set_ylim(0, max(vals2) * 1.25)
+    ax2.set_ylabel('Bin-weighted annual effective COP')
+    ax2.set_title('Annual Effective COP', fontsize=11)
+    cov = result['AMR_annual_hours_fraction_covered'] * 100
+    ax2.annotate(textwrap.fill(
+        f'AMR computed over only {cov:.0f}% of annual hours; liquid cooling includes an '
+        'economizer credit AMR/VCC do not receive', width=34),
+        xy=(0.5, 0.98), xycoords='axes fraction', ha='center', va='top',
+        fontsize=7.5, color='#666666', style='italic')
+
+    fig.suptitle('Does the Single-Point COP Conclusion Survive a Full Climate Year?', fontsize=12)
+    fig.tight_layout(rect=[0, 0, 1, 0.92])
+    save(fig, 'fig55_annualized_climate_comparison')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 56 — Heat-transfer fluid selection comparison
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_fluid_selection_comparison(precomputed=None):
+    """Figure for fluid_selection_optimization.run_fluid_selection_comparison():
+    every other figure in this repo silently assumes one fixed working
+    fluid. This is the only figure showing the actual trade-off behind
+    that choice -- COP_electrical (with mdot independently re-optimized
+    per fluid) at two different operating points, ranked, with each
+    fluid's %-COP giveup relative to the pure-water ceiling (not a real
+    hardware option, since Gd corrodes in plain water). New information:
+    justifies core/fluids.py's DEFAULT_FLUID against the alternatives
+    quantitatively rather than by assertion, and shows whether that
+    ranking is robust to a second, higher-flow/lower-mass operating
+    point."""
+    precomputed = precomputed or {}
+    result = precomputed.get('fluid_selection_result')
+    if result is None:
+        result = fluid_selection_optimization.run_fluid_selection_comparison(verbose=False)
+    baseline = {r['fluid']: r for r in result['baseline_rows']}
+    robustness = {r['fluid']: r for r in result['robustness_rows']}
+    order = [r['fluid'] for r in result['baseline_rows']]  # baseline ranking order
+
+    fig, ax = plt.subplots(figsize=(9.5, 6))
+    x = np.arange(len(order))
+    w = 0.35
+    b_cop = [baseline[f]['COP_electrical'] for f in order]
+    r_cop = [robustness[f]['COP_electrical'] for f in order]
+    ax.bar(x - w / 2, b_cop, w, color=COLOR_MAIN, edgecolor='white',
+           label='Baseline point (5kg, 1Hz, 1.5T)')
+    ax.bar(x + w / 2, r_cop, w, color=COLOR_POWER, edgecolor='white',
+           label='Robustness point (2kg, 2Hz, 1.5T)')
+    for xi, f in zip(x, order):
+        ax.annotate(f"\u2212{baseline[f]['pct_below_water']:.1f}%", xy=(xi - w / 2, baseline[f]['COP_electrical']),
+                    xytext=(0, 3), textcoords='offset points', ha='center', fontsize=7, color='#555')
+    ax.set_xticks(x)
+    ax.set_xticklabels([f.replace('_', ' ') for f in order], rotation=15, ha='right')
+    ax.set_ylabel('Electrical COP (mdot re-optimized per fluid)')
+    same = result['same_ranking']
+    ax.set_title('Heat-Transfer Fluid Selection: COP Trade-off\n'
+                 f"(% labels = COP giveup vs. pure water, not a real hardware option; "
+                 f"ranking {'IS' if same else 'is NOT'} robust across both operating points)",
+                 fontsize=10.5)
+    ax.legend(fontsize=8.5)
+    fig.tight_layout()
+    save(fig, 'fig56_fluid_selection_comparison')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 57 — Commercial landscape reality check (model vs. vendor claims)
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_commercial_landscape_check():
+    """Figure for commercial_landscape.py: two vendor-claimed magnetocaloric
+    products (Magnotherm Stellar, Cooltech Applications' data-center unit)
+    now exist in the commercial/trade-press record, alongside this repo's
+    own naming-collision documentation (magnetic-bearing chillers,
+    desiccant wheels, which dominate a plain-text search for "magnetic
+    cooling" but are not magnetocaloric at all). No existing figure shows
+    where this repo's own calibrated model sits relative to those public
+    claims. Left panel: claimed capacity of the two real magnetocaloric
+    commercial systems (Cooltech's own claimed COP range annotated, since
+    Magnotherm's is undisclosed). Right panel: this repo's own model,
+    run at a scaled-up Cooltech-class operating point using the SAME CORE
+    loss-model calibration already flagged elsewhere as not calibrating
+    against this device, against Cooltech's claimed COP range -- the gap
+    is reported honestly, as an already-documented model limitation
+    continuing to show up here, not a new discrepancy."""
+    from core.commercial_landscape import COMMERCIAL_SYSTEMS
+    model = commercial_landscape.model_prediction_at_cooltech_point(verbose=False)
+
+    magneto = [c for c in COMMERCIAL_SYSTEMS if c.is_magnetocaloric]
+    names = [c.name.replace(' Applications', '').replace(' (data-center-oriented unit)',
+                                                           '\n(data-center unit)') for c in magneto]
+    capacities = [c.claimed_capacity_kW or 0.0 for c in magneto]
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11.5, 5.5))
+    bars = ax1.bar(names, capacities, color=[COLOR_MAIN, COLOR_POWER], alpha=0.85, edgecolor='white')
+    for b, c in zip(bars, magneto):
+        label = f'{c.claimed_capacity_kW:.0f} kW'
+        if c.claimed_COP_range:
+            label += f'\nCOP claimed: {c.claimed_COP_range}'
+        else:
+            label += '\nCOP: undisclosed'
+        ax1.annotate(label, xy=(b.get_x() + b.get_width() / 2, b.get_height()), xytext=(0, 4),
+                     textcoords='offset points', ha='center', fontsize=9)
+    ax1.set_ylabel('Claimed cooling capacity [kW]')
+    ax1.set_title('Commercial Magnetocaloric-AMR Claims\n(trade-press/vendor, not independently audited)', fontsize=10.5)
+    ax1.set_ylim(0, max(capacities) * 1.3)
+
+    cooltech = next(c for c in magneto if c.name.startswith('Cooltech'))
+    lo, hi = (float(x) for x in cooltech.claimed_COP_range.split('-'))
+    labels2 = ['Cooltech claimed\n(trade press)', "This repo's model\n(CORE calibration,\nscaled to Cooltech-class point)"]
+    vals2 = [(lo + hi) / 2, model['model_COP_electrical']]
+    colors2 = [COLOR_MAIN, COLOR_POWER]
+    bars2 = ax2.bar(labels2, vals2, color=colors2, alpha=0.85, edgecolor='white', width=0.55)
+    ax2.errorbar([0], [(lo + hi) / 2], yerr=[[(lo + hi) / 2 - lo], [hi - (lo + hi) / 2]],
+                 fmt='none', color='black', capsize=6, linewidth=1.5)
+    # The Cooltech bar's label sits above the ERROR BAR's own top (hi), not
+    # the bar height -- anchoring it at the bar height alone (as the model
+    # bar's label does) would print the text directly on top of the
+    # error-bar's vertical whisker line, since that whisker extends well
+    # above the bar itself.
+    for i, (b, v) in enumerate(zip(bars2, vals2)):
+        anchor_y = hi if i == 0 else v
+        ax2.annotate(f'{v:.2f}', xy=(b.get_x() + b.get_width() / 2, anchor_y), xytext=(0, 6),
+                     textcoords='offset points', ha='center', fontsize=10, fontweight='bold')
+    ax2.set_ylim(0, hi * 1.15)
+    ax2.set_ylabel('Electrical COP')
+    ax2.set_title(f"Model vs. Cooltech's Own Claim\ngap vs. claimed midpoint: "
+                  f"{model['gap_pct_vs_claimed_midpoint']:+.0f}%\n"
+                  f"(already-documented calibration limitation, not a new finding)",
+                  fontsize=10.5)
+
+    fig.suptitle('Commercial Landscape Reality Check: Public Claims vs. This Repo\'s Own Model',
+                 fontsize=12)
+    fig.tight_layout(rect=[0, 0, 1, 0.93])
+    save(fig, 'fig57_commercial_landscape_check')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 58 — System-level cost of the Gd grain-Tc-broadening physics fix
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_calibrated_gd_system_impact(precomputed=None):
+    """Figure for validation_system.run_calibrated_gd_system_level_
+    comparison(): core/mce_material.py's more physically-complete Gd model
+    (GADOLINIUM_CALIBRATED, with fitted grain-Tc broadening) is NOT wired
+    in as this repo's system-wide default -- run_validation()'s own
+    material-level comparison uses it, but amr_cycle.py/optimize.py/
+    cascade.py all still use plain GADOLINIUM. No existing figure shows
+    WHY that's a deliberate choice rather than an oversight: this plots
+    the measured COP/Qc shift, side by side, for every already-calibrating
+    Gd benchmark device -- and calls out the two devices that go from a
+    real, positive Qc under plain Gd to a HARD ZERO under the broadened
+    model at the identical mdot/span/field, which is concrete evidence
+    (not just a performance-cost argument) for keeping the current
+    default."""
+    precomputed = precomputed or {}
+    rows = precomputed.get('calibrated_gd_rows')
+    if rows is None:
+        result = validation_system.run_calibrated_gd_system_level_comparison(verbose=False)
+        rows = result['rows']
+
+    names = [r['device'].replace('_', '\n') for r in rows]
+    names_flat = [r['device'].replace('_', ' ') for r in rows]
+    cop_plain = [r['COP_plain'] for r in rows]
+    cop_cal = [r['COP_calibrated'] for r in rows]
+    zeroed = [r['Qc_calibrated_W'] == 0.0 and r['Qc_plain_W'] > 0 for r in rows]
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5.5))
+    x = np.arange(len(names))
+    w = 0.35
+    ax1.bar(x - w / 2, cop_plain, w, label='Plain GADOLINIUM (current default)',
+            color=COLOR_MAIN, alpha=0.85, edgecolor='white')
+    bars_cal = ax1.bar(x + w / 2, cop_cal, w, label='GADOLINIUM_CALIBRATED (grain-Tc broadened)',
+                        color=COLOR_POWER, alpha=0.85, edgecolor='white')
+    for bar, z in zip(bars_cal, zeroed):
+        if z:
+            bar.set_hatch('xx')
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(names, fontsize=7.5)
+    ax1.set_ylabel('Electrical COP')
+    ax1.set_title('COP: Plain vs. Broadened Gd\n(hatched = device goes to a HARD ZERO under the broadened model)',
+                  fontsize=10)
+    ax1.legend(fontsize=8)
+
+    cop_shift = [r['COP_shift_pct'] for r in rows]
+    colors_shift = [COLOR_POWER if z else COLOR_MAIN for z in zeroed]
+    ax2.barh(names_flat, cop_shift, color=colors_shift, alpha=0.85, edgecolor='white')
+    ax2.axvline(0, color='k', linewidth=0.8)
+    ax2.tick_params(axis='y', labelsize=8)
+    ax2.set_xlabel('COP shift vs. plain GADOLINIUM [%]  (-100% = zeroed out)')
+    n_zeroed = sum(zeroed)
+    ax2.set_title(f'System-Level Impact of the Physics Fix\n'
+                  f'{n_zeroed}/{len(rows)} devices lose ALL cooling capacity at the same mdot/span/field',
+                  fontsize=10)
+
+    fig.suptitle('Why GADOLINIUM_CALIBRATED Is Not the System-Wide Default: the Measured Cost',
+                 fontsize=12)
+    fig.tight_layout(rect=[0, 0, 1, 0.93])
+    save(fig, 'fig58_calibrated_gd_system_impact')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 59 — 1-D transient regenerator model vs. literature no-load spans
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_regenerator_1d_validation(precomputed=None):
+    """Figure for regenerator_1d.validate_against_benchmarks(): the direct,
+    honest validation of the 1-D transient regenerator model (the tool
+    behind fig35/fig53's span-cap discussion) against the cleanest
+    available ground truth -- directly-measured no-load spans, which
+    require no mdot back-calibration. No existing figure shows this
+    model's OWN accuracy; fig35 only shows whether its override recovers
+    a nonzero prediction, not how close that prediction lands, and fig53
+    only uses the older, cruder 0-D structural cap. This plots literature
+    span against both the 1-D model's prediction AND the 0-D model's own
+    structural ceiling for the same three devices, on one axis, making
+    the honest finding directly visible: the 1-D model undershoots on two
+    devices and overshoots on the third -- a genuine, direction-
+    inconsistent error, not a single systematic bias to correct for."""
+    precomputed = precomputed or {}
+    rows = precomputed.get('regenerator_1d_rows')
+    if rows is None:
+        rows = regenerator_1d.validate_against_benchmarks(
+            verbose=False, out_path=str(RESULTS_DIR / 'regenerator_1d_validation.txt'))
+
+    names = [r['device'].replace('_', '\n') for r in rows]
+    names_flat = [r['device'].replace('_', ' ') for r in rows]
+    lit = [r['span_lit_K'] for r in rows]
+    m1d = [r['span_1d_K'] for r in rows]
+    cap0d = [r['cap_0d_K'] for r in rows]
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5.5))
+    x = np.arange(len(names))
+    w = 0.27
+    ax1.bar(x - w, lit, w, label='Literature (directly measured)', color='#2ca02c',
+            alpha=0.85, edgecolor='white')
+    ax1.bar(x, cap0d, w, label='0-D structural cap (2\u00d7dTad_noload)', color=COLOR_MAIN,
+            alpha=0.85, edgecolor='white')
+    ax1.bar(x + w, m1d, w, label='1-D transient model', color=COLOR_POWER,
+            alpha=0.85, edgecolor='white')
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(names, fontsize=7.5)
+    ax1.set_ylabel('No-load span [K]')
+    ax1.set_title('Directly-Measured No-Load Span vs. Both Models', fontsize=10.5)
+    ax1.legend(fontsize=8)
+
+    err_1d = [r['err_1d_pct'] for r in rows]
+    err_0d = [r['err_0d_pct'] for r in rows]
+    w2 = 0.35
+    ax2.barh(x - w2 / 2, err_0d, w2, label='0-D cap error (\u22640% by construction)',
+             color=COLOR_MAIN, alpha=0.85, edgecolor='white')
+    ax2.barh(x + w2 / 2, err_1d, w2, label='1-D model error', color=COLOR_POWER,
+             alpha=0.85, edgecolor='white')
+    ax2.axvline(0, color='k', linewidth=0.8)
+    ax2.set_yticks(x)
+    ax2.set_yticklabels(names_flat, fontsize=8)
+    ax2.set_xlabel('Error vs. literature span [%]')
+    ax2.set_title('Signed Error: the 1-D Model Undershoots on Two Devices,\n'
+                  'Overshoots on the Third — Not a Single Systematic Bias', fontsize=10.5)
+    ax2.legend(fontsize=8)
+
+    fig.suptitle('1-D Transient Regenerator Model vs. Directly-Measured No-Load Spans\n'
+                 '(genuine multi-cycle transient simulation — regenerative amplification is real, '
+                 'but accuracy is direction-inconsistent)', fontsize=11.5)
+    fig.tight_layout(rect=[0, 0, 1, 0.90])
+    save(fig, 'fig59_regenerator_1d_validation')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 60 — Field-dependent Tc-broadening: fit vs. held-out data
+# ══════════════════════════════════════════════════════════════════════════
+
+def plot_field_dependent_broadening_calibration():
+    """Figure for inhomogeneous_broadening.run_field_dependent_broadening_
+    calibration(): a DIFFERENT broadening question from fig27's general
+    Gaussian sigma sweep -- here a specific, literature-motivated
+    field-dependent form (sigma_Tc = k*mu0*H, motivated by Dan'kov et
+    al.'s own qualitative field-broadening discussion) is fit to the same
+    3 calibration points core/validation.py already uses, THEN checked
+    against genuinely held-out data (Dan'kov's own 7.5T point and
+    Giguere et al.'s independent 5T/7T Gd cross-check) that did not feed
+    the fit. No existing figure shows this held-out check. Reported
+    honestly: the least-squares fit converges to k=0 (no broadening
+    preferred), so the "fitted" and "sharp" curves are the same line here
+    -- itself a genuine negative result worth showing rather than hiding
+    behind only a paragraph of text."""
+    from core.inhomogeneous_broadening import (calibrate_field_dependent_broadening,
+                                                 FieldBroadenedMagnetocaloricMaterial)
+    from core.validation import GIGUERE_GD_CROSSCHECK
+
+    fit = calibrate_field_dependent_broadening(verbose=False)
+    k_fit = fit['k_fit_K_per_T']
+    mat_fit = FieldBroadenedMagnetocaloricMaterial(GADOLINIUM, k_fit)
+
+    fitted_rows = fit['rows']
+    fitted_B = [r['mu0H_T'] for r in fitted_rows]
+    fitted_lit = [r['dT_lit_K'] for r in fitted_rows]
+    fitted_sharp = [r['dT_before_K'] for r in fitted_rows]
+    fitted_k = [r['dT_after_K'] for r in fitted_rows]
+
+    B75, dT_lit_75 = 7.5, 15.5
+    H75 = B75 / mu0
+    dT_sharp_75 = float(np.asarray(GADOLINIUM.delta_T_adiabatic(np.array([294.0]), H75)).ravel()[0])
+    dT_k_75 = float(np.asarray(mat_fit.delta_T_adiabatic(np.array([294.0]), H75)).ravel()[0])
+
+    held_out_B = [B75]
+    held_out_lit_mid = [dT_lit_75]
+    held_out_sharp = [dT_sharp_75]
+    held_out_k = [dT_k_75]
+    held_out_labels = ["Dan'kov 7.5T\n(Fig.10 pixel-read)"]
+    for B, ref in sorted(GIGUERE_GD_CROSSCHECK.items()):
+        H = B / mu0
+        lo, hi = ref['range_K']
+        mid = 0.5 * (lo + hi)
+        dT_sharp = float(np.asarray(GADOLINIUM.delta_T_adiabatic(np.array([294.0]), H)).ravel()[0])
+        dT_k = float(np.asarray(mat_fit.delta_T_adiabatic(np.array([294.0]), H)).ravel()[0])
+        held_out_B.append(B)
+        held_out_lit_mid.append(mid)
+        held_out_sharp.append(dT_sharp)
+        held_out_k.append(dT_k)
+        held_out_labels.append(f'Gigu\u00e8re {B:.0f}T\n({lo:.1f}-{hi:.1f}K range)')
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5.5))
+
+    x1 = np.arange(len(fitted_B))
+    w = 0.27
+    ax1.bar(x1 - w, fitted_lit, w, label='Literature (fitted points)', color='#2ca02c',
+            alpha=0.85, edgecolor='white')
+    ax1.bar(x1, fitted_sharp, w, label='Sharp (k=0)', color=COLOR_MAIN, alpha=0.85, edgecolor='white')
+    ax1.bar(x1 + w, fitted_k, w, label=f'Fitted k={k_fit:.3f} K/T', color=COLOR_POWER,
+            alpha=0.85, edgecolor='white')
+    ax1.set_xticks(x1)
+    ax1.set_xticklabels([f'{b:.0f} T' for b in fitted_B])
+    ax1.set_ylabel(r'$\Delta T_{ad}$ [K] at 294K')
+    ax1.set_title(f'3-Point Fit (SAME points core/validation.py uses)\n'
+                  f'k converges to {k_fit:.3f} K/T — essentially no broadening preferred',
+                  fontsize=10)
+    ax1.legend(fontsize=8)
+
+    x2 = np.arange(len(held_out_B))
+    ax2.bar(x2 - w, held_out_lit_mid, w, label='Literature (held-out, NOT in the fit)',
+            color='#2ca02c', alpha=0.85, edgecolor='white')
+    ax2.bar(x2, held_out_sharp, w, label='Sharp (k=0)', color=COLOR_MAIN, alpha=0.85, edgecolor='white')
+    ax2.bar(x2 + w, held_out_k, w, label='Fitted k', color=COLOR_POWER, alpha=0.85, edgecolor='white')
+    ax2.set_xticks(x2)
+    ax2.set_xticklabels(held_out_labels, fontsize=8)
+    ax2.set_ylabel(r'$\Delta T_{ad}$ [K] at 294K')
+    ax2.set_title('Held-Out Cross-Check\n(sharp and fitted-k bars coincide: k\u22480 changes nothing)',
+                  fontsize=10)
+    # Dan'kov (the tallest category) sits at the LEFT, directly under
+    # where a default/'best' legend placement lands, clipping the tops
+    # of its Sharp/Fitted-k bars behind the legend box. Add headroom
+    # above the tallest bar so the legend has clear whitespace above the
+    # data instead of sitting on top of it.
+    ax2.set_ylim(0, max(held_out_lit_mid + held_out_sharp + held_out_k) * 1.3)
+    ax2.legend(fontsize=8)
+
+    # tight_layout(rect=[...]) reserves a FIXED amount of vertical space
+    # for the suptitle regardless of the rect's own top value (confirmed:
+    # axes top tracks rect_top - 0.153 exactly), which left a large blank
+    # band between the suptitle and the subplot titles that bbox_inches=
+    # 'tight' (used by save()) can't crop since it only trims the outer
+    # figure margin, not this internal gap. tight_layout() with no rect,
+    # followed by an explicit subplots_adjust(top=...), sizes the axes
+    # tightly under both title rows with no leftover band.
+    fig.tight_layout()
+    fig.suptitle('Field-Dependent Tc-Broadening (\u03c3_Tc = k\u00b7\u03bc\u2080H): a Literature-Motivated '
+                 'Fit That Converges to No Broadening', fontsize=12, y=0.99)
+    fig.subplots_adjust(top=0.80)
+    save(fig, 'fig60_field_dependent_broadening_calibration')
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FIG 61 — Magnet-geometry Pareto sensitivity: multiseed stability check
+# ══════════════════════════════════════════════════════════════════════════
+
+def _parse_magnet_geometry_multiseed_txt(path):
+    """Fallback parser for the checked-in results/magnet_geometry_
+    multiseed_stability.txt table (used when pymoo is unavailable so this
+    figure doesn't have to re-run 6 NSGA-III optimizations live)."""
+    rows = []
+    started = False
+    with open(path, encoding='utf-8', errors='replace') as f:
+        for line in f:
+            s = line.strip()
+            if s.startswith('seed') and 'mean_FLAT_T' in s:
+                started = True
+                continue
+            if not started:
+                continue
+            if s.startswith('---') or not s:
+                if rows:
+                    break
+                continue
+            parts = s.split()
+            if len(parts) == 5:
+                try:
+                    seed, flat, geom, ff, fg = parts
+                    rows.append({'seed': int(seed), 'mean_flat_T': float(flat),
+                                 'mean_geometric_T': float(geom),
+                                 'front_size_flat': int(ff), 'front_size_geometric': int(fg)})
+                except ValueError:
+                    break
+    return rows
+
+
+def plot_magnet_geometry_multiseed_stability(precomputed=None):
+    """Figure for magnet_geometry.run_magnet_geometry_multiseed_stability_
+    check(): fig34 shows the FLAT-vs-GEOMETRIC magnet-mass Pareto
+    comparison at a single seed/reduced NSGA-III setting. This is the
+    direct robustness follow-up that single-seed result explicitly
+    invited (Paper-Mining Pass review item 4): does the "geometric cost
+    pulls the mean field down" direction hold at production pop_size/
+    n_gen settings across multiple independent seeds? The honest answer,
+    plotted directly rather than left in a text report: NO -- at least
+    one seed's GEOMETRIC run has a HIGHER mean field than its own FLAT
+    run, the same kind of seed-sensitivity fig49 already found for the
+    main material/geometry Pareto front. This is new information no
+    existing figure shows: it is the specific reliability check on
+    fig34's own headline claim, not a repeat of fig34 itself.
+
+    precomputed, if given, may supply 'magnet_geometry_multiseed_result'
+    (the dict returned by run_magnet_geometry_multiseed_stability_check())
+    to reuse an already-computed run instead of re-running 6 NSGA-III
+    optimizations (production pop_size=40/n_gen=25 settings, ~1 minute)
+    a second time. When called standalone with pymoo unavailable, this
+    falls back to the pre-computed results/magnet_geometry_multiseed_
+    stability.txt table checked into the repo."""
+    precomputed = precomputed or {}
+    result = precomputed.get('magnet_geometry_multiseed_result')
+    if result is not None:
+        per_seed = result['per_seed']
+    elif HAVE_PYMOO:
+        result = magnet_geometry.run_magnet_geometry_multiseed_stability_check(
+            out_path=None)
+        per_seed = result['per_seed']
+    else:
+        print("  [pymoo unavailable — falling back to pre-computed "
+              "results/magnet_geometry_multiseed_stability.txt]")
+        per_seed = _parse_magnet_geometry_multiseed_txt(
+            RESULTS_DIR / 'magnet_geometry_multiseed_stability.txt')
+
+    seeds = [s['seed'] for s in per_seed]
+    mean_flat = [s['mean_flat_T'] for s in per_seed]
+    mean_geom = [s['mean_geometric_T'] for s in per_seed]
+    reversed_seeds = [g > f for f, g in zip(mean_flat, mean_geom)]
+
+    fig, ax = plt.subplots(figsize=(8, 5.5))
+    x = np.arange(len(seeds))
+    w = 0.35
+    ax.bar(x - w / 2, mean_flat, w, label='FLAT (previous cost term)', color=COLOR_MAIN,
+           alpha=0.85, edgecolor='white')
+    bars_geom = ax.bar(x + w / 2, mean_geom, w, label='GEOMETRIC (Halbach magnet-mass cost)',
+                        color=COLOR_POWER, alpha=0.85, edgecolor='white')
+    for bar, rev in zip(bars_geom, reversed_seeds):
+        if rev:
+            bar.set_hatch('//')
+    ax.set_xticks(x)
+    ax.set_xticklabels([f'seed {s}' for s in seeds])
+    ax.set_ylabel('Merged Pareto front mean mu0H_max [T]')
+    n_rev = sum(reversed_seeds)
+    ax.set_title('Does "Geometric Cost Pulls Mean Field Down" Hold at Production Settings?\n'
+                 f'{n_rev}/{len(seeds)} seed(s) reverse the expected direction '
+                 '(hatched bar = GEOMETRIC mean field HIGHER than FLAT)',
+                 fontsize=11)
+    # The default 'best' location sat directly on top of the tallest bar
+    # (seed 2's GEOMETRIC bar came closest to the field ceiling), clipping
+    # its hatching -- add headroom above the tallest bar so the legend has
+    # clear whitespace to sit in instead of overlapping data.
+    ax.set_ylim(0, max(mean_flat + mean_geom) * 1.22)
+    ax.legend(fontsize=9)
+    fig.tight_layout()
+    save(fig, 'fig61_magnet_geometry_multiseed_stability')
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # Generate all figures
 # ══════════════════════════════════════════════════════════════════════════
 
-def run_all(precomputed=None):
-    """Generates all 52 figures.
+# ══════════════════════════════════════════════════════════════════════════
+# Generate all / selected figures
+# ══════════════════════════════════════════════════════════════════════════
 
-    precomputed, if given, is a dict that may carry results already
-    computed earlier in the SAME pipeline run (main.py steps
-    2/2f/4/7/7b/7c/8d/9/9b/11/11b/11d):
+def _build_figure_registry(precomputed=None):
+    """Builds the full (label, fn) figure registry used by both run_all()
+    (which runs every entry) and run_figures()/the CLI (which runs a
+    filtered subset). Kept as its own function so a specific figure can be
+    regenerated -- e.g. after a fix, or just to check one result -- without
+    re-running the other 60, most of which are cheap but a handful of
+    which (fig18/33/34/49/61's NSGA-III sweeps) are not.
+
+    precomputed is a dict that may carry results already computed earlier
+    in the SAME pipeline run (main.py steps 2/2f/4/7/7b/7c/8d/9/9b/11/
+    11b/11d), reused instead of recomputing them:
       - 'system_validation_results' (step 2)
       - 'baseline_rows' (step 4)
       - 'sobol_const_Si', 'sobol_state_Si' (step 9 / step 9b)
@@ -2696,28 +3406,15 @@ def run_all(precomputed=None):
       - 'hysteresis_result' (step 11b)
       - 'magnet_geometry_result' (step 11d)
       - 'override_check_result' (step 2f)
-    Figures 8, 14, 16, 18, 19, 20, 21, 25, 26, 33, 34, 35, and 47 reuse
-    whichever of these are supplied instead of recomputing them, which
-    otherwise adds several minutes of redundant work (mostly fig21's
-    graded-cascade sweep, fig25's Astronautics validation, fig33/fig34's
-    NSGA-III A/B comparisons, and fig35's multi-device 1-D regenerator
-    override check -- each a nontrivial computation, on top of the
-    identical work already performed earlier in the same run). When
+      - 'fluid_selection_result' (fig56)
+      - 'calibrated_gd_rows' (fig58)
+      - 'regenerator_1d_rows' (fig59)
+      - 'magnet_geometry_multiseed_result' (fig61)
+    Figures 8, 14, 16, 18, 19, 20, 21, 25, 26, 33, 34, 35, 47, 56, 58, 59,
+    and 61 reuse whichever of these are supplied instead of recomputing
+    them, which otherwise adds several minutes of redundant work. When
     called standalone (`python plots.py`, precomputed=None) every figure
-    still computes its own data fresh from core/, exactly as before
-    (fig35 falls back to the SAME bounded max_devices=3 check main.py
-    itself runs by default, not the full every-flagged-device version).
-
-    Figures 46-52 cover the last round of previously-unplotted analysis
-    modules: cross-technology caloric comparison vs. VCC (46), annual
-    water-usage/WUE comparison (47), Monte Carlo calibration-uncertainty
-    band on COP_electrical (48), NSGA-III Pareto-front seed-to-seed
-    stability (49, reduced pop_size/n_gen for runtime), the two-search
-    regime-crossover null result (50), the Ames Lab heat-pump
-    architecture check (51), and the Hypereg parallel-hydraulic
-    pumping-power sensitivity (52).
-    """
-    print("Generating all figures...\n")
+    still computes its own data fresh from core/, exactly as before."""
     precomputed = precomputed or {}
 
     figure_fns = [
@@ -2808,8 +3505,33 @@ def run_all(precomputed=None):
          plot_heat_pump_validation),
         ("52 Hypereg parallel-hydraulic pumping-power sensitivity",
          plot_hypereg_analysis),
+        ("53 Regenerative-amplification gap across the full benchmark corpus",
+         plot_regenerative_amplification_gap),
+        ("54 Hybrid solid-state regenerator (HMR) vs. VCC, ideal -> real",
+         plot_hmr_vs_vcc_loss_funnel),
+        ("55 Annualized, climate-weighted COP comparison",
+         plot_annualized_climate_comparison),
+        ("56 Heat-transfer fluid selection comparison",
+         lambda: plot_fluid_selection_comparison(precomputed)),
+        ("57 Commercial landscape reality check",
+         plot_commercial_landscape_check),
+        ("58 System-level cost of the Gd grain-Tc-broadening physics fix",
+         lambda: plot_calibrated_gd_system_impact(precomputed)),
+        ("59 1-D transient regenerator model vs. literature no-load spans",
+         lambda: plot_regenerator_1d_validation(precomputed)),
+        ("60 Field-dependent Tc-broadening: fit vs. held-out data",
+         plot_field_dependent_broadening_calibration),
+        ("61 Magnet-geometry Pareto sensitivity: multiseed stability",
+         lambda: plot_magnet_geometry_multiseed_stability(precomputed)),
     ]
 
+    return figure_fns
+
+
+def _execute_figures(figure_fns):
+    """Runs each (label, fn) pair in figure_fns, printing progress and
+    catching exceptions per-figure so one failure doesn't abort the rest.
+    Returns the list of labels that failed."""
     failures = []
     for label, fn in figure_fns:
         print(f"[{label}]")
@@ -2819,8 +3541,11 @@ def run_all(precomputed=None):
             print(f"  !!! FAILED: {label}: {exc}")
             failures.append(label)
         print()
+    return failures
 
-    print(f"All figures written to: {FIG_DIR.resolve()}")
+
+def _report_failures(failures):
+    print(f"Figures written to: {FIG_DIR.resolve()}")
     if failures:
         print(f"\n{len(failures)} figure(s) failed:")
         for label in failures:
@@ -2831,5 +3556,159 @@ def run_all(precomputed=None):
         print("Note: pymoo not installed — fig18 used pre-computed results/pareto_front.csv.")
 
 
+def _figure_number(label):
+    """Extracts the leading figure number from a figure_fns label, e.g.
+    '07 AMR energy balance vs. span' -> 7. Returns None if the label
+    doesn't start with a number (shouldn't happen for any entry in
+    _build_figure_registry(), but handled defensively anyway)."""
+    m = re.match(r'\s*0*(\d+)', label)
+    return int(m.group(1)) if m else None
+
+
+def list_available_figures(precomputed=None):
+    """Prints every figure's number and label, one per line, in registry
+    order -- what `python plots.py --list` shows. Useful for finding the
+    right number/substring to pass to run_figures() or the CLI without
+    reading this whole file."""
+    for label, _ in _build_figure_registry(precomputed):
+        print(f"  {label}")
+
+
+def _resolve_selection(tokens, figure_fns):
+    """Resolves user-supplied tokens against figure_fns, matching each
+    token against, in order of precedence:
+      1. an inclusive numeric range, 'N-M' (e.g. '53-56')
+      2. a single figure number, with or without a 'fig' prefix or
+         leading zeros ('53', 'fig53', '053')
+      3. a case-insensitive substring of the figure's own label (e.g.
+         'hysteresis' matches every figure whose label mentions it)
+    Returns the matching (label, fn) pairs in the registry's own order,
+    de-duplicated (a figure matched by two different tokens is only run
+    once). Raises ValueError naming any token that matched nothing, so a
+    typo doesn't just silently generate zero figures."""
+    numbered = [(_figure_number(label), label, fn) for label, fn in figure_fns]
+    selected_indices = []
+    unmatched = []
+
+    def _add(i):
+        if i not in selected_indices:
+            selected_indices.append(i)
+
+    for token in tokens:
+        t = str(token).strip()
+        matched = False
+
+        range_match = re.match(r'^(\d+)\s*-\s*(\d+)$', t)
+        if range_match:
+            lo, hi = int(range_match.group(1)), int(range_match.group(2))
+            for i, (num, _label, _fn) in enumerate(numbered):
+                if num is not None and lo <= num <= hi:
+                    _add(i)
+                    matched = True
+            if not matched:
+                unmatched.append(token)
+            continue
+
+        num_match = re.match(r'^(?:fig)?0*(\d+)$', t, re.IGNORECASE)
+        if num_match:
+            want = int(num_match.group(1))
+            for i, (num, _label, _fn) in enumerate(numbered):
+                if num == want:
+                    _add(i)
+                    matched = True
+                    break
+            if not matched:
+                unmatched.append(token)
+            continue
+
+        t_lower = t.lower()
+        for i, (_num, label, _fn) in enumerate(numbered):
+            if t_lower in label.lower():
+                _add(i)
+                matched = True
+        if not matched:
+            unmatched.append(token)
+
+    if unmatched:
+        raise ValueError(
+            f"No figure matched: {', '.join(repr(u) for u in unmatched)}. "
+            f"Run with --list to see every available figure number/label."
+        )
+    return [(numbered[i][1], numbered[i][2]) for i in selected_indices]
+
+
+def run_figures(selection, precomputed=None):
+    """Generates only the requested figure(s) instead of the full
+    run_all() sweep -- useful for regenerating one figure after a fix, or
+    checking a single result, without waiting on the NSGA-III-backed
+    figures (18/33/34/49/61) that dominate a full run's time.
+
+    `selection` is a list/tuple of tokens; each one may be:
+      - a figure number, as an int or string, with or without a 'fig'
+        prefix or leading zeros: 53, '53', 'fig53', '053'
+      - an inclusive number range: '53-56'
+      - a case-insensitive substring of a figure's own label, e.g.
+        'hysteresis' or 'commercial'
+    A single bare token (not in a list) is also accepted for convenience,
+    e.g. run_figures(53) or run_figures('hysteresis').
+
+    precomputed works exactly as in run_all() -- pass the same dict to
+    reuse already-computed results for whichever selected figures accept
+    it. Returns the list of any selected figure labels that failed (same
+    convention as run_all()); an unresolvable selection raises ValueError
+    up front, before anything is computed.
+    """
+    if isinstance(selection, (str, int)):
+        selection = [selection]
+    figure_fns = _build_figure_registry(precomputed)
+    chosen = _resolve_selection(selection, figure_fns)
+    print(f"Generating {len(chosen)} selected figure(s):")
+    for label, _fn in chosen:
+        print(f"  [{label}]")
+    print()
+    failures = _execute_figures(chosen)
+    _report_failures(failures)
+    return failures
+
+
+def run_all(precomputed=None):
+    """Generates all 61 figures. See _build_figure_registry()'s docstring
+    for what may be passed via `precomputed`. To generate only some of
+    the figures, use run_figures(selection, precomputed) instead, or run
+    `python plots.py <figure(s)>` from the command line."""
+    print("Generating all figures...\n")
+    figure_fns = _build_figure_registry(precomputed)
+    failures = _execute_figures(figure_fns)
+    _report_failures(failures)
+    return failures
+
+
 if __name__ == '__main__':
-    run_all()
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Generate magcool-dc figures. With no arguments, generates the "
+                    "full figure set (equivalent to calling run_all()). Pass one or "
+                    "more figure numbers, ranges, or name substrings to generate only "
+                    "those instead.")
+    parser.add_argument(
+        'figures', nargs='*',
+        help="Figure(s) to generate, e.g. 53, fig53, 53-56, or a label substring "
+             "like hysteresis. Space-separated for multiple. Omit to generate every "
+             "figure.")
+    parser.add_argument(
+        '--list', action='store_true',
+        help="List every available figure's number and label, then exit without "
+             "generating anything.")
+    args = parser.parse_args()
+
+    if args.list:
+        list_available_figures()
+    elif args.figures:
+        try:
+            run_figures(args.figures)
+        except ValueError as exc:
+            print(f"Error: {exc}")
+            sys.exit(1)
+    else:
+        run_all()
