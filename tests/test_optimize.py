@@ -15,7 +15,8 @@ from core.optimize import run_optimization
 
 def test_optimizer_finds_nondegenerate_designs(tmp_path):
     rows = run_optimization(pop_size=20, n_gen=10, seed=1,
-                             out_csv=str(tmp_path / "pareto_front.csv"))
+                             out_csv=str(tmp_path / "pareto_front.csv"),
+                             per_material_out_dir=str(tmp_path / "pareto_front_by_material"))
     assert len(rows) > 1, "optimizer collapsed to a single design"
     assert any(r["Qc_W"] > 0 for r in rows), "no design has nonzero cooling capacity"
     assert any(r["COP_electrical"] > 1.0 for r in rows), "no design has a sane COP"
