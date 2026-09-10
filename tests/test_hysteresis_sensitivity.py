@@ -42,7 +42,10 @@ def test_run_hysteresis_sensitivity_restores_original_values(tmp_path):
     leaking mutated global state into unrelated later code."""
     before = _hysteresis_snapshot()
     out_path = str(tmp_path / "hysteresis_sensitivity.txt")
-    run_hysteresis_sensitivity(pop_size=_POP, n_gen=_GEN, seed=1, out_path=out_path)
+    run_hysteresis_sensitivity(
+        pop_size=_POP, n_gen=_GEN, seed=1, out_path=out_path,
+        out_csv_on=str(tmp_path / "pareto_front_hysteresis_on.csv"),
+        out_csv_off=str(tmp_path / "pareto_front_hysteresis_off.csv"))
     after = _hysteresis_snapshot()
     assert before == after
     for v in before.values():
@@ -69,7 +72,10 @@ def test_run_hysteresis_sensitivity_restores_values_even_on_exception(monkeypatc
 
     out_path = str(tmp_path / "hysteresis_sensitivity.txt")
     with pytest.raises(RuntimeError, match="simulated failure"):
-        run_hysteresis_sensitivity(pop_size=_POP, n_gen=_GEN, seed=1, out_path=out_path)
+        run_hysteresis_sensitivity(
+            pop_size=_POP, n_gen=_GEN, seed=1, out_path=out_path,
+            out_csv_on=str(tmp_path / "pareto_front_hysteresis_on.csv"),
+            out_csv_off=str(tmp_path / "pareto_front_hysteresis_off.csv"))
 
     after = _hysteresis_snapshot()
     assert before == after
@@ -77,7 +83,10 @@ def test_run_hysteresis_sensitivity_restores_values_even_on_exception(monkeypatc
 
 def test_run_hysteresis_sensitivity_writes_output_file(tmp_path):
     out_path = str(tmp_path / "sub" / "hysteresis_sensitivity.txt")
-    result = run_hysteresis_sensitivity(pop_size=_POP, n_gen=_GEN, seed=1, out_path=out_path)
+    result = run_hysteresis_sensitivity(
+        pop_size=_POP, n_gen=_GEN, seed=1, out_path=out_path,
+        out_csv_on=str(tmp_path / "sub" / "pareto_front_hysteresis_on.csv"),
+        out_csv_off=str(tmp_path / "sub" / "pareto_front_hysteresis_off.csv"))
     assert os.path.isfile(out_path)
     with open(out_path) as f:
         content = f.read()
