@@ -83,21 +83,36 @@ def liquid_cooling_cop(Tc, Th, economizer_hours_fraction=0.6,
 # conventional (vapor-compression) gas cycle.
 # ---------------------------------------------------------------------------
 #
-# HONESTY FLAG (book access -- same tier as this module's other flags). The
-# ROADMAP.md plan's stated data sources were Tishin & Spichkin
-# (2003) Sect. 11.1 (passive magnetic regenerators used inside conventional
-# gas-cycle refrigerators), Sect. 11.2.3 (magnetically-augmented gas
-# regenerators) and Sect. 11.2.4 (hybrid magnetic working bodies). As
-# already documented in this project's ROADMAP.md entry, this
-# project's copy of Tishin & Spichkin (2003) is a scanned, image-only PDF
-# with NO extractable text layer (confirmed again for this pass) -- none of
-# those sections' own equations, reported effectiveness-vs-alignment curves,
-# or COP figures could be digitized. What is implemented below is instead,
-# exactly as the plan itself anticipated ("this doesn't need new
-# physics or new benchmark data -- it recombines your existing
+# HONESTY FLAG (book access -- same tier as this module's other flags).
+# UPDATE: corrected after direct re-check. Earlier passes stated this
+# project's copy of Tishin & Spichkin (2003) was "image-only, non-
+# extractable" and therefore unreadable. That was an incomplete framing:
+# pdfplumber's direct text-layer extraction does correctly return zero
+# characters (the scan genuinely has no embedded text layer), but the
+# pages themselves ARE legible, and running OCR (tesseract) on them
+# recovers real, readable text. OCR has now actually been run -- not
+# assumed -- on Sect. 11.1 (passive magnetic regenerators), Sect. 11.2
+# general consideration (equations 11.2-11.20: Carnot/AMR-cycle entropy
+# balance, N_tu-effectiveness relations), Sect. 11.2.3 (magnetically
+# augmented regenerators in gas refrigerators, Jeong & Smith 1994 /
+# Yayama et al 2000) and Sect. 11.2.4 (hybrid magnetic working bodies,
+# Smaili & Chahine 1996/1997). None of that content is a digitized
+# effectiveness-vs-alignment curve or a COP-vs-augmentation figure for
+# THIS repo's specific "passive regenerator boosts a vapor-compression
+# cycle's internal heat exchanger" framing -- the book's own passive-
+# regenerator material is about cryocooler regenerators (Gd, ErNi,
+# rare-earth intermetallics at 4-80K), not room-temperature VCC systems,
+# so it still doesn't supply a digitized effectiveness/COP curve for
+# this module's own use case. What is implemented below therefore
+# remains, exactly as the plan itself anticipated ("this doesn't need
+# new physics or new benchmark data -- it recombines your existing
 # mce_material.py entropy/heat-capacity curves with your existing
-# baseline_cooling.py gas-cycle correlations in a new way"): a reuse of data
-# this repo already computes, not a reproduction of Tishin's own numbers.
+# baseline_cooling.py gas-cycle correlations in a new way"): a reuse of
+# data this repo already computes, not a reproduction of Tishin's own
+# numbers. See core/passive_regenerator_analysis.py's own docstring for
+# the design-guideline content (Barclay & Sarangi 1984 regenerator
+# geometry/porosity/particle-diameter trade-off) that the OCR pass DID
+# recover and that IS now used, additively, elsewhere in this repo.
 #
 # Physical picture. A "passive" magnetic regenerator is not actively
 # magnetized/demagnetized in step with the flow (that would make it an AMR,
@@ -292,9 +307,11 @@ def augmented_regenerator_cop(base_cop, passive_regenerator_material, T_range,
 # Chapter 10 is simply not present in the file this repo has access to.
 # Tishin & Spichkin (2003) does not cover elastocalorics at all (the book
 # predates the field's modern development; no elastocaloric chapter appears
-# in its own table of contents) and is separately an image-only scan with
-# no text layer besides (already re-confirmed in this module's other
-# honesty flags). So, exactly as phase_plan.md's own entry
+# in its own table of contents), so this gap is unrelated to the book's
+# scan/text-layer status -- see this module's other honesty flags (now
+# updated) for the fact that OCR has since made the rest of the book's
+# relevant chapters readable; it simply doesn't contain elastocaloric
+# content to read. So, exactly as phase_plan.md's own entry
 # anticipated ("using published elastocaloric COP/exergy-efficiency
 # figures as a static reference point"), the values below come from
 # external, independently-published, peer-reviewed literature located by

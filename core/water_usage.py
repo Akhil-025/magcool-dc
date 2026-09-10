@@ -67,8 +67,19 @@ rejection loop depending on design choice; a dry/air-cooled heat
 rejection loop, not the AMR unit itself, is what eliminates the water
 term, and either VCC or AMR could in principle be paired with either
 heat-rejection strategy).
+
+India addition (docs/LIMITATIONS.md Sect. 4 "India techno-economics" gap):
+real, IMD-sourced monthly dry-bulb temperature and relative-humidity
+normals for Delhi and Mumbai, converted to wet-bulb temperature via
+Stull (2011), are provided below (india_wet_bulb_profile() /
+compare_india_wet_bulb_profiles()) as informational climate context.
+These are NOT wired into the WUE/liters-of-water calculations above --
+see the "HONEST SCOPE" note near those functions for why a precise
+India-specific WUE figure is not currently defensible from what this
+repo has.
 """
 
+import math
 from dataclasses import dataclass
 from typing import List
 
@@ -239,6 +250,108 @@ def write_water_usage_report(path="results/water_usage_comparison.txt",
         f.write(text)
     print(text)
     print(f"\nWrote {path}")
+
+
+# ---------------------------------------------------------------------------
+# India-specific wet-bulb context (Sect. 4's "India techno-economics" gap in
+# docs/LIMITATIONS.md). ADDITIVE, informational only -- see the "HONEST
+# SCOPE" note below for exactly what this does and does NOT claim.
+# ---------------------------------------------------------------------------
+#
+# Real monthly average dry-bulb temperature (deg C) and relative humidity
+# (%), same two NBC 2016 climate-zone stations core/pue_annualized.py
+# already uses for its INDIA_COMPOSITE_DELHI_CLIMATE_PROFILE /
+# INDIA_WARM_HUMID_MUMBAI_CLIMATE_PROFILE (temperature from JMA/Tokyo
+# Climate Center WMO normals for the same two IMD stations). Humidity
+# normals are not published on those same JMA pages, so RH here is from a
+# second IMD-sourced normals table (indianclimate.com, "Relative Humidity
+# Data of Delhi"/"...of Mumbai", average-by-month columns) -- flagged
+# explicitly as a second source, not silently merged as if from the same
+# page.
+INDIA_DELHI_MONTHLY_TEMP_RH = [
+    # (month, T_dry_bulb_C, RH_percent)
+    ("Jan", 13.9, 75.9), ("Feb", 17.6, 66.6), ("Mar", 22.9, 52.5),
+    ("Apr", 29.1, 44.4), ("May", 32.7, 41.7), ("Jun", 33.3, 56.6),
+    ("Jul", 31.5, 79.6), ("Aug", 30.4, 81.8), ("Sep", 29.6, 82.0),
+    ("Oct", 26.2, 70.0), ("Nov", 20.5, 70.3), ("Dec", 15.6, 76.5),
+]
+
+INDIA_MUMBAI_MONTHLY_TEMP_RH = [
+    ("Jan", 24.6, 68.6), ("Feb", 25.3, 65.5), ("Mar", 27.6, 65.7),
+    ("Apr", 28.8, 73.8), ("May", 30.2, 76.4), ("Jun", 29.3, 82.9),
+    ("Jul", 27.9, 89.3), ("Aug", 27.8, 89.0), ("Sep", 27.9, 82.1),
+    ("Oct", 29.0, 72.3), ("Nov", 28.0, 69.0), ("Dec", 25.8, 62.5),
+]
+
+
+def wet_bulb_temperature_C(T_dry_bulb_C, RH_percent):
+    """Wet-bulb temperature (deg C) from dry-bulb temperature and relative
+    humidity, via Stull's (2011) empirical approximation (R Stull, 'Wet-
+    Bulb Temperature from Relative Humidity and Air Temperature', J. Appl.
+    Meteor. Climatol. 50(11), 2267-2269). Valid over roughly -20 to 50 C,
+    5-99% RH, with typical error <1 C (worse, up to ~1 C, near the extreme
+    edges of that range) -- adequate for the directional, monthly-normal
+    comparison this function is used for, NOT a substitute for a real
+    psychrometric chart or ASHRAE humid-air calculation in a design
+    context."""
+    T, RH = T_dry_bulb_C, RH_percent
+    return (T * math.atan(0.151977 * math.sqrt(RH + 8.313659))
+            + math.atan(T + RH) - math.atan(RH - 1.676331)
+            + 0.00391838 * RH ** 1.5 * math.atan(0.023101 * RH)
+            - 4.686035)
+
+
+@dataclass
+class WetBulbMonth:
+    month: str
+    T_dry_bulb_C: float
+    RH_percent: float
+    T_wet_bulb_C: float
+
+
+def india_wet_bulb_profile(monthly_temp_rh):
+    """Applies wet_bulb_temperature_C() to a (month, T_dry_bulb_C,
+    RH_percent) table such as INDIA_DELHI_MONTHLY_TEMP_RH /
+    INDIA_MUMBAI_MONTHLY_TEMP_RH, returning a list of WetBulbMonth."""
+    return [WetBulbMonth(m, t, rh, wet_bulb_temperature_C(t, rh))
+            for m, t, rh in monthly_temp_rh]
+
+
+def compare_india_wet_bulb_profiles():
+    """Returns {"Delhi": [...], "Mumbai": [...]} of WetBulbMonth lists, one
+    per NBC 2016 climate zone this repo already models in
+    core/pue_annualized.py. Purely informational context (see module-level
+    HONEST SCOPE note below): this does NOT feed into
+    WUE_L_PER_KWH_BY_REJECTION_CLASS or any liters-of-water figure this
+    module reports -- it is here so a reader (or future work item) has the
+    real wet-bulb numbers available, without this repo overclaiming a
+    validated wet-bulb-to-WUE conversion it does not have."""
+    return {
+        "Delhi (NBC Composite)": india_wet_bulb_profile(INDIA_DELHI_MONTHLY_TEMP_RH),
+        "Mumbai (NBC Warm-Humid)": india_wet_bulb_profile(INDIA_MUMBAI_MONTHLY_TEMP_RH),
+    }
+
+
+# HONEST SCOPE of the India wet-bulb addition above: a prior pass described
+# this as though evaporative water use "scales with wet-bulb temperature"
+# in a way that could be wired directly into WUE_L_PER_KWH_BY_REJECTION_CLASS
+# as an India-specific multiplier. That overstates what is actually
+# defensible without a real cooling-tower makeup-water model. To first
+# order, a cooling tower's EVAPORATION loss for a given rejected heat load
+# is set by the latent heat of vaporization (~constant), not by wet bulb --
+# wet bulb instead governs the tower's approach/size and fan energy, and
+# blowdown (the other major makeup-water term) is set by feedwater cycles
+# of concentration, not climate. CTI/ASHRAE cooling-tower literature does
+# document that hot, humid climates increase tower sizing and total
+# operating hours at high load, which can raise ANNUAL water use somewhat,
+# but this repo does not have a validated coefficient for that effect. So:
+# india_wet_bulb_profile() / compare_india_wet_bulb_profiles() report real,
+# sourced wet-bulb context for Delhi and Mumbai (useful for future
+# cooling-tower or economizer-window work) -- they are NOT wired into
+# annual_water_liters(), compare_water_usage(), or
+# write_water_usage_report() above, and no India-specific WUE_L_PER_KWH
+# figure is claimed here. That remains an open item, stated as such
+# rather than closed with an unsupported coefficient.
 
 
 if __name__ == "__main__":

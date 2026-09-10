@@ -10,17 +10,42 @@ span=10K -- see main.py's REPRESENTATIVE_SPAN_K / step 4).
 
 Scope and honesty flag
 -----------------------
-See core/baseline_cooling.py's own docstring block for the full
-book-access honesty flag (Tishin & Spichkin (2003) remains an
-image-only, non-extractable-text PDF in this project's corpus -- same
-finding as ) and for why the effectiveness-to-COP mapping used
-here is an illustrative, literature-range-anchored ceiling rather than a
-fitted or digitized coefficient. This module is a design-exploration /
-comparison tool, not a validated benchmark-backed result -- the same
-disposition (thermal diodes) and (magnetocaloric
-fluids) gave their own new modules, for the same underlying reason (no
-benchmark device for this specific configuration exists in
-data/amr_experimental_benchmarks.csv, which is solid-AMR-only).
+UPDATE: corrected after direct re-check. See core/baseline_cooling.py's
+own docstring block for the full book-access honesty flag. Tishin &
+Spichkin (2003) has no embedded text layer (pdfplumber extraction still
+returns 0 characters -- that part was correct), but OCR (tesseract) has
+now actually been run across Sect. 11.1 (passive magnetic regenerators,
+book pp.359-374: rare-earth intermetallics and rare-earth-metal
+regenerator materials, Table 11.1 peak heat-capacity data) and Sect.
+11.2's general-consideration equations (pp.374-390: Carnot/AMR-cycle
+entropy balance eq. 11.2-11.20, N_tu-effectiveness relations, and
+Barclay & Sarangi's (1984) regenerator-geometry design guidance -- see
+regenerator_specific_area_design_point() below for what that guidance
+actually was and how it's used here).
+
+A specific earlier claim is corrected here directly: a prior pass
+asserted this OCR would recover "a real penetration-depth formula
+(eq. 11.1)" for the passive-regenerator section. That formula does not
+exist in this book -- checked directly by OCR-ing and text-searching
+the entirety of chapter 11 (pp.359-418, both the passive-regenerator
+and active-refrigeration sections) for "penetration depth", "diffusion
+depth" and "thermal wave" with zero matches. Equation (11.1) itself is
+an unlabelled Carnot-cycle heat-absorption relation (Q_c = T_cold *
+Delta S_m), not a penetration-depth formula. No penetration-depth
+function has been added to this repo as a result -- adding one would
+have meant fabricating it. What the OCR pass DID recover and IS usable
+is the real regenerator design guidance now in
+regenerator_specific_area_design_point(): the porosity/particle-
+diameter/specific-area/pressure-drop trade-off Barclay & Sarangi (1984)
+worked through for packed-bed, tube, and plate regenerator geometries.
+
+This module remains a design-exploration / comparison tool, not a
+validated benchmark-backed result -- the same disposition
+core/thermal_diode_analysis.py (thermal diodes) and
+core/fluid_mce_analysis.py (magnetocaloric fluids) gave their own new
+modules, for the same underlying reason (no benchmark device for this
+specific configuration exists in data/amr_experimental_benchmarks.csv,
+which is solid-AMR-only).
 
 Only core/mce_material.py's second-order (mean-field/Brillouin)
 MagnetocaloricMaterial instances are used -- GADOLINIUM, GD5SI2GE2 (its
@@ -34,6 +59,7 @@ meaningful "passive regenerator" candidates under this specific
 mechanism and are deliberately excluded rather than silently coerced.
 """
 
+from dataclasses import dataclass
 from core.mce_material import GADOLINIUM, GD5SI2GE2, LACAMNO3
 from core.baseline_cooling import (
     vapor_compression_cop, augmented_regenerator_cop,
@@ -108,7 +134,10 @@ def run_passive_regenerator_analysis(out_path="results/passive_regenerator_analy
         print("PHASE 21: passive/hybrid magnetic regenerator augmentation of a")
         print("conventional (vapor-compression) gas cycle -- see")
         print("core/baseline_cooling.py's own docstring block for the honesty")
-        print("flag (Tishin Ch.11 not digitizable -- image-only PDF, no text layer)")
+        print("flag (Tishin Ch.11 OCR'd -- passive-regenerator materials and design")
+        print("guidance recovered; no digitized effectiveness/COP curve for THIS")
+        print("module's VCC-augmentation use case, and no penetration-depth formula")
+        print("exists in the source -- see this module's own docstring)")
         print("and for why the effectiveness-to-COP mapping is an illustrative,")
         print("literature-range-anchored ceiling rather than a fitted coefficient.")
         print("=" * 90)
@@ -148,6 +177,110 @@ def run_passive_regenerator_analysis(out_path="results/passive_regenerator_analy
         with open(out_path, "w") as f:
             f.write(text)
     return {"base": base, "candidate_results": results, "span_sweep": sweep_rows}
+
+
+# ---------------------------------------------------------------------------
+# Regenerator specific-area / particle-diameter design guidance -- Barclay &
+# Sarangi (1984), as reported in Tishin & Spichkin (2003) Sect. 11.2.2
+# (book p.373), recovered by the OCR pass described in this module's own
+# docstring above. This is real, citable design content (NOT a penetration-
+# depth formula -- see the docstring's correction of that earlier claim),
+# additive and independently testable, same pattern as the tariff work in
+# core/economics.py.
+# ---------------------------------------------------------------------------
+
+# Typical overall porosity (void fraction) for a randomly packed bed of
+# spherical regenerator particles, per Barclay & Sarangi (1984) as quoted
+# in Tishin & Spichkin (2003) p.373 ("The overall porosity ... was chosen
+# to be 0.4 for all cases under consideration (this value is typical for
+# a randomly packed bed of spherical particles)").
+TYPICAL_PACKED_BED_POROSITY = 0.4
+
+# Barclay (1991)'s own reported regenerator design point, as quoted in
+# Tishin & Spichkin (2003) p.373: N_tu=500 (a high-effectiveness target)
+# at an operational frequency of 0.5 Hz requires a specific area of
+# 25000 m^-1, achievable with particles of 240 um diameter. Used below
+# purely as a sanity-check reference point, not as an input to any
+# calculation.
+_BARCLAY_1991_REFERENCE_POINT = {
+    "N_tu": 500, "frequency_Hz": 0.5,
+    "specific_area_per_m": 25000.0, "particle_diameter_m": 240e-6,
+}
+
+
+def regenerator_specific_area_per_m(particle_diameter_m):
+    """Surface-to-volume ratio (specific area, m^-1) of a spherical
+    regenerator particle: a = 6 / d. This is the elementary sphere
+    geometry relation, not itself a Tishin-specific formula -- but it is
+    exactly the relation that reproduces Tishin & Spichkin (2003)'s own
+    quoted Barclay (1991) design point (240 um -> 25000 m^-1, checked in
+    check_against_barclay_1991_reference_point() below), which is why it
+    is the "specific area" this repo uses when citing that design
+    guidance, rather than some other packed-bed correlation that would
+    NOT reproduce the book's own reported number."""
+    if particle_diameter_m <= 0:
+        raise ValueError("particle_diameter_m must be positive")
+    return 6.0 / particle_diameter_m
+
+
+def particle_diameter_for_specific_area(specific_area_per_m):
+    """Inverse of regenerator_specific_area_per_m(): the spherical
+    particle diameter (m) needed to hit a target specific area (m^-1)."""
+    if specific_area_per_m <= 0:
+        raise ValueError("specific_area_per_m must be positive")
+    return 6.0 / specific_area_per_m
+
+
+def check_against_barclay_1991_reference_point(tol_frac=0.01):
+    """Verifies regenerator_specific_area_per_m() reproduces Tishin &
+    Spichkin (2003)'s own quoted Barclay (1991) design point (240 um
+    particles -> 25000 m^-1 specific area, at N_tu=500 / 0.5 Hz) to
+    within tol_frac. Returns (matches: bool, computed_specific_area).
+    This is a literature cross-check, not a fitted coefficient -- if it
+    ever fails, that means the OCR'd reference number or this function's
+    formula disagree and BOTH should be re-examined, not silently
+    reconciled."""
+    ref = _BARCLAY_1991_REFERENCE_POINT
+    computed = regenerator_specific_area_per_m(ref["particle_diameter_m"])
+    matches = abs(computed - ref["specific_area_per_m"]) <= tol_frac * ref["specific_area_per_m"]
+    return matches, computed
+
+
+@dataclass
+class RegeneratorDesignPoint:
+    particle_diameter_m: float
+    specific_area_per_m: float
+    porosity: float
+    note: str
+
+
+def regenerator_specific_area_design_point(particle_diameter_m,
+                                            porosity=TYPICAL_PACKED_BED_POROSITY):
+    """Returns a RegeneratorDesignPoint for a packed bed of spherical
+    regenerator particles of the given diameter, at the given porosity
+    (defaulting to Barclay & Sarangi's (1984) typical value of 0.4, per
+    Tishin & Spichkin (2003) p.373). Reports specific area via
+    regenerator_specific_area_per_m(); porosity is carried through for
+    reference/reporting only -- it does NOT enter that formula (the
+    book's own reference point is matched by the bare 6/d sphere
+    relation, not a porosity-scaled packed-bed correlation -- see that
+    function's own docstring), since decreasing particle diameter
+    increases specific area but also increases pressure drop across the
+    regenerator (requiring additional fluid-pump work), a qualitative
+    trade-off Tishin & Spichkin (2003) p.373 states explicitly but does
+    not give a quantitative pressure-drop correlation for -- NOT modeled
+    quantitatively here, stated as an open gap rather than silently
+    ignored."""
+    a = regenerator_specific_area_per_m(particle_diameter_m)
+    return RegeneratorDesignPoint(
+        particle_diameter_m=particle_diameter_m,
+        specific_area_per_m=a,
+        porosity=porosity,
+        note=("Decreasing particle diameter increases specific area but "
+              "also increases regenerator pressure drop (additional pump "
+              "work) -- Tishin & Spichkin (2003) p.373, Barclay & Sarangi "
+              "(1984) -- not quantitatively modeled here."),
+    )
 
 
 if __name__ == "__main__":

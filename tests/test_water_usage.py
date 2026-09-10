@@ -2,11 +2,17 @@
 though it is wired into main.py's pipeline (see README's Tier-1 test-
 coverage gap). These tests mirror the style and level of test_emissions.py
 and test_economics.py -- direct function calls, plain asserts, no fixtures."""
+import pytest
 
 from core.water_usage import (
     annual_water_liters,
     compare_water_usage,
     WUE_L_PER_KWH_BY_REJECTION_CLASS,
+    wet_bulb_temperature_C,
+    india_wet_bulb_profile,
+    compare_india_wet_bulb_profiles,
+    INDIA_DELHI_MONTHLY_TEMP_RH,
+    INDIA_MUMBAI_MONTHLY_TEMP_RH,
 )
 
 
@@ -85,3 +91,43 @@ def test_compare_water_usage_respects_caller_supplied_rejection_class_override()
 
 def test_annual_water_liters_zero_capacity_is_zero():
     assert annual_water_liters(0.0, cop_electrical=5.0, rejection_class="dry_air_cooled") == 0.0
+
+
+# --- India wet-bulb context (Delhi/Mumbai, Stull 2011) ---
+
+def test_wet_bulb_never_exceeds_dry_bulb():
+    for t, rh in [(30.0, 80.0), (35.0, 20.0), (15.0, 95.0)]:
+        assert wet_bulb_temperature_C(t, rh) <= t + 1e-6
+
+
+def test_wet_bulb_at_100_percent_rh_equals_dry_bulb():
+    # At saturation, wet-bulb == dry-bulb; Stull's fit should land close.
+    t = 25.0
+    assert wet_bulb_temperature_C(t, 100.0) == pytest.approx(t, abs=0.5)
+
+
+def test_wet_bulb_increases_with_humidity_at_fixed_dry_bulb():
+    lo = wet_bulb_temperature_C(30.0, 30.0)
+    hi = wet_bulb_temperature_C(30.0, 80.0)
+    assert hi > lo
+
+
+def test_india_wet_bulb_profile_covers_all_twelve_months():
+    rows = india_wet_bulb_profile(INDIA_DELHI_MONTHLY_TEMP_RH)
+    assert len(rows) == 12
+    assert all(r.T_wet_bulb_C <= r.T_dry_bulb_C + 1e-6 for r in rows)
+
+
+def test_mumbai_more_humid_than_delhi_on_average():
+    # Real IMD-sourced normals: Mumbai (coastal, monsoon-heavy) has a
+    # higher annual-average RH than Delhi (composite/dry-winter zone).
+    delhi_avg_rh = sum(rh for _, _, rh in INDIA_DELHI_MONTHLY_TEMP_RH) / 12
+    mumbai_avg_rh = sum(rh for _, _, rh in INDIA_MUMBAI_MONTHLY_TEMP_RH) / 12
+    assert mumbai_avg_rh > delhi_avg_rh
+
+
+def test_compare_india_wet_bulb_profiles_returns_both_zones():
+    result = compare_india_wet_bulb_profiles()
+    assert set(result.keys()) == {"Delhi (NBC Composite)", "Mumbai (NBC Warm-Humid)"}
+    for rows in result.values():
+        assert len(rows) == 12

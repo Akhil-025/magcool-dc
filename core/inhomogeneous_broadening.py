@@ -11,23 +11,38 @@ inhomogeneity-broadened transition" a real experimental sample shows).
 
 HONESTY FLAG -- book access (checked directly, not assumed)
 -------------------------------------------------------------
-Tishin & Spichkin (2003) Sec. 2.8 ("Inhomogeneous ferromagnets") is this
-item's intended primary source per phase_plan.md. This project's copy of
-that book was checked directly with pdfplumber: 486 pages total, and
-every page sampled (0, 1, 2, 50, 51 -- front matter through mid-book)
-returns zero extractable characters, i.e. it is an image-only scan with
-no text layer, the SAME finding already flagged for Tishin Ch.11 in
-the earlier core/baseline_cooling.py docstring. So Sec. 2.8's specific
-content could not be read or digitized here. What follows instead
-implements the STANDARD textbook treatment of inhomogeneous broadening
-for a second-order magnetic transition -- a distribution of local grain
+UPDATE: corrected after direct re-check. Tishin & Spichkin (2003) Sec.
+2.8 ("Inhomogeneous ferromagnets", book pp.43-44) is this item's
+intended primary source per phase_plan.md. pdfplumber's direct
+text-layer extraction does return zero characters for this book (no
+embedded text layer -- that part of the earlier finding was correct),
+but OCR (tesseract) has now actually been run on the section and DOES
+recover it: it is a real, 2-page section covering the Wagner et al
+(1996) / Silin et al (1995) / Romanov & Silin (1997) treatment of a
+polycrystalline ferromagnet as a distribution of grains with local
+Curie temperatures Tc(s) = Tc0 - s*dTc, weighted by a distribution
+function W(s) (their eq. 2.109-2.111), with the mean magnetization
+obtained by integrating the local magnetization over that distribution
+and the MCE then computed from it via the same eq. (2.16) used
+elsewhere in this book. This is a REAL precedent for this module's own
+Curie-broadening approach: both smear a single sharp mean-field
+transition over a distribution of local Curie temperatures. It is NOT,
+however, wired into the code below -- Romanov & Silin's W(s) and the
+specific dTc distribution they used were not extracted in enough
+numerical detail (the OCR pass recovered the equations and prose, not
+digitized figure data), so there is no fitted or literature-sourced
+distribution shape to plug in here. What follows still implements the
+STANDARD textbook treatment of inhomogeneous broadening for a
+second-order magnetic transition -- a distribution of local grain
 Curie temperatures, smeared by a Gaussian, averaged into the bulk sample
 response -- per the general mean-field near-Tc literature already cited
 in core/validation.py for this same model's other near-Tc limitations
-(de Oliveira & von Ranke, Phys. Rep. 489 (2010) 89-159). This is a
-physically-motivated, standard approximation, NOT digitized Tishin
-content, and the module is scoped as a sensitivity study rather than a
-claimed reproduction of Sec. 2.8's own specific results.
+(de Oliveira & von Ranke, Phys. Rep. 489 (2010) 89-159), now cross-
+referenced against Sec. 2.8's real-but-unwired precedent rather than
+against an assumed-unreadable source. The module remains scoped as a
+sensitivity study, not a claimed reproduction of Sec. 2.8's own specific
+results -- closing the book-access question doesn't by itself close the
+"is our Gaussian shape the right one" question.
 
 Physical model
 --------------
@@ -651,14 +666,16 @@ def run_inhomogeneous_broadening_analysis(out_path="results/inhomogeneous_broade
     log("PHASE 22 ITEM 1: Gaussian inhomogeneous/polycrystalline Tc-broadening")
     log("sensitivity for the mean-field Gd model (core/mce_material.py)")
     log("=" * 90)
-    log("HONESTY FLAG: Tishin & Spichkin (2003) Sec. 2.8 (inhomogeneous ferromagnets)")
-    log("is this item's intended primary source per phase_plan.md. Confirmed directly")
-    log("that this project's copy is an image-only PDF (pdfplumber extracts 0")
-    log("characters from every one of its 486 pages sampled) -- same finding already")
-    log("flagged for Tishin Ch.11 in the earlier baseline_cooling.py. So Sec. 2.8's")
-    log("specific content could not be digitized; what follows is the standard")
+    log("HONESTY FLAG (updated): Tishin & Spichkin (2003) Sec. 2.8 (inhomogeneous")
+    log("ferromagnets, pp.43-44) is this item's intended primary source per")
+    log("phase_plan.md. pdfplumber extracts 0 characters (no text layer -- confirmed),")
+    log("but OCR has now actually been run and DOES recover it: a real 2-page section")
+    log("on the Wagner/Silin/Romanov & Silin local-Tc-distribution model (eq.")
+    log("2.109-2.111), a genuine precedent for this module's own Curie-broadening")
+    log("idea -- but its specific W(s) distribution was not extracted in enough")
+    log("numerical detail to wire in here. What follows is still the standard")
     log("literature treatment of Tc-distribution broadening (see this module's own")
-    log("docstring), not book content.")
+    log("docstring), cross-checked against, not reproduced from, Sec. 2.8.")
     log("")
     log("--- Step 1: peak DeltaT_ad / FWHM vs. sigma_Tc, at Dan'kov et al.'s own three "
         "fields ---")
