@@ -131,6 +131,78 @@ REPRESENTATIVE_CLIMATE_PROFILE_4A = [
 ]
 
 
+# India-specific climate profiles (Section 4's "India/data-center-specific
+# techno-economics" gap in LIMITATIONS.md). Real monthly normal-temperature
+# data (not a guessed/synthetic bin split like the 4A profile above), one
+# bin per calendar month (annual_hours_fraction=1/12 each), for the two
+# NBC 2016 Part 11 climate zones (Composite, Warm-Humid) that cover India's
+# two largest data-center hubs.
+# Source: Japan Meteorological Agency / Tokyo Climate Center, WMO monthly
+# climate normals (station data originating from IMD):
+#   https://ds.data.jma.go.jp/gmd/tcc/tcc/products/climate/normal/parts/NrmMonth_e.php?stn=42182
+#   (NEW DELHI/SAFDARJUNG, 28.58N 77.20E)
+#   https://ds.data.jma.go.jp/gmd/tcc/tcc/products/climate/normal/parts/NrmMonth_e.php?stn=43003
+#   (BOMBAY/SANTACRUZ, 19.12N 72.85E)
+INDIA_COMPOSITE_DELHI_CLIMATE_PROFILE = [
+    ClimateBin("Jan", 13.9, 1 / 12), ClimateBin("Feb", 17.6, 1 / 12),
+    ClimateBin("Mar", 22.9, 1 / 12), ClimateBin("Apr", 29.1, 1 / 12),
+    ClimateBin("May", 32.7, 1 / 12), ClimateBin("Jun", 33.3, 1 / 12),
+    ClimateBin("Jul", 31.5, 1 / 12), ClimateBin("Aug", 30.4, 1 / 12),
+    ClimateBin("Sep", 29.6, 1 / 12), ClimateBin("Oct", 26.2, 1 / 12),
+    ClimateBin("Nov", 20.5, 1 / 12), ClimateBin("Dec", 15.6, 1 / 12),
+]
+"""NBC 2016 Composite climate zone (long hot-dry summer, cool dry winter,
+monsoon), representative of Delhi-NCR data-center siting."""
+
+INDIA_WARM_HUMID_MUMBAI_CLIMATE_PROFILE = [
+    ClimateBin("Jan", 24.6, 1 / 12), ClimateBin("Feb", 25.3, 1 / 12),
+    ClimateBin("Mar", 27.6, 1 / 12), ClimateBin("Apr", 28.8, 1 / 12),
+    ClimateBin("May", 30.2, 1 / 12), ClimateBin("Jun", 29.3, 1 / 12),
+    ClimateBin("Jul", 27.9, 1 / 12), ClimateBin("Aug", 27.8, 1 / 12),
+    ClimateBin("Sep", 27.9, 1 / 12), ClimateBin("Oct", 29.0, 1 / 12),
+    ClimateBin("Nov", 28.0, 1 / 12), ClimateBin("Dec", 25.8, 1 / 12),
+]
+"""NBC 2016 Warm-Humid climate zone (year-round high humidity, mild
+seasonal swing), representative of Mumbai/coastal data-center siting.
+Monthly means never drop below ~24.6C -- unlike the 4A/Composite
+profiles, there is essentially no economizer/free-cooling window at any
+point in the year, which is itself the headline finding for this zone
+(see run_india_climate_comparison())."""
+
+
+def run_india_climate_comparison(T_it_setpoint_C=27.0, economizer_below_C=18.0,
+                                  out_path="results/pue_annualized_india.txt",
+                                  verbose=True):
+    """Runs annualized_energy_comparison() against both real India climate
+    profiles above instead of the US-representative 4A default, and writes
+    a combined report. Purely additive: does not change
+    REPRESENTATIVE_CLIMATE_PROFILE_4A, annualized_energy_comparison()'s own
+    default, or any existing caller's behavior."""
+    import io, contextlib, os
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        for zone_name, profile in [
+                ("Composite (Delhi-NCR)", INDIA_COMPOSITE_DELHI_CLIMATE_PROFILE),
+                ("Warm-Humid (Mumbai/coastal)", INDIA_WARM_HUMID_MUMBAI_CLIMATE_PROFILE)]:
+            print("=" * 70)
+            print(f"India NBC 2016 climate zone: {zone_name}")
+            print("=" * 70)
+            annualized_energy_comparison(T_it_setpoint_C=T_it_setpoint_C,
+                                          climate_profile=profile,
+                                          economizer_below_C=economizer_below_C,
+                                          verbose=True)
+            print()
+    text = buf.getvalue()
+    if verbose:
+        print(text)
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    with open(out_path, "w") as f:
+        f.write(text)
+    if verbose:
+        print(f"Wrote {out_path}")
+    return text
+
+
 def _amr_cop_at(T_cold_K, span_K, mu0H_max=2.0, mass_regenerator=5.0,
                  frequency=2.0, fluid_mdot=0.08, regenerator_effectiveness=0.85):
     sys_ = AMRSystem(GADOLINIUM, mu0H_max=mu0H_max, mass_regenerator=mass_regenerator,
