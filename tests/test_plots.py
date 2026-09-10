@@ -17,7 +17,7 @@ import pytest
 from core import plots
 
 # (figure function, output basename passed to plots.save()) for every
-# figure in plots.run_all()'s figure_fns list, kept in sync with that list.
+# figure in plots._build_figure_registry()'s list, kept in sync with that list.
 FIGURE_FUNCTIONS = [
     (plots.plot_gd_validation, "fig01_gd_mce_validation"),
     (plots.plot_gd_entropy_dTad, "fig02_gd_entropy_and_dTad_vs_T"),
@@ -137,23 +137,29 @@ def test_figure_function_runs_and_saves_png_and_pdf(fn, basename, _redirect_plot
 
 
 def test_figure_set_covers_every_function_in_run_all():
-    """Keeps FIGURE_FUNCTIONS in sync with run_all()'s own figure list, so
-    a newly added figure doesn't silently go untested (and a removed one
-    doesn't leave a stale entry here)."""
+    """Keeps FIGURE_FUNCTIONS in sync with the actual figure list, so a
+    newly added figure doesn't silently go untested (and a removed one
+    doesn't leave a stale entry here).
+
+    run_all() itself now just delegates to _build_figure_registry() (see
+    that function's own docstring for what `precomputed` accepts) --
+    inspecting run_all()'s source directly would find zero plot_* names
+    and make every entry below look stale. Inspect _build_figure_registry()
+    instead, which is where the actual (label, fn) list lives."""
     import inspect
     import re
 
-    source = inspect.getsource(plots.run_all)
+    source = inspect.getsource(plots._build_figure_registry)
     run_all_names = set(re.findall(r"\bplot_\w+", source))
     tested_names = {fn.__name__ for fn, _ in FIGURE_FUNCTIONS}
 
     missing_from_tests = run_all_names - tested_names
     stale_in_tests = tested_names - run_all_names
     assert not missing_from_tests, (
-        f"run_all() lists figure function(s) not covered here: {missing_from_tests}"
+        f"_build_figure_registry() lists figure function(s) not covered here: {missing_from_tests}"
     )
     assert not stale_in_tests, (
-        f"FIGURE_FUNCTIONS lists function(s) no longer in run_all(): {stale_in_tests}"
+        f"FIGURE_FUNCTIONS lists function(s) no longer in _build_figure_registry(): {stale_in_tests}"
     )
 
 
