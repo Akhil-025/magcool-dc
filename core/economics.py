@@ -184,6 +184,77 @@ ELECTRICITY_PRICE_PER_KWH = 0.10  # $/kWh, Bjørk, Bahl & Nielsen (2016), US/
                                     # European countries are higher -- see
                                     # module docstring
 
+# India-specific electricity price range (LIMITATIONS.md Section 4 follow-up).
+# The generic ELECTRICITY_PRICE_PER_KWH=$0.10 above is an 8+ year old (2016)
+# "US/China/India-representative" placeholder, not a current India-specific
+# figure. Real, current sourced range collected 2026:
+#   - National industrial average ~INR 6.70/kWh (~USD 0.075-0.08) as of Dec
+#     2025 (Intratec electricity-price index).
+#   - Industry market estimate of India's industrial power-price range as of
+#     Sept 2025: USD 0.07-0.12/kWh (Arizton, "India Data Center Market").
+#   - State-level commercial/industrial tariffs vary substantially, e.g.
+#     Punjab PSERC commercial INR 6.89-7.75/kWh vs. Delhi DERC commercial/
+#     industrial >INR 10/kWh -- among the highest states, so a single
+#     national number understates real cross-state spread.
+#   - Mumbai specifically is reported as a low-cost outlier for large
+#     industrial/data-center consumers in 2025 market coverage (IBEF/Turner
+#     & Townsend Data Centre Construction Cost Index).
+# Used here as a LOW/MID/HIGH band, same convention as this module's other
+# LOW/MID/HIGH cost-range functions (see full_system_cost_estimate_range()),
+# not a single point estimate -- explicitly NOT claiming state-by-state
+# resolution this repo hasn't verified against a primary SERC tariff order.
+ELECTRICITY_PRICE_PER_KWH_INDIA_LOW = 0.07    # $/kWh, low end of industrial range
+ELECTRICITY_PRICE_PER_KWH_INDIA_MID = 0.078   # $/kWh, ~national industrial average
+ELECTRICITY_PRICE_PER_KWH_INDIA_HIGH = 0.13   # $/kWh, Delhi-like high-tariff state
+                                                # commercial/industrial band
+
+
+def india_electricity_price_sensitivity(mu0H_max, mass_regenerator, Qc_avg_W,
+                                          COP_electrical, family_name="Gd",
+                                          device_lifetime_years=15.0,
+                                          discount_rate=0.06,
+                                          verbose=True):
+    """Re-runs lifetime_cost() and levelized_cost_of_cooling() at the
+    LOW/MID/HIGH India electricity-price band above, instead of the
+    generic $0.10/kWh placeholder both functions otherwise default to.
+    Purely additive: does not change ELECTRICITY_PRICE_PER_KWH or any
+    existing caller's default behavior. This closes the electricity-price
+    half of LIMITATIONS.md's "India/data-center-specific techno-economics"
+    gap; it does NOT re-derive material_cost()/bom_cost()'s own $/kg
+    figures for an India-specific supply chain (those remain the existing
+    global US$/kg figures throughout this module) -- narrower in scope
+    than a full India-market cost model, stated explicitly rather than
+    implied."""
+    rows = {}
+    for label, price in [("LOW", ELECTRICITY_PRICE_PER_KWH_INDIA_LOW),
+                          ("MID", ELECTRICITY_PRICE_PER_KWH_INDIA_MID),
+                          ("HIGH", ELECTRICITY_PRICE_PER_KWH_INDIA_HIGH)]:
+        lc = lifetime_cost(mu0H_max, mass_regenerator, Qc_avg_W, COP_electrical,
+                            device_lifetime_years=device_lifetime_years,
+                            electricity_price_per_kwh=price)
+        lcoc = levelized_cost_of_cooling(mu0H_max, mass_regenerator, Qc_avg_W,
+                                          COP_electrical, family_name=family_name,
+                                          device_lifetime_years=device_lifetime_years,
+                                          discount_rate=discount_rate,
+                                          electricity_price_per_kwh=price)
+        rows[label] = {
+            "electricity_price_usd_per_kwh": price,
+            "lifetime_total_$": lc["lifetime_total_$"],
+            "levelized_cost_of_cooling_$_per_kwh": lcoc["levelized_cost_of_cooling_$_per_kwh"],
+        }
+    if verbose:
+        print("India electricity-price sensitivity (LOW/MID/HIGH band, see "
+              "module docstring for sourcing):")
+        for label, r in rows.items():
+            print(f"  {label}: ${r['electricity_price_usd_per_kwh']:.3f}/kWh -> "
+                  f"lifetime_total=${r['lifetime_total_$']:,.0f}, "
+                  f"levelized=${r['levelized_cost_of_cooling_$_per_kwh']:.5f}/kWh_cooling")
+        print("  NOTE: material_cost()/bom_cost() $/kg figures are unchanged "
+              "US-representative values -- this function varies only the "
+              "electricity-price input, not a full India-specific supply "
+              "chain re-costing.")
+    return rows
+
 
 def lifetime_cost(mu0H_max, mass_regenerator, Qc_avg_W, COP_electrical,
                    device_lifetime_years=15.0, capacity_factor=1.0,

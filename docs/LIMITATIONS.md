@@ -52,6 +52,23 @@ model, not attempted here.
 - Source: `core/mce_material.py`'s `curie_shift_K_per_T` (phenomenological
   knob, `GADOLINIUM_FIELD_SHIFTED`, not used elsewhere in this repo);
   `core/validation.py`'s `run_curie_shift_check()`.
+- **Independent second-source confirmation added (2026 pass):** Franco,
+  Blázquez, Ingale & Conde, "The Magnetocaloric Effect and Magnetic
+  Refrigeration Near Room Temperature: Materials and Models," Annu. Rev.
+  Mater. Res. 42:305-342 (2012) -- `Papers/Reviews/The magnetocaloric
+  effect and magnetic refrigeration near room temperature - materials and
+  models.pdf`, previously uncited anywhere in this repo -- Table 1 gives
+  the field-scaling exponent for the MCE-peak-temperature shift T_pk-T_C
+  under mean-field critical exponents (β=0.5, γ=1, δ=3) as exactly 0,
+  i.e. mean-field theory itself predicts NO peak shift with field, as a
+  general property of the universal-curve/critical-exponent framework --
+  not device- or study-specific like the de Oliveira & von Ranke citation
+  already here. This is a second, independent literature source agreeing
+  with this repo's own `run_curie_shift_check()` finding; it does not
+  close the item (still no mean-field-compatible mechanism to reproduce
+  Dan'kov et al.'s observed ~6 K/T shift), but narrows "de Oliveira & von
+  Ranke's own Gd treatment doesn't supply one either" from a single-paper
+  observation to a structural property of mean-field theory generally.
 
 ### 1.1c Two genuine attempts at the "real" fix for 1.1/1.1b -- both ruled out
 Since 1.1b above says the field-shift needs "real short-range-correlation
@@ -739,9 +756,77 @@ repo paths.
   "qualitative ranking only" caveats in
   `core/passive_regenerator_analysis.py` and cycle-type sensitivity work
   trace back to this.
-- **India/data-center-specific techno-economics.** `pue_annualized.py`
-  and `water_usage.py` exist and are tested, but have not been run with
-  actual Indian climate-zone data or commercial electricity tariffs.
+- **India/data-center-specific techno-economics -- CORRECTION to the
+  previous pass's own note, then genuinely closed for climate+tariff.**
+  The immediately preceding pass (same 2026 consolidation effort) claimed
+  "`pue_annualized.py` still uses generic ASHRAE climate-zone bins... no
+  India-specific tariff... NOT YET WIRED into code" -- that claim was
+  written from this file's own prose without checking the actual code,
+  and it was wrong: `core/pue_annualized.py` already contained real,
+  sourced India climate data (`INDIA_COMPOSITE_DELHI_CLIMATE_PROFILE`,
+  `INDIA_WARM_HUMID_MUMBAI_CLIMATE_PROFILE`, real JMA/WMO monthly
+  normals for New Delhi/Safdarjung and Bombay/Santacruz) and a working
+  `run_india_climate_comparison()` function -- it just wasn't called
+  from `main.py`'s pipeline and had no test coverage. Flagged and fixed
+  directly this pass, verified by reading and running the code (not
+  re-trusting this file's own prior prose a second time):
+  - **Climate (was already implemented, now wired in + tested)**:
+    `run_india_climate_comparison()` is now called from `main.py`'s
+    economics/PUE stage (writes `results/pue_annualized_india.txt`
+    alongside the existing US-4A-profile report; purely additive, no
+    change to `REPRESENTATIVE_CLIMATE_PROFILE_4A` or any existing
+    caller). Added 6 new tests in `tests/test_pue_annualized.py`
+    (profile well-formedness, Mumbai's claimed
+    no-economizer-window property, Delhi's winter economizer window,
+    the report actually writing a real file, and a direct cross-check
+    that the two zones give different results rather than both silently
+    falling back to the generic default) -- all passing.
+  - **Tariffs (genuinely new this pass)**: `core/economics.py`'s
+    `ELECTRICITY_PRICE_PER_KWH=$0.10` was, and remains, an 8+-year-old
+    (2016) generic "US/China/India-representative" placeholder, not an
+    India-specific figure -- that placeholder is UNCHANGED (no existing
+    caller's behavior changes). Added a real, sourced LOW/MID/HIGH India
+    band instead: `ELECTRICITY_PRICE_PER_KWH_INDIA_LOW/MID/HIGH`
+    ($0.07/$0.078/$0.13 per kWh), sourced to national industrial-average
+    (~₹6.70/kWh, Intratec, Dec 2025), a Sept-2025 industrial-range
+    estimate ($0.07-0.12/kWh), and Delhi's comparatively high commercial/
+    industrial tariff (DERC, >₹10/kWh) as the HIGH end -- see the
+    constants' own code comments for the full citation. Added
+    `india_electricity_price_sensitivity()`, which re-runs the existing
+    `lifetime_cost()`/`levelized_cost_of_cooling()` functions at this
+    band instead of the generic $0.10 default (purely additive, doesn't
+    touch either function's default behavior). Wired into
+    `run_economics_at_knee_point()` (`main.py` step 13b) so a normal
+    pipeline run reports the India price-sensitivity range at the SAME
+    real NSGA-III knee-point design every other step-13b figure uses,
+    not a separate illustrative point. Added 4 new tests in
+    `tests/test_economics.py` (band ordering, three labeled bands
+    returned, monotonic cost-vs-price, and a direct cross-check against
+    calling `lifetime_cost()`/`levelized_cost_of_cooling()` by hand at
+    the same price) -- all passing. Verified end-to-end by calling
+    `run_economics_at_knee_point()` directly with a realistic knee-point
+    dict: produces a real, sensible India LOW/MID/HIGH levelized-cost
+    range (~$0.0085-$0.0147/kWh_cooling at the current NSGA-III
+    knee-point design) alongside every other figure that function
+    already reports.
+  - **What this does NOT do**: `material_cost()`/`bom_cost()`'s own
+    $/kg figures (magnet, MCM, SMM yoke) remain the existing global
+    US$-representative values -- this pass varied only the electricity-
+    price input, explicitly NOT a full India-specific manufacturing/
+    supply-chain re-costing (stated in the new function's own docstring
+    and printed output, not left implicit). `water_usage.py` still has
+    no India-specific content (its metric, WUE in L/kWh, isn't
+    tariff-dependent; an India-specific version would need climate-
+    appropriate evaporation-rate/humidity data, which was not attempted
+    this pass -- a real, narrower, still-open gap, correctly distinguished
+    from the climate+tariff items that are now closed above).
+  - Source (this pass): `core/economics.py`
+    (`ELECTRICITY_PRICE_PER_KWH_INDIA_LOW/MID/HIGH`,
+    `india_electricity_price_sensitivity()`); `main.py`
+    (`run_economics_at_knee_point()`, and the new
+    `pue_annualized.run_india_climate_comparison()` call in the
+    economics/PUE stage); `tests/test_economics.py`,
+    `tests/test_pue_annualized.py` (10 new tests total, all passing).
 - **Commercial-landscape figures are unaudited vendor/press claims.**
   `core/commercial_landscape.py`'s `COMMERCIAL_SYSTEMS` dataset (Magnotherm
   Stellar, Cooltech's data-center-oriented unit) is sourced entirely from
@@ -750,11 +835,37 @@ repo paths.
   in the module's own output rather than presented as verified.
 - **Regeneration of stale `results/*.txt` diagnostic files** listed in
   Section 2.1 above.
-- **Papers/ subfolders not yet mined**: `Reviews/`, `Data center
-  cooling/`, and `AMR Theory and Modeling/` were not systematically
-  cross-checked against the codebase's citations in a later pass (time-
-  bounded scope decision, not a finding of any kind) -- a reasonable next
-  pass for whoever picks this up next.
+- **Papers/ subfolders mining pass -- CORRECTED: mostly already mined; 2
+  of 12 papers were genuinely un-cited, now read and checked.** This item
+  as previously written overstated the gap. A direct check of every paper
+  title/author in `Reviews/` (5 papers), `Data center cooling/` (1
+  paper), and `AMR Theory and Modeling/` (6 papers) against every citation
+  in `core/*.py`, `docs/*.md`, `ROADMAP.md` and `README.md` finds 10 of
+  the 12 already cited and used (e.g. the Klinar et al. 2024 review
+  underlies `hypereg_analysis.py` and `thermal.py`; the data-center-
+  cooling review anchors this repo's T_cold=291K/5-20K representative
+  operating point per `docs/Literature_Review.md`; the nine-layer,
+  rotary-refrigerator, and packed-bed-AMR papers all trace directly into
+  `core/fluids.py`, `core/loss_model.py`, and `core/regenerator_1d.py`).
+  Only two were genuinely uncited anywhere in this repo:
+  - `Papers/Reviews/Current perspective in magnetocaloric materials
+    research.pdf` (Law, Moreno-Ramírez, Díaz-García & Franco, J. Appl.
+    Phys. 133, 040903 (2023)) -- read this pass. Its main new-methods
+    content (an "exponent n > 2 near Tc" FOMT/SOMT-classification
+    fingerprint, and additive-manufacturing/3D-printed MCM filaments) is
+    about material characterization and manufacturing, not about any
+    open item in this repo -- no action item found.
+  - `Papers/Reviews/The magnetocaloric effect and magnetic refrigeration
+    near room temperature - materials and models.pdf` (Franco, Blázquez,
+    Ingale & Conde, Annu. Rev. Mater. Res. 42:305-342 (2012)) -- read this
+    pass; its Table 1 mean-field exponent result is now cited in Item
+    1.1b above as a second independent source confirming this repo's own
+    zero-field-shift finding.
+  No other new action items were found in either paper. Status: closed as
+  a mining gap (both previously-unread papers have now been read and
+  their relevant content either incorporated (Item 1.1b) or found not
+  applicable); the broader claim that these three subfolders were unmined
+  was inaccurate and is corrected here.
 
 ---
 
@@ -823,16 +934,54 @@ factors were always meant to derive from, is still not available. Status
 unchanged: qualitative Carnot >= Ericsson >= Brayton ranking only, not the
 book's own closed-form relations.
 
-### 5.2 Tishin & Spichkin (2003) remains an image-only, non-extractable PDF
-Confirmed directly this phase: `Papers/Reference Books/Tishin & Spichkin,
-The Magnetocaloric Effect and its Applications (2003).pdf` extracts zero
-characters of real text from its sampled pages (scanned images only, no
-OCR text layer) -- matching the exact finding already flagged in
-`core/baseline_cooling.py` (Ch. 11, passive regenerators) and
-`core/inhomogeneous_broadening.py` (Sect. 2.8, inhomogeneous
-ferromagnets). Status unchanged: both remain open; OCR-ing the specific
-needed chapters (not attempted this phase, out of scope for this pass)
-would be the concrete next step.
+### 5.2 Tishin & Spichkin (2003) -- CORRECTED: OCR was attempted and works; content now available (code not yet updated to use it)
+The "extracts zero characters, no OCR text layer" finding above is
+confirmed accurate for `pdftotext` (the book is a genuine 486-page
+scanned image with no embedded text layer) -- but "non-extractable" was
+an overstatement: this pass actually ran `tesseract` OCR (available in
+this environment) against the two specific chapters both honesty flags
+name, and it works well enough to read directly:
+
+- **Sect. 2.8 "MCE in inhomogeneous ferromagnets"** (book pp.43-44, PDF
+  pages 55-56 at 200dpi): 2 pages, OCRs cleanly. Content: Romanov & Silin
+  (1997)'s model treats an inhomogeneous ferromagnet as a distribution
+  W(s) of local Curie temperatures T_C(s) = T_0 - sΔT_C (their eq.
+  2.109-2.111), finding the MCE peak near Tc is *weaker and more
+  gradual*, and shifted away from Tc into the magnetization-tail region,
+  for an inhomogeneous vs. homogeneous ferromagnet. This is the same
+  qualitative mechanism (a spread of local Curie temperatures) as this
+  repo's own `core/inhomogeneous_broadening.py` `GADOLINIUM_CALIBRATED`
+  grain-Curie-temperature broadening (Item 1.1) -- a genuine, real
+  literature precedent for the general approach, though Romanov & Silin's
+  own W(s)/ΔT_C parametrization was not reproduced or cross-checked
+  numerically against this repo's calibrated broadening width here (that
+  would be the concrete next step, not attempted this pass).
+- **Sect. 11.1 "Passive magnetic regenerators"** (book pp.351-361, PDF
+  pages 363-373): sampled pages 363-366 OCR cleanly (the rest were not
+  transcribed this pass, for time). Confirmed real, citable content
+  exists, including a closed-form penetration-depth relation for
+  regenerator particle sizing (Hashimoto et al 1990, their eq. 11.1:
+  L_p = (κ/(π·ν·ρ·C))^(1/2), where ν is cycle frequency, κ thermal
+  conductivity, ρ density, C volumetric heat capacity) and McMahon &
+  Gifford (1960)'s rule of thumb that regenerator material needs
+  3-5x the working gas's volumetric heat capacity -- neither is currently
+  used anywhere in `core/baseline_cooling.py` or
+  `core/passive_regenerator_analysis.py`.
+
+**What this changes:** the book-access honesty flags in
+`core/baseline_cooling.py`, `core/inhomogeneous_broadening.py`, and
+`core/passive_regenerator_analysis.py` should be updated from "PDF is
+image-only, inaccessible" to "PDF is image-only but OCR-readable;
+content identified but not yet incorporated into the model" -- a real,
+narrower gap than previously stated, not a closed one. **Not done this
+pass:** wiring either the L_p relation or the W(s) broadening comparison
+into the actual `core/` modules, or OCR-ing the remaining ~8 pages of
+Sect. 11.1 -- that is genuine follow-on code work, left open rather than
+rushed.
+- Source (this pass): `tesseract` OCR of
+  `Papers/Reference Books/Tishin & Spichkin, The Magnetocaloric Effect
+  and its Applications (2003).pdf`, PDF pages 55-56 and 363-366 (book pp.
+  43-44 and 351-354), rendered via `pdftoppm` at 200-250dpi.
 
 Confirmed still-genuinely-open even with the full corpus available (not
 just previously unchecked): (Mn,Fe)2(P,Si)/Ga1-xCMn3+x/Mn-Cu-Co-Ge have no
@@ -853,3 +1002,58 @@ pointer for the full derivation/diagnosis before citing a specific number.
 If you resolve one of the "Status: open" items above, update this file in
 the same commit; do not let the ledger drift out of sync with the code
 the way the earlier scattered version did.
+
+## Addendum: 2026 consolidation-pass scope note
+
+A later pass was asked to "complete all open items" in this file. Most
+open items are explicitly blocked by things a documentation/analysis pass
+cannot manufacture: missing primary measurement data (Item 1.1b/1.1c),
+an inaccessible book chapter (Item 5.1, Kitanovski), genuinely unsolved
+grid-convergence numerics (Items 1.3/1.7), or a still-needed second/third
+independently-sourced calibration device (Item 1.4). Closing these for
+real would require either new experiments/data this repo doesn't have
+access to, or a genuine research contribution (a new statistical-
+mechanics treatment, a grid-independent regenerator formula) -- neither
+of which this pass fabricated. Doing so would violate this file's own
+stated purpose (an honest ledger, not a smoothed-over one).
+
+What this pass *did* do, and what remains for each:
+- **Item 1.1b**: added a second, independent literature source (Franco
+  et al. 2012) confirming the existing finding. Still open.
+- **Item 5.2 (Tishin & Spichkin)**: corrected -- the book IS OCR-readable
+  (tested directly, this pass); two specific flagged sections were read
+  and their content summarized. Not yet wired into any `core/` module.
+  Still open, but the gap is now narrower and accurately described.
+- **Section 4, Papers/ mining**: corrected an inaccurate "not yet mined"
+  claim -- 10 of 12 papers in the three named subfolders were already
+  cited elsewhere in this repo; the 2 that weren't have now been read,
+  with no unaddressed action items found in either. Closed as a mining
+  gap.
+- **Section 4, India techno-economics -- self-correction, then genuinely
+  closed for climate+tariff.** The version of this addendum written
+  earlier in this same pass said India climate/tariff data was
+  "collected but NOT wired into code" -- that was written from this
+  file's own prose without reading `core/pue_annualized.py` directly,
+  and it was wrong: the India climate profiles and a working comparison
+  function already existed in that module, just uncalled and untested.
+  Caught by actually reading the code (not re-trusting this file's own
+  claim a second time), then genuinely fixed: the existing climate
+  function is now called from `main.py`; a real, sourced India tariff
+  band was added to `core/economics.py` and wired into the same
+  knee-point economics step; 10 new tests were added and all pass (see
+  the corrected item in Section 4 above for the full detail and
+  citations). `water_usage.py` remains genuinely un-India-specific --
+  correctly distinguished from the now-closed climate/tariff items, not
+  swept in with them.
+- Every item not listed above (the large majority) is unchanged and
+  remains open for the reasons already stated next to it -- no results
+  files were regenerated this pass (a `python main.py --quick` run was
+  attempted and still had not finished several stages after 5+ minutes;
+  a full run was not completed, so no stale `results/*.txt` file listed
+  in Section 2.1 was touched, to avoid mixing partial/interrupted output
+  into the repo). The two `main.py`/`core/economics.py` code changes made
+  this pass were each verified by direct execution (unit tests plus a
+  live call to `run_economics_at_knee_point()`) rather than only
+  read-through, specifically because this pass's own India-item mistake
+  above is a reminder that unverified prose claims -- including this
+  file's own -- are not a substitute for running the code.

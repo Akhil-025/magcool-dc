@@ -400,3 +400,65 @@ def test_rowe2011_cross_check_note_reflects_phase34_update():
     assert "legacy_value" in result
     assert result["legacy_value"] == MAGNET_TO_MCM_MASS_RATIO_PER_TESLA_BJORK2011_LEGACY
     assert "" in result["note"]
+
+
+# --- India electricity-price sensitivity (LIMITATIONS.md Section 4
+# follow-up: previously no India-specific tariff data existed anywhere in
+# this module) --------------------------------------------------------
+
+from core.economics import (
+    india_electricity_price_sensitivity,
+    lifetime_cost as _lifetime_cost_india_check,
+    levelized_cost_of_cooling as _lcoc_india_check,
+    ELECTRICITY_PRICE_PER_KWH_INDIA_LOW,
+    ELECTRICITY_PRICE_PER_KWH_INDIA_MID,
+    ELECTRICITY_PRICE_PER_KWH_INDIA_HIGH,
+)
+
+
+def test_india_price_band_is_ordered_low_mid_high():
+    assert (ELECTRICITY_PRICE_PER_KWH_INDIA_LOW
+            < ELECTRICITY_PRICE_PER_KWH_INDIA_MID
+            < ELECTRICITY_PRICE_PER_KWH_INDIA_HIGH)
+
+
+def test_india_electricity_price_sensitivity_returns_three_bands():
+    result = india_electricity_price_sensitivity(
+        mu0H_max=1.5, mass_regenerator=5.0, Qc_avg_W=1000.0,
+        COP_electrical=4.0, verbose=False)
+    assert set(result.keys()) == {"LOW", "MID", "HIGH"}
+    for label, price in [("LOW", ELECTRICITY_PRICE_PER_KWH_INDIA_LOW),
+                          ("MID", ELECTRICITY_PRICE_PER_KWH_INDIA_MID),
+                          ("HIGH", ELECTRICITY_PRICE_PER_KWH_INDIA_HIGH)]:
+        assert result[label]["electricity_price_usd_per_kwh"] == price
+
+
+def test_india_electricity_price_sensitivity_cost_increases_with_price():
+    result = india_electricity_price_sensitivity(
+        mu0H_max=1.5, mass_regenerator=5.0, Qc_avg_W=1000.0,
+        COP_electrical=4.0, verbose=False)
+    assert (result["LOW"]["lifetime_total_$"]
+            < result["MID"]["lifetime_total_$"]
+            < result["HIGH"]["lifetime_total_$"])
+    assert (result["LOW"]["levelized_cost_of_cooling_$_per_kwh"]
+            < result["MID"]["levelized_cost_of_cooling_$_per_kwh"]
+            < result["HIGH"]["levelized_cost_of_cooling_$_per_kwh"])
+
+
+def test_india_electricity_price_sensitivity_matches_direct_calls():
+    # Cross-check: each band's numbers should exactly match calling
+    # lifetime_cost()/levelized_cost_of_cooling() directly with the same
+    # electricity_price_per_kwh -- the sensitivity function should not be
+    # silently using a different price or a different underlying model.
+    result = india_electricity_price_sensitivity(
+        mu0H_max=1.5, mass_regenerator=5.0, Qc_avg_W=1000.0,
+        COP_electrical=4.0, family_name="Gd", verbose=False)
+    direct_mid_lifetime = _lifetime_cost_india_check(
+        mu0H_max=1.5, mass_regenerator=5.0, Qc_avg_W=1000.0, COP_electrical=4.0,
+        electricity_price_per_kwh=ELECTRICITY_PRICE_PER_KWH_INDIA_MID)
+    direct_mid_lcoc = _lcoc_india_check(
+        mu0H_max=1.5, mass_regenerator=5.0, Qc_avg_W=1000.0, COP_electrical=4.0,
+        family_name="Gd", electricity_price_per_kwh=ELECTRICITY_PRICE_PER_KWH_INDIA_MID)
+    assert result["MID"]["lifetime_total_$"] == direct_mid_lifetime["lifetime_total_$"]
+    assert (result["MID"]["levelized_cost_of_cooling_$_per_kwh"]
+            == direct_mid_lcoc["levelized_cost_of_cooling_$_per_kwh"])

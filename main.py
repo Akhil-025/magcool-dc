@@ -864,6 +864,25 @@ def run_economics_at_knee_point(knee_point):
                 f"${envelope['combined_envelope_low_$']:,.0f} - "
                 f"${envelope['combined_envelope_high_$']:,.0f}")
 
+    try:
+        # India electricity-price sensitivity at this SAME knee-point
+        # design (LIMITATIONS.md Section 4 follow-up) -- reuses this
+        # function's existing bom/Qc_avg_W/COP_electrical, only varies the
+        # electricity price input, and does not affect anything above.
+        india_price_sensitivity = economics.india_electricity_price_sensitivity(
+            mu0H_T, mass_kg, Qc_avg_W=Qc_avg_W, COP_electrical=amr_cop,
+            family_name=family_name, verbose=False)
+        logger.info(
+            "  India electricity-price sensitivity (LOW/MID/HIGH band): "
+            f"levelized=${india_price_sensitivity['LOW']['levelized_cost_of_cooling_$_per_kwh']:.5f}/"
+            f"${india_price_sensitivity['MID']['levelized_cost_of_cooling_$_per_kwh']:.5f}/"
+            f"${india_price_sensitivity['HIGH']['levelized_cost_of_cooling_$_per_kwh']:.5f} "
+            "$/kWh_cooling (LOW/MID/HIGH)")
+    except Exception:
+        logger.error("economics.india_electricity_price_sensitivity() failed")
+        logger.error(traceback.format_exc())
+        india_price_sensitivity = None
+
     return {
         "design_point": {"mu0H_max_T": mu0H_T, "mass_regenerator_kg": mass_kg,
                           "family_name": family_name, "COP_electrical": amr_cop,
@@ -873,6 +892,7 @@ def run_economics_at_knee_point(knee_point):
         "levelized_cost_of_cooling": lcoc,
         "cross_check_full_system_cost_methods": cross_check,
         "full_system_cost_envelope": envelope,
+        "india_electricity_price_sensitivity": india_price_sensitivity,
     }
 
 
@@ -2380,6 +2400,18 @@ def _run_paper_strengthening_additions(representative_row=None):
             pue_annualized.write_pue_annualized_report()
     except Exception:
         logger.error("pue_annualized.py failed")
+        logger.error(traceback.format_exc())
+    try:
+        # India-specific climate-zone comparison (Delhi Composite,
+        # Mumbai Warm-Humid, real JMA/WMO monthly normals) -- this
+        # function has existed in pue_annualized.py but was not
+        # previously called from this pipeline (LIMITATIONS.md Section 4
+        # follow-up). Additive only: writes its own results file, does
+        # not touch REPRESENTATIVE_CLIMATE_PROFILE_4A or any existing
+        # caller's default US-climate behavior.
+        pue_annualized.run_india_climate_comparison(verbose=False)
+    except Exception:
+        logger.error("pue_annualized.run_india_climate_comparison() failed")
         logger.error(traceback.format_exc())
     try:
         uncertainty_propagation.write_uncertainty_report()

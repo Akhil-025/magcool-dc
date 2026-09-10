@@ -8,6 +8,9 @@ from core.pue_annualized import (
     annualized_energy_comparison,
     NON_COOLING_PUE_OVERHEAD,
     REPRESENTATIVE_CLIMATE_PROFILE_4A,
+    run_india_climate_comparison,
+    INDIA_COMPOSITE_DELHI_CLIMATE_PROFILE,
+    INDIA_WARM_HUMID_MUMBAI_CLIMATE_PROFILE,
 )
 
 
@@ -94,3 +97,58 @@ def test_annualized_energy_comparison_excludes_amr_bins_beyond_20k_span():
         if r["span_K"] > 20.0:
             assert r["AMR_span_feasible"] is False
             assert r["AMR_COP"] == 0.0
+
+
+# --- India-specific climate comparison (LIMITATIONS.md Section 4 follow-up,
+# `run_india_climate_comparison()` previously had no test coverage) --------
+
+def test_india_climate_profiles_are_well_formed():
+    for profile in (INDIA_COMPOSITE_DELHI_CLIMATE_PROFILE,
+                    INDIA_WARM_HUMID_MUMBAI_CLIMATE_PROFILE):
+        assert len(profile) == 12  # one bin per calendar month
+        total_hours_fraction = sum(b.annual_hours_fraction for b in profile)
+        assert abs(total_hours_fraction - 1.0) < 1e-9
+        for b in profile:
+            assert -10.0 < b.T_outdoor_C < 50.0  # sanity bound, real climate data
+
+
+def test_india_warm_humid_mumbai_never_drops_below_economizer_threshold():
+    # This profile's own docstring claims there is essentially no
+    # economizer/free-cooling window at any point in the year -- assert
+    # that directly against annualized_energy_comparison()'s default
+    # economizer_below_C=18.0 threshold.
+    assert all(b.T_outdoor_C >= 18.0 for b in INDIA_WARM_HUMID_MUMBAI_CLIMATE_PROFILE)
+
+
+def test_india_composite_delhi_has_a_winter_economizer_window():
+    # Delhi's Composite-zone winter months should fall in/near the
+    # economizer window, unlike Mumbai -- this is the qualitative
+    # zone-to-zone contrast run_india_climate_comparison() exists to show.
+    assert min(b.T_outdoor_C for b in INDIA_COMPOSITE_DELHI_CLIMATE_PROFILE) < 18.0
+
+
+def test_run_india_climate_comparison_runs_and_writes_report(tmp_path):
+    out_path = str(tmp_path / "pue_annualized_india_test.txt")
+    text = run_india_climate_comparison(out_path=out_path, verbose=False)
+    assert "Composite (Delhi-NCR)" in text
+    assert "Warm-Humid (Mumbai/coastal)" in text
+    import os
+    assert os.path.exists(out_path)
+    with open(out_path) as f:
+        assert f.read() == text
+
+
+def test_run_india_climate_comparison_uses_real_india_profiles_not_4a_default():
+    # Cross-check: the India report should reflect each zone's own
+    # annualized_energy_comparison() call, not silently fall back to
+    # REPRESENTATIVE_CLIMATE_PROFILE_4A.
+    delhi_direct = annualized_energy_comparison(
+        climate_profile=INDIA_COMPOSITE_DELHI_CLIMATE_PROFILE, verbose=False)
+    mumbai_direct = annualized_energy_comparison(
+        climate_profile=INDIA_WARM_HUMID_MUMBAI_CLIMATE_PROFILE, verbose=False)
+    # The two zones' annual effective VCC COP should differ (Mumbai's
+    # always-warm profile implies consistently larger spans than Delhi's
+    # winter-economizer-eligible profile), confirming the profiles are
+    # actually distinct inputs, not both silently resolving to the same
+    # generic default.
+    assert delhi_direct["VCC_effective_annual_COP"] != mumbai_direct["VCC_effective_annual_COP"]
