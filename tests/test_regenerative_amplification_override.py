@@ -174,28 +174,29 @@ def test_no_load_span_search_returns_best_among_grid():
     assert np.isfinite(result["span_K"])
 
 
-def test_no_load_span_cache_hit_matches_uncached_result():
+def test_no_load_span_cache_hit_matches_uncached_result(tmp_path, monkeypatch):
     """Caching (added for main.py's --quick/runtime concerns) must be
     transparent: a cached result must be numerically identical to a fresh
     computation with the same inputs, and use_cache=False must bypass the
     cache entirely (no read, no write) for callers who want a guaranteed-
     fresh run."""
     import os
-    from core.regenerator_1d import _CACHE_PATH, _cache_load
+    import core.regenerator_1d as regenerator_1d_mod
+    from core.regenerator_1d import _cache_load
 
     #  test-hygiene fix: this test's "cached_first ... was the cache
-    # MISS/write" assertion below is only valid if these exact inputs are
-    # NOT already sitting in the shared, on-disk, cross-test-session cache
-    # from some earlier/unrelated test run or manual session (this cache
-    # has no per-test isolation fixture). That was a latent fragility even
-    # before  -- exposed here because added several new
-    # test files, which shifted pytest's file collection order enough to
-    # change what had (by luck) previously been a collision-free run
-    # order. Delete the on-disk cache file before this test's own writes
-    # to guarantee the miss/hit sequence below is genuine regardless of
-    # what ran earlier in the same session.
-    if os.path.exists(_CACHE_PATH):
-        os.remove(_CACHE_PATH)
+    # MISS/write" assertion below is only valid against a guaranteed-clean
+    # cache. The ORIGINAL fix for this (os.remove()-ing the on-disk cache
+    # file before the test) was itself a bug: `_CACHE_PATH` points at the
+    # real, shared `results/.regenerator_1d_cache.json` -- deleting it
+    # wiped out every real, expensive-to-recompute production cache entry
+    # (tens of seconds each) any earlier `main.py`/`validate_against_
+    # benchmarks()` run had accumulated, exactly the class of "test
+    # clobbers a real repository file" issue LIMITATIONS.md Item 3.4
+    # already flags elsewhere. Redirect `_CACHE_PATH` at a scratch file
+    # instead -- isolates this test from both the shared cache's prior
+    # contents AND from ever touching them.
+    monkeypatch.setattr(regenerator_1d_mod, "_CACHE_PATH", str(tmp_path / "cache.json"))
 
     kwargs = dict(n_nodes=4, mdot_search=(0.003, 0.03), max_cycles=20, tol=1e-2)
     fresh = no_load_span(GADOLINIUM, 1.6, 0.6, 1.2, use_cache=False, **kwargs)
@@ -210,23 +211,25 @@ def test_no_load_span_cache_hit_matches_uncached_result():
     assert cached_second["span_K"] == pytest.approx(fresh["span_K"])
 
     # Cache file must actually contain the entry (not just an in-memory shortcut).
-    if os.path.exists(_CACHE_PATH):
+    if os.path.exists(regenerator_1d_mod._CACHE_PATH):
         assert len(_cache_load()) >= 1
 
 
-def test_no_load_span_cache_key_distinguishes_different_inputs():
+def test_no_load_span_cache_key_distinguishes_different_inputs(tmp_path, monkeypatch):
     """Two calls with different physical inputs must NOT collide in the
     cache -- a cache-key bug here would silently serve one device's span
     to another."""
-    import os
-    from core.regenerator_1d import _CACHE_PATH
+    import core.regenerator_1d as regenerator_1d_mod
 
     #  test-hygiene fix: see the identical note in
     # test_no_load_span_cache_hit_matches_uncached_result() just above --
     # both "not r.get('from_cache')" assertions below are only meaningful
-    # against a guaranteed-clean cache.
-    if os.path.exists(_CACHE_PATH):
-        os.remove(_CACHE_PATH)
+    # against a guaranteed-clean cache. Redirect `_CACHE_PATH` at a
+    # scratch file instead of os.remove()-ing the real, shared
+    # `results/.regenerator_1d_cache.json` (the original version of this
+    # test destroyed real production cache entries -- see the identical
+    # fix and explanation just above).
+    monkeypatch.setattr(regenerator_1d_mod, "_CACHE_PATH", str(tmp_path / "cache.json"))
 
     kwargs = dict(n_nodes=4, mdot_search=(0.005,), max_cycles=15, tol=1e-2, use_cache=True)
     r_a = no_load_span(GADOLINIUM, 1.5, 0.5, 1.0, **kwargs)
